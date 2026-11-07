@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- IZIN BARU UNTUK SPRINT 2 (PBI 4) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
@@ -11,7 +10,6 @@
         android:label="Morph"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
-        <!-- REGISTRASI SERVICE MORPH -->
         <service
             android:name=".MorphService"
             android:foregroundServiceType="dataSync"
@@ -37,41 +35,6 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="*/*" />
             </intent-filter>
-        </activity>
-    </application>
-</manifest>
-
-    <application
-        android:allowBackup="true"
-        android:label="Morph"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
-
-        <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:launchMode="singleTask"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar"> <!-- Simbol '>' hanya ada di akhir baris ini -->
-
-            <!-- Entry point standar jika dibuka dari daftar aplikasi -->
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-
-            <!-- Menangkap Intent "Share" (1 File) -->
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="*/*" />
-            </intent-filter>
-            
-            <!-- Menangkap Intent "Share" (Banyak File) -->
-            <intent-filter>
-                <action android:name="android.intent.action.SEND_MULTIPLE" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="*/*" />
-            </intent-filter>
-
         </activity>
     </application>
 

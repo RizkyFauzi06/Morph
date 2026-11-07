@@ -22,6 +22,7 @@ object MorphEngine {
         context: Context,
         inputUri: Uri,
         outputExtension: String,
+        onProgress: (String) -> Unit = {},
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
@@ -30,7 +31,7 @@ object MorphEngine {
 
         // PISAHKAN JALUR: Jika Gambar, gunakan Android Native (Cepat & Support WEBP)
         if (outputExtension in listOf("jpg", "png", "webp")) {
-            convertImageNatively(context, inputUri, cacheOutputFile, outputExtension, onSuccess, onError)
+            convertImageNatively(context, inputUri, cacheOutputFile, outputExtension, onProgress, onSuccess, onError)
             return
         }
 
@@ -61,6 +62,7 @@ object MorphEngine {
         inputUri: Uri,
         cacheFile: File,
         extension: String,
+        onProgress: (String) -> Unit = {},
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {

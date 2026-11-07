@@ -115,19 +115,23 @@ class MainActivity : ComponentActivity() {
                                     // Karena kita bisa punya 5+ format, kita bungkus pakai FlowRow atau panggil FormatButtonsRow per 3 baris
                                     // Untuk UI MVP, kita potong 3 format paling atas saja agar muat rapi di BottomSheet
                                     FormatButtonsRow(
-                                        formats = formatsToOptions.take(3), 
+                                        formats = formatsToOptions.take(3),
                                         onFormatSelected = { format ->
-                                            isConverting = true
-                                            MorphEngine.convert(context, fileUri, format,
-                                                onSuccess = { path -> 
-                                                    resultMessage = "Berhasil!\nTersimpan di:\n$path"
-                                                    isConverting = false
-                                                },
-                                                onError = { err -> 
-                                                    resultMessage = err
-                                                    isConverting = false
-                                                }
-                                            )
+                                            // FIRE AND FORGET UX
+                                            // Lempar URI dan Target Format ke MorphService
+                                            val serviceIntent = Intent(context, MorphService::class.java).apply {
+                                                putExtra("INPUT_URI", fileUri)
+                                                putExtra("TARGET_FORMAT", format)
+                                            }
+                                            
+                                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                                context.startForegroundService(serviceIntent)
+                                            } else {
+                                                context.startService(serviceIntent)
+                                            }
+                                            // Tutup UI secara langsung, biarkan Service & Notifikasi bekerja!
+                                            showBottomSheet = false
+                                            finish()
                                         }
                                     )
                                 }
