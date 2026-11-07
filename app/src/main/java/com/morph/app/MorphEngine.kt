@@ -16,8 +16,19 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 import android.media.MediaMetadataRetriever
+import kotlinx.coroutines.flow.MutableStateFlow
 
 object MorphEngine {
+    
+    sealed class ConvertState {
+        object Idle : ConvertState()
+        data class Converting(val format: String, val progress: Int) : ConvertState()
+        object Success : ConvertState()
+        data class Error(val message: String) : ConvertState()
+    }
+
+    // Pipa yang akan dipantau oleh UI
+    val currentStatus = MutableStateFlow<ConvertState>(ConvertState.Idle)
 
     fun convert(
         context: Context,
