@@ -45,16 +45,23 @@ object MorphEngine {
             else -> "-y -i \"$inputPath\" \"${cacheOutputFile.absolutePath}\"" // Konversi standar (mkv <-> mp4)
         }
 
-        FFmpegKit.executeAsync(command) { session ->
-            val returnCode = session.returnCode
-            if (ReturnCode.isSuccess(returnCode)) {
-                val finalPath = saveToDownloads(context, cacheOutputFile)
-                if (finalPath != null) onSuccess(finalPath) else onError("Gagal memindahkan file.")
-            } else {
-                onError("Gagal: ${session.failStackTrace}")
-                Log.e("Morph", "FFmpeg Error: ${session.allLogsAsString}")
-            }
-        }
+        FFmpegKit.executeAsync(
+            command,{ session -> 
+                // Callback 1: Saat Konversi Berakhir (Sukses/Gagal)
+                val returnCode = session.returnCode
+                if (ReturnCode.isSuccess(returnCode)) {
+                    val finalPath = saveToDownloads(context, cacheOutputFile)
+                    if (finalPath != null) onSuccess(finalPath) else onError("Gagal memindahkan file.")
+                } else {
+                    onError("Gagal: ${session.failStackTrace}")
+                    Log.e("Morph", "FFmpeg Error: ${session.allLogsAsString}")
+                }
+            },{ log -> },{ statistics -> 
+                val progress = (statistics.time.toFloat() / totalDuration * 100).toInt()
+                    .coerceIn(0, 100)
+                    onProgress("Progres: $progress%")
+                }
+        )
     }
 
     private fun convertImageNatively(

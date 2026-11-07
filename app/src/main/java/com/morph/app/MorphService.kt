@@ -37,26 +37,38 @@ class MorphService : Service() {
             inputUri = inputUri,
             outputExtension = targetFormat,
             onProgress = { progressText ->
-                // Opsi: Jika ingin mengupdate teks notifikasi secara real-time
-                // val updatedNotification = buildNotification("Memproses...", progressText, true)
-                // getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, updatedNotification)
+                // Mengupdate notifikasi secara real-time pada ID yang SAMA
+                val updatedNotification = buildNotification("Memproses ke $targetFormat...", progressText, true)
+                val manager = getSystemService(NotificationManager::class.java)
+                manager.notify(NOTIFICATION_ID, updatedNotification)
             },
             onSuccess = { finalPath ->
-                // 3. Konversi Sukses! Ubah notifikasi menjadi centang/sukses.
-                val successNotif = buildNotification("Konversi Selesai", "Tersimpan di: $finalPath", false)
+                // Konversi Sukses! Timpa notifikasi menjadi centang/sukses.
+                val successNotif = buildNotification("Konversi Selesai", "Tersimpan di:\n$finalPath", false)
                 val manager = getSystemService(NotificationManager::class.java)
-                manager.notify(NOTIFICATION_ID + 1, successNotif) // Pindah ID agar tidak tertimpa saat Service mati
+                manager.notify(NOTIFICATION_ID, successNotif)
                 
-                stopForeground(STOP_FOREGROUND_REMOVE) // Matikan mode tahan banting MIUI
-                stopSelf() // Matikan Service
+                // Lepaskan Service, tapi biarkan notifikasi tetap menempel di layar
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    stopForeground(STOP_FOREGROUND_DETACH)
+                } else {
+                    @Suppress("DEPRECATION")
+                    stopForeground(false)
+                }
+                stopSelf() // Matikan Service agar baterai aman
             },
             onError = { errorMessage ->
-                // 4. Konversi Gagal.
-                val errorNotif = buildNotification("Gagal", errorMessage, false)
+                // Konversi Gagal. Timpa notifikasi menjadi pesan error.
+                val errorNotif = buildNotification("Konversi Gagal", errorMessage, false)
                 val manager = getSystemService(NotificationManager::class.java)
-                manager.notify(NOTIFICATION_ID + 1, errorNotif)
+                manager.notify(NOTIFICATION_ID, errorNotif)
                 
-                stopForeground(STOP_FOREGROUND_REMOVE)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    stopForeground(STOP_FOREGROUND_DETACH)
+                } else {
+                    @Suppress("DEPRECATION")
+                    stopForeground(false)
+                }
                 stopSelf()
             }
         )
