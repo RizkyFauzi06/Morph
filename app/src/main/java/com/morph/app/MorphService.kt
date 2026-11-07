@@ -10,6 +10,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.content.FileProvider
+import android.webkit.MimeTypeMap
+import java.io.File
 
 class MorphService : Service() {
 
@@ -43,19 +46,20 @@ class MorphService : Service() {
                 manager.notify(NOTIFICATION_ID, updatedNotification)
             },
             onSuccess = { finalPath ->
-                // Konversi Sukses! Timpa notifikasi menjadi centang/sukses.
-                val successNotif = buildNotification("Konversi Selesai", "Tersimpan di:\n$finalPath", false)
+                // Masukkan file finalPath ke dalam notifikasi
+                val finalFile = File(finalPath)
+                val successNotif = buildNotification("Konversi Selesai", "Sentuh untuk membuka file", false, finalFile)
+                
                 val manager = getSystemService(NotificationManager::class.java)
                 manager.notify(NOTIFICATION_ID, successNotif)
                 
-                // Lepaskan Service, tapi biarkan notifikasi tetap menempel di layar
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     stopForeground(STOP_FOREGROUND_DETACH)
                 } else {
                     @Suppress("DEPRECATION")
                     stopForeground(false)
                 }
-                stopSelf() // Matikan Service agar baterai aman
+                stopSelf()
             },
             onError = { errorMessage ->
                 // Konversi Gagal. Timpa notifikasi menjadi pesan error.
@@ -76,22 +80,42 @@ class MorphService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun buildNotification(title: String, content: String, isProcessing: Boolean): android.app.Notification {
-        // Intent agar jika notifikasi diklik, aplikasi utama terbuka
+    private fun buildNotification(
+        title: String, 
+        content: String, 
+        isProcessing: Boolean, 
+        fileToOpen: File? = null
+    ): android.app.Notification {
+        
+        // Logika Pintar: Jika ada file yang diselipkan, buat Intent BUKA FILE. Jika tidak, buka aplikasi Morph.
+        val intent = if (fileToOpen != null) {
+            val uri = FileProvider.getUriForFile(this, "$packageName.provider", fileToOpen)
+            val extension = fileToOpen.extension.lowercase()
+            val mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension) ?: "*/*"
+            
+            Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mimeType)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+        } else {
+            Intent(this, MainActivity::class.java)
+        }
+
         val pendingIntent = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE
+            this, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(content)
-            .setSmallIcon(android.R.drawable.stat_sys_download) // Icon bawaan Android dulu
+            .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentIntent(pendingIntent)
+            .setAutoCancel(true) // Notifikasi otomatis hilang saat diklik!
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
 
         if (isProcessing) {
-            builder.setProgress(0, 0, true) // Indeterminate Progress Bar (Maju mundur tanpa henti)
-            builder.setOngoing(true) // Tidak bisa di-swipe (dibuang)
+            builder.setProgress(0, 0, true)
+            builder.setOngoing(true)
         }
 
         return builder.build()
