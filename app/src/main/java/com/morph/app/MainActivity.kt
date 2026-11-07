@@ -23,6 +23,8 @@ import android.os.Build
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import android.widget.Toast
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 
 class MainActivity : ComponentActivity() {
     
@@ -50,11 +52,6 @@ class MainActivity : ComponentActivity() {
                 requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        handleIntent(intent)
     }
     
     override fun onNewIntent(intent: Intent) {
@@ -140,28 +137,25 @@ class MainActivity : ComponentActivity() {
                                     }) {
                                         Text("Selesai & Tutup")
                                     }
-                                } else if (fileUri != null) {
+                                }else if (fileUri != null) {
                                     // PANGGIL LOGIKA FORMAT DINAMIS
                                     val formatsToOptions = getTargetFormats(fileName, mimeType)
-                                    
-                                    // Karena kita bisa punya 5+ format, kita bungkus pakai FlowRow atau panggil FormatButtonsRow per 3 baris
-                                    // Untuk UI MVP, kita potong 3 format paling atas saja agar muat rapi di BottomSheet
-                                    FormatButtonsRow(
-                                        formats = formatsToOptions.take(3),
+                                    // PANGGIL KOMPONEN FLOW BARU (Tanpa batasan jumlah!)
+                                    FormatButtonsFlow(
+                                        formats = formatsToOptions, 
                                         onFormatSelected = { format ->
                                             // FIRE AND FORGET UX
-                                            // Lempar URI dan Target Format ke MorphService
                                             val serviceIntent = Intent(context, MorphService::class.java).apply {
                                                 putExtra("INPUT_URI", fileUri)
                                                 putExtra("TARGET_FORMAT", format)
                                             }
                                             
-                                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                                                 context.startForegroundService(serviceIntent)
                                             } else {
                                                 context.startService(serviceIntent)
                                             }
-                                            // Tutup UI secara langsung, biarkan Service & Notifikasi bekerja!
+
                                             showBottomSheet = false
                                             finish()
                                         }
@@ -176,16 +170,19 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun FormatButtonsRow(formats: List<String>, onFormatSelected: (String) -> Unit) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier.fillMaxWidth()
+fun FormatButtonsFlow(formats: List<String>, onFormatSelected: (String) -> Unit) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         formats.forEach { format ->
-            Button(
+            // Kita gunakan ElevatedButton agar desain tombol di dalam grid terlihat lebih menonjol (premium)
+            ElevatedButton(
                 onClick = { onFormatSelected(format) },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.defaultMinSize(minWidth = 90.dp) // Menjaga ukuran tombol tetap konsisten
             ) {
                 Text(format.uppercase())
             }

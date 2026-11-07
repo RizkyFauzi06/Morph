@@ -15,6 +15,7 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
+import android.media.MediaMetadataRetriever
 
 object MorphEngine {
 
@@ -45,22 +46,43 @@ object MorphEngine {
             else -> "-y -i \"$inputPath\" \"${cacheOutputFile.absolutePath}\"" // Konversi standar (mkv <-> mp4)
         }
 
+        // Baca durasi menggunakan Engine Native Android (Lebih aman dari FFprobe)
+        var totalDurationMs = 0L
+        try {
+            val retriever = MediaMetadataRetriever()
+            retriever.setDataSource(context, inputUri)
+            val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+            totalDurationMs = durationStr?.toLong() ?: 0L
+            retriever.release()
+        } catch (e: Exception) {
+            Log.e("Morph", "Gagal membaca durasi: ${e.message}")
+        }
+
+        // Eksekusi FFmpeg
         FFmpegKit.executeAsync(
-            command,{ session -> 
-                // Callback 1: Saat Konversi Berakhir (Sukses/Gagal)
+            command,
+            { session -> 
                 val returnCode = session.returnCode
                 if (ReturnCode.isSuccess(returnCode)) {
                     val finalPath = saveToDownloads(context, cacheOutputFile)
                     if (finalPath != null) onSuccess(finalPath) else onError("Gagal memindahkan file.")
                 } else {
-                    onError("Gagal: ${session.failStackTrace}")
-                    Log.e("Morph", "FFmpeg Error: ${session.allLogsAsString}")
+                    // Perbaikan Pesan Error: Jangan gunakan failStackTrace karena C++ akan mengembalikan null
+                    onError("Gagal Konversi (Kode: ${returnCode.value})")
+                    Log.e("Morph", "FFmpeg Error Log: ${session.allLogsAsString}")
                 }
-            },{ log -> },{ statistics -> 
-                val progress = (statistics.time.toFloat() / totalDuration * 100).toInt()
-                    .coerceIn(0, 100)
-                    onProgress("Progres: $progress%")
+            },
+            { log -> /* Kosongkan agar memori tidak bocor */ },
+            { statistics -> 
+                // Kalkulasi Persentase
+                if (totalDurationMs > 0) {
+                    val percentage = ((statistics.time.toFloat() / totalDurationMs) * 100).toInt().coerceIn(0, 100)
+                    onProgress("Telah diproses: $percentage%")
+                } else {
+                    val secondsProcessed = statistics.time / 1000
+                    onProgress("Telah diproses: $secondsProcessed detik")
                 }
+            }
         )
     }
 
