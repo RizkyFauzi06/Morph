@@ -88,6 +88,8 @@ class MorphService : Service() {
         // SELALU ARAHKAN KE MARKAS UTAMA MORPH (HISTORY TAB)
         val intent = Intent(this, MainActivity::class.java).apply {
             // Pastikan aplikasi terbuka di layar depan, bukan menumpuk
+            action = Intent.ACTION_MAIN
+            addCategory(Intent.CATEGORY_LAUNCHER)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP 
         }
 
