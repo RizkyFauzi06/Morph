@@ -83,7 +83,6 @@ class MainActivity : ComponentActivity() {
     private fun handleIntent(intent: Intent) {
         // DETEKSI LOGIKA: Apakah dibuka dari Launcher (Ikon) atau Share?
         val isStandalone = intent.action == Intent.ACTION_MAIN
-        
         var sharedUri: Uri? = null
         var fileName = "Menunggu file..."
         var mimeType = "*/*"
@@ -102,37 +101,58 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            MaterialTheme {
-                // UI Dinamis: Solid jika Standalone, Transparan jika Share
+            val context = LocalContext.current
+            val prefs = remember { MorphPrefs(context) }
+            
+            // Logika Deteksi Tema (PBI 8.2.2)
+            val isDarkTheme = when (prefs.themeOption) {
+                1 -> false
+                2 -> true
+                else -> androidx.compose.foundation.isSystemInDarkTheme()
+            }
+
+            MaterialTheme(
+                // Jika Anda punya custom color scheme, taruh di sini. Untuk default, biarkan kosong agar otomatis mengikuti sistem M3.
+                // colorScheme = if (isDarkTheme) darkColorScheme() else lightColorScheme() 
+            ) {
                 val backgroundColor = if (isStandalone) MaterialTheme.colorScheme.background else Color.Transparent
                 
+                // --- STATE NAVIGASI SEDERHANA ---
+                var currentScreen by remember { mutableStateOf("home") }
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = backgroundColor
                 ) {
                     if (isStandalone) {
-                        // --- LAYAR MARKAS UTAMA (PBI 7) ---
-                        HomeScreen(
-                            onPickFileClick = { standaloneFilePickerLauncher.launch("*/*") },
-                            onRequestPermission = { askNotificationPermission() }
-                        )
-                        
-                        // Memunculkan BottomSheet jika file dipilih dari Tombol Raksasa
-                        if (showBottomSheetFromPicker && fileUriFromPicker != null) {
-                            val pickerFileName = fileUriFromPicker?.lastPathSegment ?: "File Terpilih"
-                            val pickerMimeType = contentResolver.getType(fileUriFromPicker!!) ?: "*/*"
+                        if (currentScreen == "home") {
+                            // Layar Utama
+                            HomeScreen(
+                                onPickFileClick = { standaloneFilePickerLauncher.launch("*/*") },
+                                onRequestPermission = { askNotificationPermission() },
+                                onSettingsClick = { currentScreen = "settings" } // LEMPAR FUNGSI KLIK
+                            )
                             
-                            BottomSheetConverter(
-                                fileUri = fileUriFromPicker!!,
-                                fileName = pickerFileName,
-                                mimeType = pickerMimeType,
-                                onDismiss = { showBottomSheetFromPicker = false }
+                            // BottomSheet
+                            if (showBottomSheetFromPicker && fileUriFromPicker != null) {
+                                val pickerFileName = fileUriFromPicker?.lastPathSegment ?: "File Terpilih"
+                                val pickerMimeType = contentResolver.getType(fileUriFromPicker!!) ?: "*/*"
+                                
+                                BottomSheetConverter(
+                                    fileUri = fileUriFromPicker!!,
+                                    fileName = pickerFileName,
+                                    mimeType = pickerMimeType,
+                                    onDismiss = { showBottomSheetFromPicker = false }
+                                )
+                            }
+                        } else if (currentScreen == "settings") {
+                            // Layar Pengaturan
+                            SettingsScreen(
+                                onBackClick = { currentScreen = "home" }
                             )
                         }
                     } else {
                         // --- LAYAR SHARE (Tembus Pandang) ---
                         if (sharedUri != null) {
-                            // Langsung minta izin (jika belum) agar konversi tidak gagal
                             LaunchedEffect(Unit) { askNotificationPermission() }
                             
                             var showShareSheet by remember { mutableStateOf(true) }
@@ -143,7 +163,11 @@ class MainActivity : ComponentActivity() {
                                     mimeType = mimeType,
                                     onDismiss = { 
                                         showShareSheet = false
-                                        finish() 
+                                        // LOGIKA 8.2.3: Periksa apakah disuruh auto-close
+                                        val prefs = MorphPrefs(this@MainActivity)
+                                        if (prefs.closeAfterShare) {
+                                            finish() 
+                                        }
                                     }
                                 )
                             }
@@ -163,12 +187,13 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// Ui dan Izin
+// Ui Home Screen dan Izin
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun HomeScreen(
     onPickFileClick: () -> Unit,
-    onRequestPermission: () -> Unit
+    onRequestPermission: () -> Unit,
+    onSettingsClick: () -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -208,6 +233,8 @@ fun HomeScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+    
+    
 
     Scaffold(
         floatingActionButton = {
@@ -224,11 +251,15 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Spacer(modifier = Modifier.height(48.dp))
-                Text("Morph", style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary)
-                Text("Universal File Converter", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(modifier = Modifier.height(24.dp))
-
+                Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp),horizontalArrangement = Arrangement.End) 
+            {
+                IconButton(onClick = onSettingsClick) {Text("⚙️", style = MaterialTheme.typography.headlineMedium)}
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                "Morph",
+                style = MaterialTheme.typography.displayMedium,
+                color = MaterialTheme.colorScheme.primary)
                 // --- IN-APP PROGRESS UI ---
                 if (engineState is MorphEngine.ConvertState.Converting) {
                     val progress = (engineState as MorphEngine.ConvertState.Converting).progress
@@ -244,7 +275,6 @@ fun HomeScreen(
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                 }
-
                 // --- KARTU ERROR & RETRY (PBI 8.1.4 & 8.1.10) ---
                 if (engineState is MorphEngine.ConvertState.Error) {
                     val errorState = engineState as MorphEngine.ConvertState.Error
@@ -380,7 +410,7 @@ fun HomeScreen(
 
 
 
-//UI
+//UI Bottom Sheet
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun BottomSheetConverter(fileUri: Uri, fileName: String, mimeType: String, onDismiss: () -> Unit) {
@@ -422,6 +452,135 @@ fun BottomSheetConverter(fileUri: Uri, fileName: String, mimeType: String, onDis
                         Text(format.uppercase())
                     }
                 }
+            }
+        }
+    }
+}
+
+// UI Setting and many more
+@Composable
+fun SettingsScreen(onBackClick: () -> Unit) {
+    val context = LocalContext.current
+    val prefs = remember { MorphPrefs(context) }
+    
+    // State untuk memicu re-render UI saat diswitch
+    var themeOption by remember { mutableStateOf(prefs.themeOption) }
+    var showNotif by remember { mutableStateOf(prefs.showNotifications) }
+    var keepName by remember { mutableStateOf(prefs.keepOriginalName) }
+    var closeShare by remember { mutableStateOf(prefs.closeAfterShare) }
+    var quality by remember { mutableStateOf(prefs.qualityPreset) }
+
+    Scaffold(
+        topBar = {
+            Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onBackClick) { Text("⬅ Kembali") }
+                Spacer(modifier = Modifier.width(16.dp))
+                Text("Pengaturan", style = MaterialTheme.typography.titleLarge)
+            }
+        }
+    ) { padding ->
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 24.dp)) {
+            
+            // PBI 8.2.1: Output Directory
+            item {
+                Text("Penyimpanan", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Lokasi Output File", style = MaterialTheme.typography.bodyLarge)
+                        Text("Downloads/Morph", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("(Fitur ubah folder akan hadir di pembaruan mendatang)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // PBI 8.2.2: Tema
+            item {
+                Text("Tampilan", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Tema Aplikasi", style = MaterialTheme.typography.bodyLarge)
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            TextButton(onClick = { themeOption = 0; prefs.themeOption = 0 }) { Text("Sistem", color = if (themeOption == 0) MaterialTheme.colorScheme.primary else Color.Gray) }
+                            TextButton(onClick = { themeOption = 1; prefs.themeOption = 1 }) { Text("Terang", color = if (themeOption == 1) MaterialTheme.colorScheme.primary else Color.Gray) }
+                            TextButton(onClick = { themeOption = 2; prefs.themeOption = 2 }) { Text("Gelap", color = if (themeOption == 2) MaterialTheme.colorScheme.primary else Color.Gray) }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // PBI 8.2.7: Quality Preset (Persiapan Sprint 3)
+            item {
+                Text("Konversi Dasar", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Preset Kualitas Output", style = MaterialTheme.typography.bodyLarge)
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            TextButton(onClick = { quality = 0; prefs.qualityPreset = 0 }) { Text("Tinggi", color = if (quality == 0) MaterialTheme.colorScheme.primary else Color.Gray) }
+                            TextButton(onClick = { quality = 1; prefs.qualityPreset = 1 }) { Text("Sedang", color = if (quality == 1) MaterialTheme.colorScheme.primary else Color.Gray) }
+                            TextButton(onClick = { quality = 2; prefs.qualityPreset = 2 }) { Text("Rendah", color = if (quality == 2) MaterialTheme.colorScheme.primary else Color.Gray) }
+                        }
+                        Text("Berguna untuk kompresi file ke format yang sama.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // PBI 8.2.3, 8.2.4, 8.2.5: Behavior & Toggles
+            item {
+                Text("Perilaku Aplikasi", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                    Column {
+                        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Pertahankan Nama Asli", style = MaterialTheme.typography.bodyLarge)
+                                Text("Jangan tambah angka acak jika tidak bentrok", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Switch(checked = keepName, onCheckedChange = { keepName = it; prefs.keepOriginalName = it })
+                        }
+                        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Notifikasi Latar Belakang", style = MaterialTheme.typography.bodyLarge)
+                                Text("Tampilkan progres di panel notifikasi", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Switch(checked = showNotif, onCheckedChange = { showNotif = it; prefs.showNotifications = it })
+                        }
+                        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Tutup Otomatis", style = MaterialTheme.typography.bodyLarge)
+                                Text("Tutup Morph setelah memilih format via Share", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Switch(checked = closeShare, onCheckedChange = { closeShare = it; prefs.closeAfterShare = it })
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // PBI 8.2.6 & 8.2.8: Cleanup & About
+            item {
+                Text("Sistem", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Morph v1.0 (The Share MVP)", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
+                        Text("Universal File Converter by Rizki Fauzi", style = MaterialTheme.typography.bodySmall)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Button(
+                            onClick = { 
+                                val cacheDir = context.cacheDir
+                                cacheDir.deleteRecursively()
+                                Toast.makeText(context, "File sampah sementara berhasil dihapus!", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Bersihkan File Sementara (Cache)")
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(48.dp))
             }
         }
     }
@@ -487,4 +646,28 @@ fun shareFileDirectly(context: android.content.Context, file: File) {
     } catch (e: Exception) {
         Toast.makeText(context, "Gagal membagikan file", Toast.LENGTH_SHORT).show()
     }
+}
+// --- PENGELOLA PENGATURAN (PBI 8.2) ---
+class MorphPrefs(context: android.content.Context) {
+    private val prefs = context.getSharedPreferences("morph_settings", android.content.Context.MODE_PRIVATE)
+
+    var themeOption: Int // 0: System, 1: Light, 2: Dark
+        get() = prefs.getInt("theme", 0)
+        set(value) = prefs.edit().putInt("theme", value).apply()
+
+    var showNotifications: Boolean
+        get() = prefs.getBoolean("notif", true)
+        set(value) = prefs.edit().putBoolean("notif", value).apply()
+
+    var keepOriginalName: Boolean
+        get() = prefs.getBoolean("keep_name", true)
+        set(value) = prefs.edit().putBoolean("keep_name", value).apply()
+
+    var closeAfterShare: Boolean
+        get() = prefs.getBoolean("close_share", true)
+        set(value) = prefs.edit().putBoolean("close_share", value).apply()
+
+    var qualityPreset: Int // 0: High, 1: Medium, 2: Low (Disiapkan untuk Sprint 3)
+        get() = prefs.getInt("quality", 0)
+        set(value) = prefs.edit().putInt("quality", value).apply()
 }

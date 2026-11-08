@@ -20,61 +20,63 @@ class MorphService : Service() {
     private val NOTIFICATION_ID = 143
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        createNotificationChannel()
-
         val inputUri = intent?.getParcelableExtra<Uri>("INPUT_URI")
-        val targetFormat = intent?.getStringExtra("TARGET_FORMAT") ?: "mp4"
+        val targetFormat = intent?.getStringExtra("TARGET_FORMAT") ?: ""
+        
+        // Baca pengaturan dari Preferences
+        val prefs = MorphPrefs(this)
+        val showNotif = prefs.showNotifications
 
-        if (inputUri == null) {
-            stopSelf()
-            return START_NOT_STICKY
+        if (inputUri != null && targetFormat.isNotEmpty()) {
+            // Notifikasi wajib Android (Foreground) - Jika showNotif false, kita buat sangat senyap
+            val initialNotif = buildNotification("Morph berjalan", "Mengonversi file...", true, 0)
+            startForeground(NOTIFICATION_ID, initialNotif)
+
+            // Ekstrak nama asli file untuk fitur Keep Original Filename (8.2.5)
+            val cursor = contentResolver.query(inputUri, null, null, null, null)
+            val originalName = if (cursor != null && cursor.moveToFirst()) {
+                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (nameIndex != -1) cursor.getString(nameIndex) else "file"
+            } else "file"
+            cursor?.close()
+
+            MorphEngine.convert(
+                context = this,
+                inputUri = inputUri,
+                outputExtension = targetFormat,
+                originalFileName = originalName, // Lempar nama asli ke mesin
+                onProgress = { progressText, percentage ->
+                    // 8.2.4: Hanya update notifikasi jika pengaturan Notifikasi ON
+                    if (showNotif) {
+                        val updateNotif = buildNotification("Mengonversi ke ${targetFormat.uppercase()}", progressText, true, percentage)
+                        val manager = getSystemService(NotificationManager::class.java)
+                        manager.notify(NOTIFICATION_ID, updateNotif)
+                    }
+                },
+                onSuccess = { finalPath ->
+                    if (showNotif) {
+                        // Gunakan ID berbeda (NOTIFICATION_ID + 1) agar notifikasi sukses tidak ikut terhapus oleh stopForeground
+                        val successNotif = buildNotification("Konversi Selesai", "Buka Morph untuk melihat hasil", false)
+                        val manager = getSystemService(NotificationManager::class.java)
+                        manager.notify(NOTIFICATION_ID + 1, successNotif)
+                    }
+                    
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_DETACH)
+                    else @Suppress("DEPRECATION") stopForeground(false)
+                    stopSelf()
+                },
+                onError = { errorMessage ->
+                    if (showNotif) {
+                        val errorNotif = buildNotification("Konversi Gagal", errorMessage, false)
+                        val manager = getSystemService(NotificationManager::class.java)
+                        manager.notify(NOTIFICATION_ID + 1, errorNotif)
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_DETACH)
+                    else @Suppress("DEPRECATION") stopForeground(false)
+                    stopSelf()
+                }
+            )
         }
-
-        // 1. Tampilkan Notifikasi "Sedang Berjalan" (Mode Indeterminate / Berputar)
-        val notification = buildNotification("Memproses ke $targetFormat...", "Mohon tunggu, Morph sedang bekerja", true)
-        startForeground(NOTIFICATION_ID, notification)
-
-        // 2. Eksekusi Engine di dalam Service ini
-        MorphEngine.convert(
-            context = this,
-            inputUri = inputUri,
-            outputExtension = targetFormat,
-            onProgress = { progressText ->
-                // Mengupdate notifikasi secara real-time pada ID yang SAMA
-                val updatedNotification = buildNotification("Memproses ke $targetFormat...", progressText, true)
-                val manager = getSystemService(NotificationManager::class.java)
-                manager.notify(NOTIFICATION_ID, updatedNotification)
-            },
-            onSuccess = { finalPath ->
-                // Panggil 3 parameter saja. Tidak perlu melempar File lagi karena klik notif sekarang mengarah ke UI History
-                val successNotif = buildNotification("Konversi Selesai", "Buka Morph untuk melihat hasil", false)
-                
-                val manager = getSystemService(NotificationManager::class.java)
-                manager.notify(NOTIFICATION_ID, successNotif)
-                
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    stopForeground(STOP_FOREGROUND_DETACH)
-                } else {
-                    @Suppress("DEPRECATION")
-                    stopForeground(false)
-                }
-                stopSelf()
-            },
-            onError = { errorMessage ->
-                val errorNotif = buildNotification("Konversi Gagal", errorMessage, false)
-                val manager = getSystemService(NotificationManager::class.java)
-                manager.notify(NOTIFICATION_ID, errorNotif)
-                
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    stopForeground(STOP_FOREGROUND_DETACH)
-                } else {
-                    @Suppress("DEPRECATION")
-                    stopForeground(false)
-                }
-                stopSelf()
-            }
-        )
-
         return START_NOT_STICKY
     }
 

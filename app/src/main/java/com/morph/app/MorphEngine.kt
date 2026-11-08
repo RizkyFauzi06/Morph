@@ -34,7 +34,8 @@ object MorphEngine {
         context: Context,
         inputUri: Uri,
         outputExtension: String,
-        onProgress: (String) -> Unit = {},
+        originalFileName: String, // Pastikan ini ada
+        onProgress: (String, Int) -> Unit, 
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
@@ -42,8 +43,9 @@ object MorphEngine {
         val cacheOutputFile = File(context.cacheDir, "Morph_$timeStamp.$outputExtension")
 
         // PISAHKAN JALUR: Jika Gambar, gunakan Android Native (Cepat & Support WEBP)
-        if (outputExtension in listOf("jpg", "png", "webp")) {
-            convertImageNatively(context, inputUri, cacheOutputFile, outputExtension, onProgress, onSuccess, onError)
+        if (outputExtension in listOf("png", "jpg", "webp")) {
+            // UBAH BARIS INI: Tambahkan originalFileName
+            convertImageNatively(context, inputUri, outputExtension, originalFileName, onProgress, onSuccess, onError)
             return
         }
 
@@ -76,7 +78,7 @@ object MorphEngine {
             { session ->
                 val returnCode = session.returnCode
                 if (ReturnCode.isSuccess(returnCode)) {
-                    val finalPath = saveToDownloads(context, cacheOutputFile)
+                    val finalPath = saveToDownloads(context, cacheOutputFile, originalFileName, outputExtension)
                     if (finalPath != null) {
                         currentStatus.value = ConvertState.Success // UPDATE STATE
                         onSuccess(finalPath)
@@ -93,51 +95,66 @@ object MorphEngine {
             { statistics ->
                 if (totalDurationMs > 0) {
                     val percentage = ((statistics.time.toFloat() / totalDurationMs) * 100).toInt().coerceIn(0, 100)
-                    currentStatus.value = ConvertState.Converting(outputExtension, percentage) // UPDATE STATE
-                    onProgress("Telah diproses: $percentage%")
+                    currentStatus.value = ConvertState.Converting(outputExtension, percentage)
+                    // UBAH BARIS INI: Kirim angka persentase sebagai parameter kedua
+                    onProgress("Telah diproses: $percentage%", percentage) 
                 } else {
                     val secondsProcessed = statistics.time / 1000
-                    // Fallback jika persentase tidak ada, set progress ke 0 agar UI tidak crash
                     currentStatus.value = ConvertState.Converting(outputExtension, 0)
-                    onProgress("Telah diproses: $secondsProcessed detik")
+                    // UBAH BARIS INI: Kirim angka 0 (karena durasi gagal dibaca)
+                    onProgress("Telah diproses: $secondsProcessed detik", 0) 
                 }
             }
         )
     }
 
     private fun convertImageNatively(
-        context: Context,
-        inputUri: Uri,
-        cacheFile: File,
+        context: android.content.Context,
+        inputUri: android.net.Uri,
         extension: String,
-        onProgress: (String) -> Unit = {},
+        originalFileName: String,
+        onProgress: (String, Int) -> Unit,
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
-        GlobalScope.launch(Dispatchers.IO) {
+        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
+                // Update State Progress
                 currentStatus.value = ConvertState.Converting(extension, 50)
-                val inputStream = context.contentResolver.openInputStream(inputUri)
-                val bitmap = BitmapFactory.decodeStream(inputStream)
-                inputStream?.close()
+                onProgress("Memproses gambar...", 50)
 
-                if (bitmap == null) throw Exception("Bitmap gagal dibaca")
-
-                val compressFormat = when (extension) {
-                    "png" -> Bitmap.CompressFormat.PNG
-                    "webp" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Bitmap.CompressFormat.WEBP_LOSSY else Bitmap.CompressFormat.valueOf("WEBP")
-                    else -> Bitmap.CompressFormat.JPEG
+                // 1. Baca gambar dari URI
+                val bitmap = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                    val source = android.graphics.ImageDecoder.createSource(context.contentResolver, inputUri)
+                    android.graphics.ImageDecoder.decodeBitmap(source)
+                } else {
+                    @Suppress("DEPRECATION")
+                    android.provider.MediaStore.Images.Media.getBitmap(context.contentResolver, inputUri)
                 }
 
-                val outStream = FileOutputStream(cacheFile)
-                bitmap.compress(compressFormat, 90, outStream)
-                outStream.flush()
-                outStream.close()
+                // 2. Tentukan format output
+                val format = when (extension.lowercase()) {
+                    "png" -> android.graphics.Bitmap.CompressFormat.PNG
+                    "webp" -> if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) 
+                                android.graphics.Bitmap.CompressFormat.WEBP_LOSSLESS 
+                              else 
+                                @Suppress("DEPRECATION") android.graphics.Bitmap.CompressFormat.WEBP
+                    else -> android.graphics.Bitmap.CompressFormat.JPEG
+                }
 
-                val finalPath = saveToDownloads(context, cacheFile)
-                launch(Dispatchers.Main) {
+                // 3. Bikin Cache File & Simpan (Ini yang tadi hilang / error!)
+                val cacheFile = java.io.File(context.cacheDir, "temp_image.$extension")
+                val fos = java.io.FileOutputStream(cacheFile)
+                bitmap.compress(format, 100, fos)
+                fos.flush()
+                fos.close()
+
+                // 4. Pindah ke Downloads dengan nama asli
+                val finalPath = saveToDownloads(context, cacheFile, originalFileName, extension)
+                
+                launch(kotlinx.coroutines.Dispatchers.Main) {
                     if (finalPath != null) {
-                        currentStatus.value = ConvertState.Success // UPDATE STATE
+                        currentStatus.value = ConvertState.Success
                         onSuccess(finalPath)
                     } else {
                         currentStatus.value = ConvertState.Error("Gagal menyimpan gambar", inputUri, extension)
@@ -145,7 +162,7 @@ object MorphEngine {
                     }
                 }
             } catch (e: Exception) {
-                launch(Dispatchers.Main) { 
+                launch(kotlinx.coroutines.Dispatchers.Main) { 
                     currentStatus.value = ConvertState.Error("Gagal render gambar", inputUri, extension)
                     onError("Gagal render gambar: ${e.message}") 
                 }
@@ -153,15 +170,34 @@ object MorphEngine {
         }
     }
 
-    private fun saveToDownloads(context: Context, cachedFile: File): String? {
-        return try {
-            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            val morphDir = File(downloadsDir, "Morph")
-            if (!morphDir.exists()) morphDir.mkdirs()
+    fun saveToDownloads(context: Context, cachedFile: File, originalName: String, targetFormat: String): String? {
+        val prefs = MorphPrefs(context)
+        val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+        val morphDir = File(downloadsDir, "Morph")
+        if (!morphDir.exists()) morphDir.mkdirs()
+        // Buang ekstensi lama dari nama aslinya
+        val baseName = originalName.substringBeforeLast(".", "file")
+        // Logika 8.2.5: Pertahankan nama atau tambah suffix unik
+        var finalName = if (prefs.keepOriginalName) {
+            "$baseName.$targetFormat"
+        } else {
+            "${baseName}_morph_converted.$targetFormat"
+        }
+        var destFile = File(morphDir, finalName)
+        // Cegah file tertimpa jika nama sama
+        var counter = 1
+        while (destFile.exists()) {
+            finalName = if (prefs.keepOriginalName) {
+                "${baseName}($counter).$targetFormat"
+            } else {
+                "${baseName}_morph_converted_$counter.$targetFormat"
+            }
+            destFile = File(morphDir, finalName)
+            counter++
+        }
 
-            val destFile = File(morphDir, cachedFile.name)
+        return try {
             cachedFile.copyTo(destFile, overwrite = true)
-            cachedFile.delete()
             destFile.absolutePath
         } catch (e: Exception) {
             null
