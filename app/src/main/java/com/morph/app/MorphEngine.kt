@@ -26,7 +26,7 @@ object MorphEngine {
         object Success : ConvertState()
         data class Error(val message: String) : ConvertState()
     }
-
+    
     // Pipa yang akan dipantau oleh UI
     val currentStatus = MutableStateFlow<ConvertState>(ConvertState.Idle)
 
@@ -70,27 +70,35 @@ object MorphEngine {
         }
 
         // Eksekusi FFmpeg
+        // ... kode sebelumnya ...
         FFmpegKit.executeAsync(
             command,
-            { session -> 
+            { session ->
                 val returnCode = session.returnCode
                 if (ReturnCode.isSuccess(returnCode)) {
                     val finalPath = saveToDownloads(context, cacheOutputFile)
-                    if (finalPath != null) onSuccess(finalPath) else onError("Gagal memindahkan file.")
+                    if (finalPath != null) {
+                        currentStatus.value = ConvertState.Success // UPDATE STATE
+                        onSuccess(finalPath)
+                    } else {
+                        currentStatus.value = ConvertState.Error("Gagal memindahkan file.") // UPDATE STATE
+                        onError("Gagal memindahkan file.")
+                    }
                 } else {
-                    // Perbaikan Pesan Error: Jangan gunakan failStackTrace karena C++ akan mengembalikan null
+                    currentStatus.value = ConvertState.Error("Gagal Konversi (Kode: ${returnCode.value})") // UPDATE STATE
                     onError("Gagal Konversi (Kode: ${returnCode.value})")
-                    Log.e("Morph", "FFmpeg Error Log: ${session.allLogsAsString}")
                 }
             },
-            { log -> /* Kosongkan agar memori tidak bocor */ },
-            { statistics -> 
-                // Kalkulasi Persentase
+            { log -> /* Kosongkan */ },
+            { statistics ->
                 if (totalDurationMs > 0) {
                     val percentage = ((statistics.time.toFloat() / totalDurationMs) * 100).toInt().coerceIn(0, 100)
+                    currentStatus.value = ConvertState.Converting(outputExtension, percentage) // UPDATE STATE
                     onProgress("Telah diproses: $percentage%")
                 } else {
                     val secondsProcessed = statistics.time / 1000
+                    // Fallback jika persentase tidak ada, set progress ke 0 agar UI tidak crash
+                    currentStatus.value = ConvertState.Converting(outputExtension, 0)
                     onProgress("Telah diproses: $secondsProcessed detik")
                 }
             }
@@ -108,6 +116,7 @@ object MorphEngine {
     ) {
         GlobalScope.launch(Dispatchers.IO) {
             try {
+                currentStatus.value = ConvertState.Converting(extension, 50)
                 val inputStream = context.contentResolver.openInputStream(inputUri)
                 val bitmap = BitmapFactory.decodeStream(inputStream)
                 inputStream?.close()
@@ -127,10 +136,19 @@ object MorphEngine {
 
                 val finalPath = saveToDownloads(context, cacheFile)
                 launch(Dispatchers.Main) {
-                    if (finalPath != null) onSuccess(finalPath) else onError("Gagal menyimpan gambar")
+                    if (finalPath != null) {
+                        currentStatus.value = ConvertState.Success // UPDATE STATE
+                        onSuccess(finalPath)
+                    } else {
+                        currentStatus.value = ConvertState.Error("Gagal menyimpan gambar") // UPDATE STATE
+                        onError("Gagal menyimpan gambar")
+                    }
                 }
             } catch (e: Exception) {
-                launch(Dispatchers.Main) { onError("Gagal render gambar: ${e.message}") }
+                launch(Dispatchers.Main) { 
+                    currentStatus.value = ConvertState.Error("Gagal render gambar") // UPDATE STATE
+                    onError("Gagal render gambar: ${e.message}") 
+                }
             }
         }
     }

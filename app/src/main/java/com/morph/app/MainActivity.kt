@@ -38,6 +38,12 @@ import java.util.Date
 import java.util.Locale
 import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -158,6 +164,7 @@ class MainActivity : ComponentActivity() {
 }
 
 // Ui dan Izin
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun HomeScreen(
     onPickFileClick: () -> Unit,
@@ -165,21 +172,32 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val coroutineScope = rememberCoroutineScope()
     
     var hasNotificationPermission by remember { mutableStateOf(checkNotifPermission(context)) }
     var morphFiles by remember { mutableStateOf(emptyList<File>()) }
+    var isRefreshing by remember { mutableStateOf(false) } // State untuk indikator loading
 
-    // 1. Dengarkan status dari Mesin FFmpeg secara Real-Time!
     val engineState by MorphEngine.currentStatus.collectAsState()
 
-    // Fungsi Refresh Manual / Auto
-    val refreshFiles = { morphFiles = getMorphFiles() }
+    val refreshFiles = {
+        isRefreshing = true
+        morphFiles = getMorphFiles()
+        isRefreshing = false
+    }
 
-    // 2. Trigger Auto-Update: Jika konversi sukses, refresh list, lalu kembalikan status ke Idle
+    // State untuk Pull to Refresh
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isRefreshing,
+        onRefresh = {
+            coroutineScope.launch { refreshFiles() }
+        }
+    )
+
     LaunchedEffect(engineState) {
         if (engineState is MorphEngine.ConvertState.Success) {
             refreshFiles()
-            delay(2000) // Tahan sebentar jika ingin menampilkan pesan sukses, lalu reset
+            delay(1500)
             MorphEngine.currentStatus.value = MorphEngine.ConvertState.Idle
         }
     }
@@ -205,40 +223,47 @@ fun HomeScreen(
         },
         containerColor = Color.Transparent
     ) { paddingValues ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(paddingValues).padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+        // Bungkus dengan Box untuk PullRefresh
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .pullRefresh(pullRefreshState) // Pasang fungsi pull refresh di sini
         ) {
-            Spacer(modifier = Modifier.height(48.dp))
-            
-            Text("Morph", style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary)
-            Text("Universal File Converter", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // --- IN-APP PROGRESS UI (Muncul saat proses jalan) ---
-            if (engineState is MorphEngine.ConvertState.Converting) {
-                val progress = (engineState as MorphEngine.ConvertState.Converting).progress
-                val format = (engineState as MorphEngine.ConvertState.Converting).format.uppercase()
+            Column(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(modifier = Modifier.height(48.dp))
                 
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Memproses ke $format...", style = MaterialTheme.typography.labelLarge)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        LinearProgressIndicator(
-                            progress = progress / 100f,
-                            modifier = Modifier.fillMaxWidth().height(8.dp),
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text("$progress%", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.End, style = MaterialTheme.typography.labelMedium)
+                Text("Morph", style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary)
+                Text("Universal File Converter", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // --- IN-APP PROGRESS UI ---
+                if (engineState is MorphEngine.ConvertState.Converting) {
+                    val progress = (engineState as MorphEngine.ConvertState.Converting).progress
+                    val format = (engineState as MorphEngine.ConvertState.Converting).format.uppercase()
+                    
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("Memproses ke $format...", style = MaterialTheme.typography.labelLarge)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            LinearProgressIndicator(
+                                progress = progress / 100f,
+                                modifier = Modifier.fillMaxWidth().height(8.dp),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("$progress%", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.End, style = MaterialTheme.typography.labelMedium)
+                        }
                     }
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
-                Spacer(modifier = Modifier.height(16.dp))
-            }
             // ----------------------------------------------------
 
             // Edukasi Izin (PBI 7.5)
@@ -258,49 +283,51 @@ fun HomeScreen(
 
             // LOGIKA DINAMIS PBI 8.1 (Kosong vs Berisi)
            if (morphFiles.isEmpty()) {
-                // UI JIKA KOSONG
-                Spacer(modifier = Modifier.weight(1f))
-                Button(
-                    onClick = onPickFileClick,
-                    modifier = Modifier.size(160.dp),
-                    shape = androidx.compose.foundation.shape.CircleShape,
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("+", style = MaterialTheme.typography.displayMedium)
-                        Text("Pilih File")
+                    Spacer(modifier = Modifier.weight(1f))
+                    Button(
+                        onClick = onPickFileClick,
+                        modifier = Modifier.size(160.dp),
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("+", style = MaterialTheme.typography.displayMedium)
+                            Text("Pilih File")
+                        }
                     }
-                }
-                Spacer(modifier = Modifier.weight(1f))
-            } else {
-                // UI JIKA BERISI & TOMBOL REFRESH MANUAL
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("File Anda", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
-                    // Tombol Refresh Manual
-                    TextButton(onClick = { refreshFiles() }) {
-                        Text("⟳ Segarkan", style = MaterialTheme.typography.labelLarge)
+                    Spacer(modifier = Modifier.weight(1f))
+                } else {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+                        Text("File Anda", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
                     }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(morphFiles) { file ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { openFileDirectly(context, file) },
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                        ) {
-                            ListItem(
-                                headlineContent = { Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                supportingContent = { 
-                                    val sizeKb = file.length() / 1024
-                                    Text("$sizeKb KB") 
-                                },
-                                trailingContent = { Text(file.extension.uppercase(), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge) },
-                                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                            )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        items(morphFiles) { file ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { openFileDirectly(context, file) },
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                            ) {
+                                ListItem(
+                                    headlineContent = { Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    supportingContent = { 
+                                        val sizeKb = file.length() / 1024
+                                        Text("$sizeKb KB") 
+                                    },
+                                    trailingContent = { Text(file.extension.uppercase(), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge) },
+                                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                )
+                            }
                         }
                     }
                 }
             }
+
+            // Indikator loading yang berputar saat layar ditarik
+            PullRefreshIndicator(
+                refreshing = isRefreshing,
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
         }
     }
 }

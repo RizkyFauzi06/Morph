@@ -46,9 +46,8 @@ class MorphService : Service() {
                 manager.notify(NOTIFICATION_ID, updatedNotification)
             },
             onSuccess = { finalPath ->
-                // Masukkan file finalPath ke dalam notifikasi
-                val finalFile = File(finalPath)
-                val successNotif = buildNotification("Konversi Selesai", "Sentuh untuk membuka file", false, finalFile)
+                // Panggil 3 parameter saja. Tidak perlu melempar File lagi karena klik notif sekarang mengarah ke UI History
+                val successNotif = buildNotification("Konversi Selesai", "Buka Morph untuk melihat hasil", false)
                 
                 val manager = getSystemService(NotificationManager::class.java)
                 manager.notify(NOTIFICATION_ID, successNotif)
@@ -62,7 +61,6 @@ class MorphService : Service() {
                 stopSelf()
             },
             onError = { errorMessage ->
-                // Konversi Gagal. Timpa notifikasi menjadi pesan error.
                 val errorNotif = buildNotification("Konversi Gagal", errorMessage, false)
                 val manager = getSystemService(NotificationManager::class.java)
                 manager.notify(NOTIFICATION_ID, errorNotif)
@@ -83,22 +81,14 @@ class MorphService : Service() {
     private fun buildNotification(
         title: String, 
         content: String, 
-        isProcessing: Boolean, 
-        fileToOpen: File? = null
+        isProcessing: Boolean,
+        progress: Int = 0
     ): android.app.Notification {
         
-        // Logika Pintar: Jika ada file yang diselipkan, buat Intent BUKA FILE. Jika tidak, buka aplikasi Morph.
-        val intent = if (fileToOpen != null) {
-            val uri = FileProvider.getUriForFile(this, "$packageName.provider", fileToOpen)
-            val extension = fileToOpen.extension.lowercase()
-            val mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension) ?: "*/*"
-            
-            Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, mimeType)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-        } else {
-            Intent(this, MainActivity::class.java)
+        // SELALU ARAHKAN KE MARKAS UTAMA MORPH (HISTORY TAB)
+        val intent = Intent(this, MainActivity::class.java).apply {
+            // Pastikan aplikasi terbuka di layar depan, bukan menumpuk
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP 
         }
 
         val pendingIntent = PendingIntent.getActivity(
@@ -110,11 +100,11 @@ class MorphService : Service() {
             .setContentText(content)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentIntent(pendingIntent)
-            .setAutoCancel(true) // Notifikasi otomatis hilang saat diklik!
+            .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
 
         if (isProcessing) {
-            builder.setProgress(0, 0, true)
+            builder.setProgress(100, progress, false)
             builder.setOngoing(true)
         }
 

@@ -31,4 +31,5 @@ dependencies {
     implementation("dev.ffmpegkit-maintained:ffmpeg-kit-min:8.1.7")
     // Tambahkan baris di bawah ini untuk menambal crash "NoClassDefFoundError"
     implementation("com.arthenica:smart-exception-java:0.2.1")
+    implementation("androidx.compose.material:material:1.5.4") // Dibutuhkan untuk pullrefresh
 }
