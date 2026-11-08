@@ -77,15 +77,20 @@ object MorphEngine {
             command,
             { session ->
                 val returnCode = session.returnCode
-                if (ReturnCode.isSuccess(returnCode)) {
+                if (com.arthenica.ffmpegkit.ReturnCode.isSuccess(returnCode)) {
                     val finalPath = saveToDownloads(context, cacheOutputFile, originalFileName, outputExtension)
                     if (finalPath != null) {
-                        currentStatus.value = ConvertState.Success // UPDATE STATE
+                        currentStatus.value = ConvertState.Success
                         onSuccess(finalPath)
                     } else {
                         currentStatus.value = ConvertState.Error("Gagal memindahkan file.", inputUri, outputExtension)
                         onError("Gagal memindahkan file.")
                     }
+                } else if (com.arthenica.ffmpegkit.ReturnCode.isCancel(returnCode)) {
+                    // PBI 8.9: Jika sengaja dibatalkan, kembalikan ke Idle dan hapus cache
+                    currentStatus.value = ConvertState.Idle
+                    cacheOutputFile.delete()
+                    onError("Konversi dibatalkan pengguna.")
                 } else {
                     currentStatus.value = ConvertState.Error("Gagal Konversi (Kode: ${returnCode.value})", inputUri, outputExtension)
                     onError("Gagal Konversi (Kode: ${returnCode.value})")
@@ -106,6 +111,8 @@ object MorphEngine {
                 }
             }
         )
+        
+        
     }
 
     private fun convertImageNatively(
@@ -202,5 +209,11 @@ object MorphEngine {
         } catch (e: Exception) {
             null
         }
+    }
+    
+    // PBI 8.9: Fungsi Pembatalan Global
+    fun cancelCurrentConversion() {
+        com.arthenica.ffmpegkit.FFmpegKit.cancel() // Menghentikan semua proses FFmpeg C++ seketika
+        currentStatus.value = ConvertState.Idle
     }
 }

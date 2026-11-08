@@ -46,8 +46,8 @@ class MorphService : Service() {
                 outputExtension = targetFormat,
                 originalFileName = originalName, // Lempar nama asli ke mesin
                 onProgress = { progressText, percentage ->
-                    // 8.2.4: Hanya update notifikasi jika pengaturan Notifikasi ON
-                    if (showNotif) {
+                    // PBI 8.2.4 (Smart Notification): Update notif HANYA JIKA aplikasi di latar belakang
+                    if (!MainActivity.isAppInForeground) {
                         val updateNotif = buildNotification("Mengonversi ke ${targetFormat.uppercase()}", progressText, true, percentage)
                         val manager = getSystemService(NotificationManager::class.java)
                         manager.notify(NOTIFICATION_ID, updateNotif)

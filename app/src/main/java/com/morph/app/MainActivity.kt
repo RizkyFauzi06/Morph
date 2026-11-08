@@ -69,6 +69,10 @@ class MainActivity : ComponentActivity() {
     // State Global untuk Markas Utama
     private var fileUriFromPicker by mutableStateOf<Uri?>(null)
     private var showBottomSheetFromPicker by mutableStateOf(false)
+    
+    companion object {
+        var isAppInForeground = false
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -225,13 +229,23 @@ fun HomeScreen(
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                hasNotificationPermission = checkNotifPermission(context)
-                refreshFiles()
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    MainActivity.isAppInForeground = true // Latar depan
+                    hasNotificationPermission = checkNotifPermission(context)
+                    refreshFiles()
+                }
+                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
+                    MainActivity.isAppInForeground = false // Masuk latar belakang
+                }
+                else -> {}
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        onDispose { 
+            MainActivity.isAppInForeground = false
+            lifecycleOwner.lifecycle.removeObserver(observer) 
+        }
     }
     
     
@@ -260,13 +274,19 @@ fun HomeScreen(
                 "Morph",
                 style = MaterialTheme.typography.displayMedium,
                 color = MaterialTheme.colorScheme.primary)
-                // --- IN-APP PROGRESS UI ---
+                // --- IN-APP PROGRESS UI (PBI 8.9 Tambah Tombol Batal) ---
                 if (engineState is MorphEngine.ConvertState.Converting) {
                     val progress = (engineState as MorphEngine.ConvertState.Converting).progress
                     val format = (engineState as MorphEngine.ConvertState.Converting).format.uppercase()
                     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Memproses ke $format...", style = MaterialTheme.typography.labelLarge)
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text("Memproses ke $format...", style = MaterialTheme.typography.labelLarge)
+                                // Tombol Pembatalan
+                                IconButton(onClick = { MorphEngine.cancelCurrentConversion() }, modifier = Modifier.size(24.dp)) {
+                                    Text("✖", color = MaterialTheme.colorScheme.error)
+                                }
+                            }
                             Spacer(modifier = Modifier.height(8.dp))
                             LinearProgressIndicator(progress = progress / 100f, modifier = Modifier.fillMaxWidth().height(8.dp), color = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.height(4.dp))
@@ -417,14 +437,33 @@ fun BottomSheetConverter(fileUri: Uri, fileName: String, mimeType: String, onDis
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val context = LocalContext.current
     
+    // PBI 8.4: Ambil ukuran file asli
+    var fileSizeStr by remember { mutableStateOf("Menghitung ukuran...") }
+    LaunchedEffect(fileUri) {
+        val cursor = context.contentResolver.query(fileUri, null, null, null, null)
+        if (cursor != null && cursor.moveToFirst()) {
+            val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+            if (sizeIndex != -1) {
+                val sizeInKb = cursor.getLong(sizeIndex) / 1024
+                fileSizeStr = if (sizeInKb > 1024) "${sizeInKb / 1024} MB" else "$sizeInKb KB"
+            }
+            cursor.close()
+        } else {
+            fileSizeStr = "Ukuran tidak diketahui"
+        }
+    }
+    
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 48.dp, top = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text("Ubah Format File", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 4.dp))
+            // Detail File (PBI 8.4)
             Text(
-                text = fileName, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = "$fileName • $fileSizeStr", 
+                style = MaterialTheme.typography.bodyMedium, 
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = 24.dp)
             )
 
