@@ -24,7 +24,7 @@ object MorphEngine {
         object Idle : ConvertState()
         data class Converting(val format: String, val progress: Int) : ConvertState()
         object Success : ConvertState()
-        data class Error(val message: String) : ConvertState()
+        data class Error(val message: String, val originalUri: Uri? = null, val targetFormat: String = "") : ConvertState()
     }
     
     // Pipa yang akan dipantau oleh UI
@@ -81,11 +81,11 @@ object MorphEngine {
                         currentStatus.value = ConvertState.Success // UPDATE STATE
                         onSuccess(finalPath)
                     } else {
-                        currentStatus.value = ConvertState.Error("Gagal memindahkan file.") // UPDATE STATE
+                        currentStatus.value = ConvertState.Error("Gagal memindahkan file.", inputUri, outputExtension)
                         onError("Gagal memindahkan file.")
                     }
                 } else {
-                    currentStatus.value = ConvertState.Error("Gagal Konversi (Kode: ${returnCode.value})") // UPDATE STATE
+                    currentStatus.value = ConvertState.Error("Gagal Konversi (Kode: ${returnCode.value})", inputUri, outputExtension)
                     onError("Gagal Konversi (Kode: ${returnCode.value})")
                 }
             },
@@ -140,13 +140,13 @@ object MorphEngine {
                         currentStatus.value = ConvertState.Success // UPDATE STATE
                         onSuccess(finalPath)
                     } else {
-                        currentStatus.value = ConvertState.Error("Gagal menyimpan gambar") // UPDATE STATE
+                        currentStatus.value = ConvertState.Error("Gagal menyimpan gambar", inputUri, extension)
                         onError("Gagal menyimpan gambar")
                     }
                 }
             } catch (e: Exception) {
                 launch(Dispatchers.Main) { 
-                    currentStatus.value = ConvertState.Error("Gagal render gambar") // UPDATE STATE
+                    currentStatus.value = ConvertState.Error("Gagal render gambar", inputUri, extension)
                     onError("Gagal render gambar: ${e.message}") 
                 }
             }

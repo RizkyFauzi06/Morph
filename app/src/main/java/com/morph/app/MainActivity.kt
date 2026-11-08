@@ -176,7 +176,7 @@ fun HomeScreen(
     
     var hasNotificationPermission by remember { mutableStateOf(checkNotifPermission(context)) }
     var morphFiles by remember { mutableStateOf(emptyList<File>()) }
-    var isRefreshing by remember { mutableStateOf(false) } // State untuk indikator loading
+    var isRefreshing by remember { mutableStateOf(false) }
 
     val engineState by MorphEngine.currentStatus.collectAsState()
 
@@ -185,13 +185,9 @@ fun HomeScreen(
         morphFiles = getMorphFiles()
         isRefreshing = false
     }
-
-    // State untuk Pull to Refresh
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshing,
-        onRefresh = {
-            coroutineScope.launch { refreshFiles() }
-        }
+        onRefresh = { coroutineScope.launch { refreshFiles() } }
     )
 
     LaunchedEffect(engineState) {
@@ -223,43 +219,62 @@ fun HomeScreen(
         },
         containerColor = Color.Transparent
     ) { paddingValues ->
-        // Bungkus dengan Box untuk PullRefresh
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .pullRefresh(pullRefreshState) // Pasang fungsi pull refresh di sini
-        ) {
+        Box(modifier = Modifier.fillMaxSize().padding(paddingValues).pullRefresh(pullRefreshState)) {
             Column(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Spacer(modifier = Modifier.height(48.dp))
-                
                 Text("Morph", style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary)
                 Text("Universal File Converter", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // --- IN-APP PROGRESS UI ---
                 if (engineState is MorphEngine.ConvertState.Converting) {
                     val progress = (engineState as MorphEngine.ConvertState.Converting).progress
                     val format = (engineState as MorphEngine.ConvertState.Converting).format.uppercase()
-                    
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-                    ) {
+                    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text("Memproses ke $format...", style = MaterialTheme.typography.labelLarge)
                             Spacer(modifier = Modifier.height(8.dp))
-                            LinearProgressIndicator(
-                                progress = progress / 100f,
-                                modifier = Modifier.fillMaxWidth().height(8.dp),
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                            LinearProgressIndicator(progress = progress / 100f, modifier = Modifier.fillMaxWidth().height(8.dp), color = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.height(4.dp))
                             Text("$progress%", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.End, style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                // --- KARTU ERROR & RETRY (PBI 8.1.4 & 8.1.10) ---
+                if (engineState is MorphEngine.ConvertState.Error) {
+                    val errorState = engineState as MorphEngine.ConvertState.Error
+                    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("Konversi Gagal", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                            Text(errorState.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                TextButton(onClick = { MorphEngine.currentStatus.value = MorphEngine.ConvertState.Idle }) {
+                                    Text("Tutup", color = MaterialTheme.colorScheme.onErrorContainer)
+                                }
+                                if (errorState.originalUri != null && errorState.targetFormat.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Button(
+                                        onClick = {
+                                            MorphEngine.currentStatus.value = MorphEngine.ConvertState.Idle
+                                            val serviceIntent = Intent(context, MorphService::class.java).apply {
+                                                putExtra("INPUT_URI", errorState.originalUri)
+                                                putExtra("TARGET_FORMAT", errorState.targetFormat)
+                                            }
+                                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(serviceIntent)
+                                            else context.startService(serviceIntent)
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onErrorContainer, contentColor = MaterialTheme.colorScheme.errorContainer)
+                                    ) {
+                                        Text("Coba Lagi")
+                                    }
+                                }
+                            }
                         }
                     }
                     Spacer(modifier = Modifier.height(16.dp))
@@ -284,12 +299,7 @@ fun HomeScreen(
             // LOGIKA DINAMIS PBI 8.1 (Kosong vs Berisi)
            if (morphFiles.isEmpty()) {
                     Spacer(modifier = Modifier.weight(1f))
-                    Button(
-                        onClick = onPickFileClick,
-                        modifier = Modifier.size(160.dp),
-                        shape = androidx.compose.foundation.shape.CircleShape,
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
-                    ) {
+                    Button(onClick = onPickFileClick, modifier = Modifier.size(160.dp), shape = androidx.compose.foundation.shape.CircleShape, elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("+", style = MaterialTheme.typography.displayMedium)
                             Text("Pilih File")
@@ -301,19 +311,61 @@ fun HomeScreen(
                         Text("File Anda", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
                     }
                     Spacer(modifier = Modifier.height(8.dp))
+                    
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
                         items(morphFiles) { file ->
+                            // PBI 8.1.7 & 8.1.9: STATE UNTUK MENU DROPDOWN & DIALOG HAPUS
+                            var expanded by remember { mutableStateOf(false) }
+                            var showDeleteDialog by remember { mutableStateOf(false) }
+                            if (showDeleteDialog) {
+                                AlertDialog(
+                                    onDismissRequest = { showDeleteDialog = false },
+                                    title = { Text("Hapus File") },
+                                    text = { Text("Hapus ${file.name} secara permanen dari perangkat ini?") },
+                                    confirmButton = {
+                                        TextButton(onClick = {
+                                            file.delete()
+                                            showDeleteDialog = false
+                                            refreshFiles()
+                                        }) { Text("Hapus", color = MaterialTheme.colorScheme.error) }
+                                    },
+                                    dismissButton = {
+                                        TextButton(onClick = { showDeleteDialog = false }) { Text("Batal") }
+                                    }
+                                )
+                            }
+
                             Card(
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { openFileDirectly(context, file) },
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                             ) {
                                 ListItem(
                                     headlineContent = { Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                    supportingContent = { 
-                                        val sizeKb = file.length() / 1024
-                                        Text("$sizeKb KB") 
+                                    supportingContent = { Text("${file.length() / 1024} KB") },
+                                    trailingContent = { 
+                                        Box {
+                                            // Tombol Titik Tiga (Dropdown)
+                                            IconButton(onClick = { expanded = true }) {
+                                                Text("⋮", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                                            }
+                                            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                                                DropdownMenuItem(
+                                                    text = { Text("Bagikan") },
+                                                    onClick = {
+                                                        expanded = false
+                                                        shareFileDirectly(context, file)
+                                                    }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("Hapus", color = MaterialTheme.colorScheme.error) },
+                                                    onClick = {
+                                                        expanded = false
+                                                        showDeleteDialog = true
+                                                    }
+                                                )
+                                            }
+                                        }
                                     },
-                                    trailingContent = { Text(file.extension.uppercase(), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge) },
                                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                                 )
                             }
@@ -321,13 +373,7 @@ fun HomeScreen(
                     }
                 }
             }
-
-            // Indikator loading yang berputar saat layar ditarik
-            PullRefreshIndicator(
-                refreshing = isRefreshing,
-                state = pullRefreshState,
-                modifier = Modifier.align(Alignment.TopCenter)
-            )
+            PullRefreshIndicator(refreshing = isRefreshing, state = pullRefreshState, modifier = Modifier.align(Alignment.TopCenter))
         }
     }
 }
@@ -424,5 +470,21 @@ fun openFileDirectly(context: android.content.Context, file: File) {
         context.startActivity(intent)
     } catch (e: Exception) {
         Toast.makeText(context, "Tidak ada aplikasi untuk membuka ${file.extension.uppercase()}", Toast.LENGTH_SHORT).show()
+    }
+}
+
+fun shareFileDirectly(context: android.content.Context, file: File) {
+    try {
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+        val mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: "*/*"
+        
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = mimeType
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, "Bagikan via..."))
+    } catch (e: Exception) {
+        Toast.makeText(context, "Gagal membagikan file", Toast.LENGTH_SHORT).show()
     }
 }
