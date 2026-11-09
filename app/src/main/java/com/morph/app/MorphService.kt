@@ -54,25 +54,34 @@ class MorphService : Service() {
                     }
                 },
                 onSuccess = { finalPath ->
-                    if (showNotif) {
-                        // Gunakan ID berbeda (NOTIFICATION_ID + 1) agar notifikasi sukses tidak ikut terhapus oleh stopForeground
-                        val successNotif = buildNotification("Konversi Selesai", "Buka Morph untuk melihat hasil", false)
-                        val manager = getSystemService(NotificationManager::class.java)
-                        manager.notify(NOTIFICATION_ID + 1, successNotif)
+                    val successNotif = buildNotification("Konversi Selesai", "Buka Morph untuk melihat hasil", false)
+                    val manager = getSystemService(NotificationManager::class.java)
+                    
+                    // PERBAIKAN BUG: Hapus total notifikasi proses yang lama dari layar!
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        stopForeground(STOP_FOREGROUND_REMOVE) 
+                    } else {
+                        @Suppress("DEPRECATION")
+                        stopForeground(true) 
                     }
                     
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_DETACH)
-                    else @Suppress("DEPRECATION") stopForeground(false)
+                    // Baru munculkan notifikasi sukses
+                    manager.notify(NOTIFICATION_ID + 1, successNotif)
                     stopSelf()
                 },
                 onError = { errorMessage ->
-                    if (showNotif) {
-                        val errorNotif = buildNotification("Konversi Gagal", errorMessage, false)
-                        val manager = getSystemService(NotificationManager::class.java)
-                        manager.notify(NOTIFICATION_ID + 1, errorNotif)
+                    val errorNotif = buildNotification("Konversi Gagal", errorMessage, false)
+                    val manager = getSystemService(NotificationManager::class.java)
+                    
+                    // PERBAIKAN BUG: Hapus total notifikasi proses yang lama
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        stopForeground(true)
                     }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_DETACH)
-                    else @Suppress("DEPRECATION") stopForeground(false)
+                    
+                    manager.notify(NOTIFICATION_ID + 1, errorNotif)
                     stopSelf()
                 }
             )

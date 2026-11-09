@@ -504,7 +504,6 @@ fun SettingsScreen(onBackClick: () -> Unit) {
     
     // State untuk memicu re-render UI saat diswitch
     var themeOption by remember { mutableStateOf(prefs.themeOption) }
-    var showNotif by remember { mutableStateOf(prefs.showNotifications) }
     var keepName by remember { mutableStateOf(prefs.keepOriginalName) }
     var closeShare by remember { mutableStateOf(prefs.closeAfterShare) }
     var quality by remember { mutableStateOf(prefs.qualityPreset) }
@@ -580,13 +579,6 @@ fun SettingsScreen(onBackClick: () -> Unit) {
                         }
                         Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Notifikasi Latar Belakang", style = MaterialTheme.typography.bodyLarge)
-                                Text("Tampilkan progres di panel notifikasi", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Switch(checked = showNotif, onCheckedChange = { showNotif = it; prefs.showNotifications = it })
-                        }
-                        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Column(modifier = Modifier.weight(1f)) {
                                 Text("Tutup Otomatis", style = MaterialTheme.typography.bodyLarge)
                                 Text("Tutup Morph setelah memilih format via Share", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
@@ -629,15 +621,32 @@ fun getTargetFormats(fileName: String, mimeType: String): List<String> {
     val originalExt = fileName.substringAfterLast('.', "").lowercase()
     val availableFormats = mutableListOf<String>()
 
+    // Deteksi apakah file ini masuk akal untuk dikompresi ke format yang sama
+    val isCompressible = mimeType.startsWith("video/") || 
+                         mimeType.startsWith("image/") || 
+                         mimeType.startsWith("audio/") || 
+                         mimeType == "application/pdf" || 
+                         originalExt == "pdf"
+
+    // Tentukan daftar format tujuan berdasarkan tipe file
     if (mimeType.startsWith("video/")) availableFormats.addAll(listOf("mp4", "mkv", "avi", "gif", "mp3", "m4a"))
     else if (mimeType.startsWith("image/")) availableFormats.addAll(listOf("png", "jpg", "webp"))
     else if (mimeType.startsWith("audio/")) availableFormats.addAll(listOf("mp3", "m4a", "wav"))
-    else availableFormats.addAll(listOf("mp4", "png", "mp3"))
+    else if (mimeType == "application/pdf" || originalExt == "pdf") availableFormats.addAll(listOf("pdf", "jpg", "png")) // PERSIAPAN PDF
+    else availableFormats.addAll(listOf("mp4", "png", "mp3")) // Default fallback
 
-    availableFormats.remove(originalExt)
-    return availableFormats
+    // LOGIKA PINTAR: Hapus format asal JIKA BUKAN file yang bisa dikompresi
+    if (!isCompressible) {
+        availableFormats.remove(originalExt)
+    } else {
+        // Jika bisa dikompresi, pastikan format aslinya ada di urutan teratas agar mudah diklik
+        if (!availableFormats.contains(originalExt) && originalExt.isNotEmpty()) {
+            availableFormats.add(0, originalExt)
+        }
+    }
+
+    return availableFormats.distinct()
 }
-
 
 fun checkNotifPermission(context: android.content.Context): Boolean {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
