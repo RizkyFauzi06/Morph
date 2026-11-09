@@ -31,88 +31,128 @@ object MorphEngine {
     val currentStatus = MutableStateFlow<ConvertState>(ConvertState.Idle)
 
     fun convert(
-        context: Context,
-        inputUri: Uri,
+        context: android.content.Context,
+        inputUri: android.net.Uri,
         outputExtension: String,
-        originalFileName: String, // Pastikan ini ada
-        onProgress: (String, Int) -> Unit, 
+        originalFileName: String,
+        qualityPreset: Int, // PARAMETER BARU
+        onProgress: (String, Int) -> Unit,
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
-        val timeStamp = System.currentTimeMillis()
-        val cacheOutputFile = File(context.cacheDir, "Morph_$timeStamp.$outputExtension")
-
-        // PISAHKAN JALUR: Jika Gambar, gunakan Android Native (Cepat & Support WEBP)
+        // Jika format gambar, gunakan Native Android
         if (outputExtension in listOf("png", "jpg", "webp")) {
-            // UBAH BARIS INI: Tambahkan originalFileName
-            convertImageNatively(context, inputUri, outputExtension, originalFileName, onProgress, onSuccess, onError)
+            // LEMPAR KE NATIVE
+            convertImageNatively(context, inputUri, outputExtension, originalFileName, qualityPreset, onProgress, onSuccess, onError)
             return
         }
+        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                currentStatus.value = ConvertState.Converting(outputExtension, 0)
+                onProgress("Menyiapkan file...", 0)
+               // 1. PERSIAPKAN FILE SEMENTARA (DENGAN EKSTENSI YANG BENAR)
+                val inputExt = originalFileName.substringAfterLast('.', "")
+                val inputSuffix = if (inputExt.isNotEmpty()) ".$inputExt" else ""
+                
+                val cacheInputFile = java.io.File(context.cacheDir, "temp_input_morph$inputSuffix")
+                val inputStream = context.contentResolver.openInputStream(inputUri)
+                val outputStream = java.io.FileOutputStream(cacheInputFile)
+                inputStream?.copyTo(outputStream)
+                inputStream?.close()
+                outputStream.close()
 
-        // JIKA VIDEO / AUDIO: Gunakan FFmpeg
-        val inputPath = FFmpegKitConfig.getSafParameterForRead(context, inputUri)
-        
-        // Smart Command Builder
-        val command = when (outputExtension) {
-            "mp3", "m4a", "wav" -> "-y -i \"$inputPath\" -vn \"${cacheOutputFile.absolutePath}\"" // -vn = Matikan Video, ambil Audio saja
-            "gif" -> "-y -i \"$inputPath\" -vf \"fps=10,scale=480:-1:flags=lanczos\" \"${cacheOutputFile.absolutePath}\"" // Kompresi GIF agar RAM tidak jebol
-            else -> "-y -i \"$inputPath\" \"${cacheOutputFile.absolutePath}\"" // Konversi standar (mkv <-> mp4)
-        }
+                val cacheOutputFile = java.io.File(context.cacheDir, "temp_output_morph.$outputExtension")
 
-        // Baca durasi menggunakan Engine Native Android (Lebih aman dari FFprobe)
-        var totalDurationMs = 0L
-        try {
-            val retriever = MediaMetadataRetriever()
-            retriever.setDataSource(context, inputUri)
-            val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-            totalDurationMs = durationStr?.toLong() ?: 0L
-            retriever.release()
-        } catch (e: Exception) {
-            Log.e("Morph", "Gagal membaca durasi: ${e.message}")
-        }
+               // 2. DAPATKAN DURASI FILE UNTUK PROGRESS BAR & KALKULASI BITRATE
+                val mediaInfo = com.arthenica.ffmpegkit.FFprobeKit.getMediaInformation(cacheInputFile.absolutePath).mediaInformation
+                val totalDurationStr = mediaInfo?.duration
+                val totalDurationMs = (totalDurationStr?.toDoubleOrNull()?.times(1000))?.toLong() ?: 0L
 
-        // Eksekusi FFmpeg
-        // ... kode sebelumnya ...
-        FFmpegKit.executeAsync(
-            command,
-            { session ->
-                val returnCode = session.returnCode
-                if (com.arthenica.ffmpegkit.ReturnCode.isSuccess(returnCode)) {
-                    val finalPath = saveToDownloads(context, cacheOutputFile, originalFileName, outputExtension)
-                    if (finalPath != null) {
-                        currentStatus.value = ConvertState.Success
-                        onSuccess(finalPath)
-                    } else {
-                        currentStatus.value = ConvertState.Error("Gagal memindahkan file.", inputUri, outputExtension)
-                        onError("Gagal memindahkan file.")
-                    }
-                } else if (com.arthenica.ffmpegkit.ReturnCode.isCancel(returnCode)) {
-                    // PBI 8.9: Jika sengaja dibatalkan, kembalikan ke Idle dan hapus cache
-                    currentStatus.value = ConvertState.Idle
-                    cacheOutputFile.delete()
-                    onError("Konversi dibatalkan pengguna.")
+                // MATEMATIKA CERDAS: Hitung Bitrate Asli (File Size in bits / Duration in seconds)
+                val originalBitrateBps = if (totalDurationMs > 0) {
+                    ((cacheInputFile.length() * 8.0) / (totalDurationMs / 1000.0)).toLong()
                 } else {
-                    currentStatus.value = ConvertState.Error("Gagal Konversi (Kode: ${returnCode.value})", inputUri, outputExtension)
-                    onError("Gagal Konversi (Kode: ${returnCode.value})")
+                    5000000L // Fallback ke 5 Mbps jika durasi aneh/gagal dibaca
                 }
-            },
-            { log -> /* Kosongkan */ },
-            { statistics ->
-                if (totalDurationMs > 0) {
-                    val percentage = ((statistics.time.toFloat() / totalDurationMs) * 100).toInt().coerceIn(0, 100)
-                    currentStatus.value = ConvertState.Converting(outputExtension, percentage)
-                    // UBAH BARIS INI: Kirim angka persentase sebagai parameter kedua
-                    onProgress("Telah diproses: $percentage%", percentage) 
+
+                // Asumsikan video memakan 90% dari total ukuran file, sisa 10% untuk audio
+                val videoBitrateBps = (originalBitrateBps * 0.9).toLong()
+
+                // 3. SPRINT 3 (PBI 11): RACIKAN PARAMETER KUALITAS DINAMIS (SMART COMPRESSOR)
+                val qualityArgs = if (outputExtension in listOf("mp4", "mkv", "webm", "avi", "mov")) {
+                    when (qualityPreset) {
+                        0 -> {
+                            // TINGGI: Gunakan bitrate asli (Ukuran dan kualitas 100% terjaga)
+                            "-b:v $videoBitrateBps -b:a 256k"
+                        }
+                        1 -> {
+                            // SEDANG: Pangkas bitrate jadi 50% dari aslinya
+                            val targetBv = (videoBitrateBps * 0.5).toLong()
+                            "-b:v $targetBv -b:a 128k"
+                        }
+                        2 -> {
+                            // RENDAH: Pangkas bitrate jadi 25% dari aslinya + paksa resolusi 720p
+                            val targetBv = (videoBitrateBps * 0.25).toLong()
+                            "-vf \"scale=trunc(iw/2)*2:720\" -b:v $targetBv -b:a 96k"
+                        }
+                        else -> ""
+                    }
+                } else if (outputExtension in listOf("mp3", "m4a", "ogg", "opus", "wav")) {
+                    when (qualityPreset) {
+                        0 -> "-b:a 320k" 
+                        1 -> "-b:a 128k" 
+                        2 -> "-b:a 64k"  
+                        else -> ""
+                    }
                 } else {
-                    val secondsProcessed = statistics.time / 1000
-                    currentStatus.value = ConvertState.Converting(outputExtension, 0)
-                    // UBAH BARIS INI: Kirim angka 0 (karena durasi gagal dibaca)
-                    onProgress("Telah diproses: $secondsProcessed detik", 0) 
+                    "" 
+                }
+
+                // 4. SUSUN PERINTAH FFMPEG
+                val command = "-y -i \"${cacheInputFile.absolutePath}\" $qualityArgs \"${cacheOutputFile.absolutePath}\""
+                com.arthenica.ffmpegkit.FFmpegKit.executeAsync(
+                    command,
+                    { session ->
+                        val returnCode = session.returnCode
+                        if (com.arthenica.ffmpegkit.ReturnCode.isSuccess(returnCode)) {
+                            val finalPath = saveToDownloads(context, cacheOutputFile, originalFileName, outputExtension)
+                            if (finalPath != null) {
+                                currentStatus.value = ConvertState.Success
+                                onSuccess(finalPath)
+                            } else {
+                                currentStatus.value = ConvertState.Error("Gagal memindahkan file.", inputUri, outputExtension)
+                                onError("Gagal memindahkan file.")
+                            }
+                        } else if (com.arthenica.ffmpegkit.ReturnCode.isCancel(returnCode)) {
+                            currentStatus.value = ConvertState.Idle
+                            cacheOutputFile.delete()
+                            cacheInputFile.delete() // Bersihkan juga file inputnya
+                            onError("Konversi dibatalkan pengguna.")
+                        } else {
+                            currentStatus.value = ConvertState.Error("Gagal Konversi (Kode: ${returnCode.value})", inputUri, outputExtension)
+                            onError("Gagal Konversi (Kode: ${returnCode.value})")
+                        }
+                    },
+                    { log -> /* Kosongkan */ },
+                    { statistics ->
+                        if (totalDurationMs > 0) {
+                            val percentage = ((statistics.time.toFloat() / totalDurationMs) * 100).toInt().coerceIn(0, 100)
+                            currentStatus.value = ConvertState.Converting(outputExtension, percentage)
+                            onProgress("Telah diproses: $percentage%", percentage)
+                        } else {
+                            val secondsProcessed = statistics.time / 1000
+                            currentStatus.value = ConvertState.Converting(outputExtension, 0)
+                            onProgress("Telah diproses: $secondsProcessed detik", 0)
+                        }
+                    }
+                )
+            } catch (e: Exception) {
+                launch(kotlinx.coroutines.Dispatchers.Main) {
+                    currentStatus.value = ConvertState.Error("Gagal setup konversi", inputUri, outputExtension)
+                    onError("Gagal setup konversi: ${e.message}")
                 }
             }
-        )
-        
-        
+        }
     }
 
     private fun convertImageNatively(
@@ -120,6 +160,7 @@ object MorphEngine {
         inputUri: android.net.Uri,
         extension: String,
         originalFileName: String,
+        qualityPreset: Int, // PARAMETER BARU
         onProgress: (String, Int) -> Unit,
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
@@ -140,6 +181,7 @@ object MorphEngine {
                 }
 
                 // 2. Tentukan format output
+                // 2. Tentukan format output
                 val format = when (extension.lowercase()) {
                     "png" -> android.graphics.Bitmap.CompressFormat.PNG
                     "webp" -> if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) 
@@ -149,10 +191,19 @@ object MorphEngine {
                     else -> android.graphics.Bitmap.CompressFormat.JPEG
                 }
 
-                // 3. Bikin Cache File & Simpan (Ini yang tadi hilang / error!)
+                // SPRINT 3 (PBI 11): Baca Preset Kualitas
+                val prefs = MorphPrefs(context)
+                val qualitySetting = when (qualityPreset) {
+                    0 -> 100 // Tinggi 
+                    1 -> 80  // Sedang 
+                    2 -> 50  // Rendah 
+                    else -> 100
+                }
+
+                // 3. Bikin Cache File & Simpan (Terapkan Kualitas)
                 val cacheFile = java.io.File(context.cacheDir, "temp_image.$extension")
                 val fos = java.io.FileOutputStream(cacheFile)
-                bitmap.compress(format, 100, fos)
+                bitmap.compress(format, qualitySetting, fos) // MENGGUNAKAN QUALITY SETTING
                 fos.flush()
                 fos.close()
 

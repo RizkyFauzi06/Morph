@@ -18,33 +18,39 @@ class MorphService : Service() {
 
     private val CHANNEL_ID = "Morph_Foreground"
     private val NOTIFICATION_ID = 143
+    private var isCancelled = false // Pelacak pembatalan
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // DETEKSI TOMBOL BATAL
         if (intent?.action == "ACTION_CANCEL_CONVERSION") {
+            isCancelled = true // Kunci semua notifikasi susulan!
             MorphEngine.cancelCurrentConversion()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                stopForeground(STOP_FOREGROUND_REMOVE)
-            } else {
-                @Suppress("DEPRECATION")
-                stopForeground(true)
-            }
+            
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.cancel(NOTIFICATION_ID) // Bunuh notifikasi progress
+            manager.cancel(NOTIFICATION_ID + 1) // Bunuh notifikasi error/sukses jika sempat muncul
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
+            else @Suppress("DEPRECATION") stopForeground(true)
+            
             stopSelf()
             return START_NOT_STICKY
         }
 
+        isCancelled = false // Reset saat konversi baru dimulai
         val inputUri = intent?.getParcelableExtra<Uri>("INPUT_URI")
         val targetFormat = intent?.getStringExtra("TARGET_FORMAT") ?: ""
         
-        // Baca pengaturan dari Preferences
+        // TANGKAP PILIHAN KUALITAS DARI BOTTOM SHEET
+        val qualityPreset = intent?.getIntExtra("QUALITY_PRESET", 0) ?: 0
+        
         val prefs = MorphPrefs(this)
         val showNotif = prefs.showNotifications
 
         if (inputUri != null && targetFormat.isNotEmpty()) {
-            // Notifikasi wajib Android (Foreground) - Jika showNotif false, kita buat sangat senyap
             val initialNotif = buildNotification("Morph berjalan", "Mengonversi file...", true, 0)
             startForeground(NOTIFICATION_ID, initialNotif)
 
-            // Ekstrak nama asli file untuk fitur Keep Original Filename (8.2.5)
             val cursor = contentResolver.query(inputUri, null, null, null, null)
             val originalName = if (cursor != null && cursor.moveToFirst()) {
                 val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
@@ -56,44 +62,34 @@ class MorphService : Service() {
                 context = this,
                 inputUri = inputUri,
                 outputExtension = targetFormat,
-                originalFileName = originalName, // Lempar nama asli ke mesin
+                originalFileName = originalName,
+                qualityPreset = qualityPreset, // TAMBAHKAN PARAMETER INI
                 onProgress = { progressText, percentage ->
-                    // PBI 8.2.4 (Smart Notification): Update notif HANYA JIKA aplikasi di latar belakang
-                    if (!MainActivity.isAppInForeground) {
+                    // BUG FIX: Jangan update notifikasi jika sudah dibatalkan
+                    if (!MainActivity.isAppInForeground && !isCancelled) {
                         val updateNotif = buildNotification("Mengonversi ke ${targetFormat.uppercase()}", progressText, true, percentage)
                         val manager = getSystemService(NotificationManager::class.java)
                         manager.notify(NOTIFICATION_ID, updateNotif)
                     }
                 },
                 onSuccess = { finalPath ->
-                    val successNotif = buildNotification("Konversi Selesai", "Buka Morph untuk melihat hasil", false)
-                    val manager = getSystemService(NotificationManager::class.java)
-                    
-                    // PERBAIKAN BUG: Hapus total notifikasi proses yang lama dari layar!
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                        stopForeground(STOP_FOREGROUND_REMOVE) 
-                    } else {
-                        @Suppress("DEPRECATION")
-                        stopForeground(true) 
+                    if (!isCancelled) {
+                        val successNotif = buildNotification("Konversi Selesai", "Buka Morph untuk melihat hasil", false)
+                        val manager = getSystemService(NotificationManager::class.java)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
+                        else @Suppress("DEPRECATION") stopForeground(true)
+                        manager.notify(NOTIFICATION_ID + 1, successNotif)
                     }
-                    
-                    // Baru munculkan notifikasi sukses
-                    manager.notify(NOTIFICATION_ID + 1, successNotif)
                     stopSelf()
                 },
                 onError = { errorMessage ->
-                    val errorNotif = buildNotification("Konversi Gagal", errorMessage, false)
-                    val manager = getSystemService(NotificationManager::class.java)
-                    
-                    // PERBAIKAN BUG: Hapus total notifikasi proses yang lama
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                        stopForeground(STOP_FOREGROUND_REMOVE)
-                    } else {
-                        @Suppress("DEPRECATION")
-                        stopForeground(true)
+                    if (!isCancelled) {
+                        val errorNotif = buildNotification("Konversi Gagal", errorMessage, false)
+                        val manager = getSystemService(NotificationManager::class.java)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
+                        else @Suppress("DEPRECATION") stopForeground(true)
+                        manager.notify(NOTIFICATION_ID + 1, errorNotif)
                     }
-                    
-                    manager.notify(NOTIFICATION_ID + 1, errorNotif)
                     stopSelf()
                 }
             )

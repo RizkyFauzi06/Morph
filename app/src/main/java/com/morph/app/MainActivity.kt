@@ -440,7 +440,6 @@ fun BottomSheetConverter(fileUri: Uri, fileName: String, mimeType: String, onDis
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val context = LocalContext.current
     
-    // PBI 8.4: Ambil ukuran file asli
     var fileSizeStr by remember { mutableStateOf("Menghitung ukuran...") }
     LaunchedEffect(fileUri) {
         val cursor = context.contentResolver.query(fileUri, null, null, null, null)
@@ -448,7 +447,7 @@ fun BottomSheetConverter(fileUri: Uri, fileName: String, mimeType: String, onDis
             val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
             if (sizeIndex != -1) {
                 val sizeInBytes = cursor.getLong(sizeIndex)
-                fileSizeStr = formatFileSize(sizeInBytes) // MENGGUNAKAN FUNGSI BARU
+                fileSizeStr = formatFileSize(sizeInBytes)
             }
             cursor.close()
         } else {
@@ -456,19 +455,43 @@ fun BottomSheetConverter(fileUri: Uri, fileName: String, mimeType: String, onDis
         }
     }
     
+    // --- UX BARU: State Kualitas Lokal ---
+    var selectedQuality by remember { mutableStateOf(0) } // 0: Tinggi, 1: Sedang, 2: Rendah
+
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 48.dp, top = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text("Ubah Format File", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 4.dp))
-            // Detail File (PBI 8.4)
+            
             Text(
                 text = "$fileName • $fileSizeStr", 
                 style = MaterialTheme.typography.bodyMedium, 
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = 24.dp)
+                maxLines = 1, overflow = TextOverflow.Ellipsis
             )
+
+            // --- UX BARU: UI Pemilih Kualitas Elegan ---
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp), horizontalArrangement = Arrangement.Center) {
+                listOf("Tinggi", "Sedang", "Rendah").forEachIndexed { index, title ->
+                    val isSelected = selectedQuality == index
+                    Surface(
+                        modifier = Modifier.clickable { selectedQuality = index }.padding(horizontal = 4.dp),
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                        border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null
+                    ) {
+                        Text(
+                            text = title, 
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), 
+                            style = MaterialTheme.typography.labelMedium, 
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
 
             val formatsToOptions = getTargetFormats(fileName, mimeType)
             
@@ -478,18 +501,21 @@ fun BottomSheetConverter(fileUri: Uri, fileName: String, mimeType: String, onDis
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 formatsToOptions.forEach { format ->
-                    ElevatedButton(
+                    Button(
                         onClick = {
                             val serviceIntent = Intent(context, MorphService::class.java).apply {
                                 putExtra("INPUT_URI", fileUri)
                                 putExtra("TARGET_FORMAT", format)
+                                putExtra("QUALITY_PRESET", selectedQuality) // KIRIM KUALITAS KE SERVICE
                             }
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(serviceIntent)
-                            else context.startService(serviceIntent)
-                            
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                context.startForegroundService(serviceIntent)
+                            } else {
+                                context.startService(serviceIntent)
+                            }
                             onDismiss()
                         },
-                        modifier = Modifier.defaultMinSize(minWidth = 90.dp)
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
                         Text(format.uppercase())
                     }
@@ -550,24 +576,6 @@ fun SettingsScreen(onBackClick: () -> Unit) {
                 }
                 Spacer(modifier = Modifier.height(16.dp))
             }
-
-            // PBI 8.2.7: Quality Preset (Persiapan Sprint 3)
-            item {
-                Text("Konversi Dasar", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Preset Kualitas Output", style = MaterialTheme.typography.bodyLarge)
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            TextButton(onClick = { quality = 0; prefs.qualityPreset = 0 }) { Text("Tinggi", color = if (quality == 0) MaterialTheme.colorScheme.primary else Color.Gray) }
-                            TextButton(onClick = { quality = 1; prefs.qualityPreset = 1 }) { Text("Sedang", color = if (quality == 1) MaterialTheme.colorScheme.primary else Color.Gray) }
-                            TextButton(onClick = { quality = 2; prefs.qualityPreset = 2 }) { Text("Rendah", color = if (quality == 2) MaterialTheme.colorScheme.primary else Color.Gray) }
-                        }
-                        Text("Berguna untuk kompresi file ke format yang sama.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
             // PBI 8.2.3, 8.2.4, 8.2.5: Behavior & Toggles
             item {
                 Text("Perilaku Aplikasi", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
