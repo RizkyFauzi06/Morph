@@ -494,7 +494,6 @@ fun BottomSheetConverter(fileUri: Uri, fileName: String, mimeType: String, onDis
             }
 
             val formatsToOptions = getTargetFormats(fileName, mimeType)
-            
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
