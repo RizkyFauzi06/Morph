@@ -20,6 +20,18 @@ class MorphService : Service() {
     private val NOTIFICATION_ID = 143
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == "ACTION_CANCEL_CONVERSION") {
+            MorphEngine.cancelCurrentConversion()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                @Suppress("DEPRECATION")
+                stopForeground(true)
+            }
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         val inputUri = intent?.getParcelableExtra<Uri>("INPUT_URI")
         val targetFormat = intent?.getStringExtra("TARGET_FORMAT") ?: ""
         
@@ -119,6 +131,15 @@ class MorphService : Service() {
         if (isProcessing) {
             builder.setProgress(100, progress, false)
             builder.setOngoing(true)
+            
+            val cancelIntent = Intent(this, MorphService::class.java).apply {
+                action = "ACTION_CANCEL_CONVERSION"
+            }
+            val cancelPendingIntent = PendingIntent.getService(
+                this, 1, cancelIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            // Menggunakan ikon "X" bawaan Android
+            builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Batal", cancelPendingIntent)
         }
 
         return builder.build()

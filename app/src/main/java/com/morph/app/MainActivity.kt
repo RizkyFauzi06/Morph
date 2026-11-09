@@ -44,6 +44,9 @@ import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import kotlinx.coroutines.launch
+import java.text.DecimalFormat
+import kotlin.math.log10
+import kotlin.math.pow
 
 class MainActivity : ComponentActivity() {
 
@@ -391,7 +394,7 @@ fun HomeScreen(
                             ) {
                                 ListItem(
                                     headlineContent = { Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                    supportingContent = { Text("${file.length() / 1024} KB") },
+                                    supportingContent = { Text(formatFileSize(file.length())) },
                                     trailingContent = { 
                                         Box {
                                             // Tombol Titik Tiga (Dropdown)
@@ -444,8 +447,8 @@ fun BottomSheetConverter(fileUri: Uri, fileName: String, mimeType: String, onDis
         if (cursor != null && cursor.moveToFirst()) {
             val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
             if (sizeIndex != -1) {
-                val sizeInKb = cursor.getLong(sizeIndex) / 1024
-                fileSizeStr = if (sizeInKb > 1024) "${sizeInKb / 1024} MB" else "$sizeInKb KB"
+                val sizeInBytes = cursor.getLong(sizeIndex)
+                fileSizeStr = formatFileSize(sizeInBytes) // MENGGUNAKAN FUNGSI BARU
             }
             cursor.close()
         } else {
@@ -594,7 +597,7 @@ fun SettingsScreen(onBackClick: () -> Unit) {
                 Text("Sistem", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                 Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Morph v1.0 (The Share MVP)", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
+                        Text("Morph v1.8 (The Share MVP)", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
                         Text("Universal File Converter by Rizki Fauzi", style = MaterialTheme.typography.bodySmall)
                         Spacer(modifier = Modifier.height(16.dp))
                         
@@ -695,6 +698,15 @@ fun shareFileDirectly(context: android.content.Context, file: File) {
         Toast.makeText(context, "Gagal membagikan file", Toast.LENGTH_SHORT).show()
     }
 }
+
+//Format Size Math
+fun formatFileSize(bytes: Long): String {
+    if (bytes <= 0) return "0 B"
+    val units = arrayOf("B", "KB", "MB", "GB", "TB")
+    val digitGroups = (log10(bytes.toDouble()) / log10(1024.0)).toInt()
+    return DecimalFormat("#,##0.#").format(bytes / 1024.0.pow(digitGroups.toDouble())) + " " + units[digitGroups]
+}
+
 // --- PENGELOLA PENGATURAN (PBI 8.2) ---
 class MorphPrefs(context: android.content.Context) {
     private val prefs = context.getSharedPreferences("morph_settings", android.content.Context.MODE_PRIVATE)
