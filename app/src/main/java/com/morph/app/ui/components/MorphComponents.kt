@@ -1,5 +1,8 @@
+
 package com.morph.app.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -16,6 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -27,7 +31,16 @@ import java.text.DecimalFormat
 import kotlin.math.log10
 import kotlin.math.pow
 
-// --- LIVE CONVERSION PROGRESS BANNER ---
+// Shared visual constants
+private val CardRadius = 16.dp
+private val ControlRadius = 12.dp
+private val ButtonRadius = 14.dp
+private val StandardBorder = 1.dp
+
+// --------------------------------------------------
+// LIVE CONVERSION PROGRESS BANNER
+// --------------------------------------------------
+
 @Composable
 fun ConversionBanner(
     format: String,
@@ -35,86 +48,126 @@ fun ConversionBanner(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val safeProgress = progress.coerceIn(0, 100)
+
+    val animatedProgress by animateFloatAsState(
+        targetValue = safeProgress / 100f,
+        animationSpec = tween(durationMillis = 350),
+        label = "conversion_progress"
+    )
+
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(CardRadius),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(
+                alpha = 0.55f
+            )
         ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+        border = BorderStroke(
+            StandardBorder,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 0.dp
+        )
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     Box(
                         modifier = Modifier
-                            .size(10.dp)
+                            .size(9.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF10B981))
+                            .background(MaterialTheme.colorScheme.tertiary)
                     )
-                    Text(
-                        text = "Mengonversi ke ${format.uppercase()}...",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = "Mengonversi ke ${format.uppercase()}",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+
+                        Text(
+                            text = "Proses konversi sedang berjalan",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
 
                 IconButton(
                     onClick = onCancel,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(36.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Batalkan Konversi",
                         tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(19.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
-            // Animated Gradient Progress Track
+            // Progress track
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(MaterialTheme.colorScheme.surface)
+                    .height(7.dp)
+                    .clip(CircleShape)
+                    .background(
+                        MaterialTheme.colorScheme.surface
+                    )
             ) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(fraction = (progress / 100f).coerceIn(0.01f, 1f))
+                        .fillMaxWidth(animatedProgress)
                         .fillMaxHeight()
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(CircleShape)
                         .background(
                             Brush.horizontalGradient(
-                                listOf(MorphIndigo, MorphViolet, MorphPink)
+                                colors = listOf(
+                                    MorphIndigo,
+                                    MorphViolet,
+                                    MorphPink
+                                )
                             )
                         )
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Latar belakang aktif",
+                    text = "Berjalan di latar belakang",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
                 Text(
-                    text = "$progress%",
+                    text = "$safeProgress%",
                     style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary
                 )
             }
@@ -122,7 +175,10 @@ fun ConversionBanner(
     }
 }
 
-// --- ERROR & RETRY CARD ---
+// --------------------------------------------------
+// ERROR & RETRY CARD
+// --------------------------------------------------
+
 @Composable
 fun ErrorCard(
     message: String,
@@ -132,53 +188,103 @@ fun ErrorCard(
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f))
+        shape = RoundedCornerShape(CardRadius),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer
+        ),
+        border = BorderStroke(
+            StandardBorder,
+            MaterialTheme.colorScheme.error.copy(alpha = 0.18f)
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 0.dp
+        )
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Warning,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(RoundedCornerShape(ControlRadius))
+                        .background(
+                            MaterialTheme.colorScheme.error.copy(alpha = 0.10f)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(19.dp)
+                    )
+                }
+
                 Text(
                     text = "Konversi Gagal",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onErrorContainer
                 )
             }
-            Spacer(modifier = Modifier.height(6.dp))
+
+            Spacer(modifier = Modifier.height(12.dp))
+
             Text(
                 text = message,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.9f)
+                color = MaterialTheme.colorScheme.onErrorContainer.copy(
+                    alpha = 0.9f
+                )
             )
-            Spacer(modifier = Modifier.height(10.dp))
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = onDismiss) {
-                    Text("Tutup", color = MaterialTheme.colorScheme.onErrorContainer)
+                TextButton(
+                    onClick = onDismiss
+                ) {
+                    Text(
+                        text = "Tutup",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
                 }
+
                 if (onRetry != null) {
                     Spacer(modifier = Modifier.width(8.dp))
+
                     Button(
                         onClick = onRetry,
+                        shape = RoundedCornerShape(ButtonRadius),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.onErrorContainer,
-                            contentColor = MaterialTheme.colorScheme.errorContainer
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
                         ),
-                        shape = RoundedCornerShape(10.dp)
+                        elevation = ButtonDefaults.buttonElevation(
+                            defaultElevation = 0.dp
+                        )
                     ) {
-                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Coba Lagi", fontSize = 12.sp)
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        Text(
+                            text = "Coba Lagi",
+                            style = MaterialTheme.typography.labelLarge
+                        )
                     }
                 }
             }
@@ -186,7 +292,10 @@ fun ErrorCard(
     }
 }
 
-// --- FILE HISTORY ITEM CARD ---
+// --------------------------------------------------
+// FILE HISTORY ITEM CARD
+// --------------------------------------------------
+
 @Composable
 fun FileHistoryItemCard(
     file: File,
@@ -198,31 +307,68 @@ fun FileHistoryItemCard(
     var menuExpanded by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
+    // Delete confirmation
     if (showDeleteConfirm) {
         AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Hapus File") },
-            text = { Text("Apakah Anda yakin ingin menghapus ${file.name} secara permanen?") },
+            onDismissRequest = {
+                showDeleteConfirm = false
+            },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            title = {
+                Text(
+                    text = "Hapus File",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+            },
+            text = {
+                Text(
+                    text = "Apakah Anda yakin ingin menghapus ${file.name} secara permanen?",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
             confirmButton = {
-                TextButton(onClick = {
-                    showDeleteConfirm = false
-                    onDelete()
-                }) {
-                    Text("Hapus", color = MaterialTheme.colorScheme.error)
+                TextButton(
+                    onClick = {
+                        showDeleteConfirm = false
+                        onDelete()
+                    }
+                ) {
+                    Text(
+                        text = "Hapus",
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) { Text("Batal") }
+                TextButton(
+                    onClick = {
+                        showDeleteConfirm = false
+                    }
+                ) {
+                    Text("Batal")
+                }
             }
         )
     }
 
     val ext = file.extension.uppercase()
+
+    // Format-specific accent colors
     val badgeColor = when (ext) {
-        "MP4", "MKV", "WEBM", "AVI", "MOV" -> Color(0xFFEC4899)
-        "MP3", "M4A", "WAV", "OGG" -> Color(0xFF8B5CF6)
-        "PNG", "JPG", "JPEG", "WEBP" -> Color(0xFF10B981)
-        "PDF" -> Color(0xFFEF4444)
+        "MP4", "MKV", "WEBM", "AVI", "MOV" -> MorphPink
+
+        "MP3", "M4A", "WAV", "OGG" -> MorphViolet
+
+        "PNG", "JPG", "JPEG", "WEBP" ->
+            MaterialTheme.colorScheme.tertiary
+
+        "PDF" -> MaterialTheme.colorScheme.error
+
         else -> MorphIndigo
     }
 
@@ -230,46 +376,59 @@ fun FileHistoryItemCard(
         modifier = modifier
             .fillMaxWidth()
             .clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(CardRadius),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(
+                alpha = 0.45f
+            )
         ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+        border = BorderStroke(
+            StandardBorder,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 0.dp
+        )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Format Badge
+            // File format badge
             Box(
                 modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(badgeColor.copy(alpha = 0.15f)),
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(ControlRadius))
+                    .background(badgeColor.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = ext.take(4),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = badgeColor
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = badgeColor,
+                    maxLines = 1
                 )
             }
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            Column(modifier = Modifier.weight(1f)) {
+            // File information
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 Text(
                     text = file.name,
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Spacer(modifier = Modifier.height(2.dp))
+
                 Text(
                     text = formatFileSize(file.length()),
                     style = MaterialTheme.typography.bodySmall,
@@ -277,30 +436,56 @@ fun FileHistoryItemCard(
                 )
             }
 
-            // Three-dot action menu
+            // File actions
             Box {
-                IconButton(onClick = { menuExpanded = true }) {
+                IconButton(
+                    onClick = {
+                        menuExpanded = true
+                    }
+                ) {
                     Icon(
                         imageVector = Icons.Default.MoreVert,
                         contentDescription = "Menu Aksi",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+
                 DropdownMenu(
                     expanded = menuExpanded,
-                    onDismissRequest = { menuExpanded = false }
+                    onDismissRequest = {
+                        menuExpanded = false
+                    }
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Bagikan") },
-                        leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
+                        text = {
+                            Text("Bagikan")
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Share,
+                                contentDescription = null
+                            )
+                        },
                         onClick = {
                             menuExpanded = false
                             onShare()
                         }
                     )
+
                     DropdownMenuItem(
-                        text = { Text("Hapus", color = MaterialTheme.colorScheme.error) },
-                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                        text = {
+                            Text(
+                                text = "Hapus",
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        },
                         onClick = {
                             menuExpanded = false
                             showDeleteConfirm = true
@@ -312,7 +497,10 @@ fun FileHistoryItemCard(
     }
 }
 
-// --- EMPTY HISTORY STATE ---
+// --------------------------------------------------
+// EMPTY HISTORY STATE
+// --------------------------------------------------
+
 @Composable
 fun EmptyHistoryState(
     onPickFileClick: () -> Unit,
@@ -321,60 +509,98 @@ fun EmptyHistoryState(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 36.dp),
+            .padding(vertical = 40.dp, horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        // Illustration / focal point
         Box(
             modifier = Modifier
-                .size(72.dp)
-                .clip(CircleShape)
-                .background(MorphIndigo.copy(alpha = 0.12f)),
+                .size(76.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(
+                    MaterialTheme.colorScheme.primaryContainer.copy(
+                        alpha = 0.65f
+                    )
+                ),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Default.FolderOpen,
                 contentDescription = null,
-                tint = MorphIndigo,
-                modifier = Modifier.size(36.dp)
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(34.dp)
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         Text(
             text = "Belum Ada File Terkonversi",
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center
         )
 
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Pilih file dari HP atau bagikan langsung dari galeri\nuntuk memulai konversi pertamamu.",
+            text = "Pilih file dari HP atau bagikan langsung dari galeri untuk memulai konversi pertamamu.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            textAlign = TextAlign.Center,
+            lineHeight = MaterialTheme.typography.bodySmall.lineHeight
         )
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         Button(
             onClick = onPickFileClick,
-            shape = RoundedCornerShape(14.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            shape = RoundedCornerShape(ButtonRadius),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ),
+            contentPadding = PaddingValues(
+                horizontal = 20.dp,
+                vertical = 12.dp
+            ),
+            elevation = ButtonDefaults.buttonElevation(
+                defaultElevation = 0.dp,
+                pressedElevation = 1.dp
+            )
         ) {
-            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text("Pilih File Sekarang")
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Text(
+                text = "Pilih File Sekarang",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold
+            )
         }
     }
 }
 
+// --------------------------------------------------
+// FILE SIZE FORMATTER
+// --------------------------------------------------
+
 fun formatFileSize(bytes: Long): String {
     if (bytes <= 0) return "0 B"
+
     val units = arrayOf("B", "KB", "MB", "GB", "TB")
-    val digitGroups = (log10(bytes.toDouble()) / log10(1024.0)).toInt()
-    return DecimalFormat("#,##0.#").format(bytes / 1024.0.pow(digitGroups.toDouble())) + " " + units[digitGroups]
+    val digitGroups = (
+        log10(bytes.toDouble()) / log10(1024.0)
+    ).toInt().coerceIn(0, units.lastIndex)
+
+    val size = bytes / 1024.0.pow(digitGroups.toDouble())
+
+    return DecimalFormat("#,##0.#").format(size) + " " + units[digitGroups]
 }

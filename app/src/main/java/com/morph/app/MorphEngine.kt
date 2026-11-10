@@ -223,8 +223,11 @@ object MorphEngine {
     ) {
         GlobalScope.launch(Dispatchers.IO) {
             try {
-                currentStatus.value = ConvertState.Converting(targetExtension, 10)
-                onProgress("Membaca dokumen PDF...", 10)
+                // Gunakan Main Thread khusus untuk update state awal agar aman
+                launch(Dispatchers.Main) {
+                    currentStatus.value = ConvertState.Converting(targetExtension, 10)
+                    onProgress("Membaca dokumen PDF...", 10)
+                }.join() // Tunggu selesai
 
                 val cacheInputFile = File(context.cacheDir, "temp_pdf_in.pdf")
                 context.contentResolver.openInputStream(inputUri)?.use { input ->
@@ -266,30 +269,40 @@ object MorphEngine {
                 val baseName = originalFileName.substringBeforeLast('.', "doc")
 
                 for (i in 0 until pageCount) {
+                    // Cek pembatalan (agar tidak spam jika user membatalkan di tengah jalan)
+                    if (currentStatus.value is ConvertState.Idle) {
+                        throw java.util.concurrent.CancellationException("Dibatalkan pengguna")
+                    }
+
+                    val percent = (((i + 1).toFloat() / pageCount) * 85).toInt() + 10
+                    launch(Dispatchers.Main) {
+                        currentStatus.value = ConvertState.Converting(targetExtension, percent)
+                        onProgress("Merender halaman ${i + 1} dari $pageCount...", percent)
+                    }
+
                     val page = renderer.openPage(i)
                     val width = (page.width * scale).toInt()
                     val height = (page.height * scale).toInt()
+                    
                     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
                     val canvas = Canvas(bitmap)
-                    canvas.drawColor(Color.WHITE) // PDF latar belakang putih
-                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                    canvas.drawColor(Color.WHITE) // PDF butuh latar belakang putih padat
+                    
+                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT) // Pakai mode PRINT agar tajam
                     page.close()
 
                     val pageSuffix = if (pageCount > 1) "_hal_${i + 1}" else ""
                     val pageFileName = "$baseName$pageSuffix.$targetExtension"
                     val cachePageFile = File(context.cacheDir, "temp_page_${i}.$targetExtension")
+                    
                     FileOutputStream(cachePageFile).use { fos ->
                         bitmap.compress(format, qualityVal, fos)
                     }
-                    bitmap.recycle()
+                    bitmap.recycle() // Bebaskan memori bitmap seketika!
 
                     val savedPath = saveToDownloads(context, cachePageFile, pageFileName, targetExtension)
                     cachePageFile.delete()
                     if (savedPath != null) lastSavedPath = savedPath
-
-                    val percent = (((i + 1).toFloat() / pageCount) * 85).toInt() + 10
-                    currentStatus.value = ConvertState.Converting(targetExtension, percent)
-                    onProgress("Halaman ${i + 1} dari $pageCount...", percent)
                 }
 
                 renderer.close()
@@ -432,7 +445,11 @@ object MorphEngine {
 
                 val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     val source = android.graphics.ImageDecoder.createSource(context.contentResolver, inputUri)
-                    android.graphics.ImageDecoder.decodeBitmap(source)
+                    android.graphics.ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
+                        // Paksa Android menggunakan memori RAM biasa (Software), bukan VRAM GPU (Hardware)
+                        decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+                        decoder.isMutableRequired = true
+                    }
                 } else {
                     @Suppress("DEPRECATION")
                     android.provider.MediaStore.Images.Media.getBitmap(context.contentResolver, inputUri)

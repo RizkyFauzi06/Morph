@@ -1,27 +1,25 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="96dp"
     android:height="96dp"
-    android:viewportWidth="96"
-    android:viewportHeight="96">
-    <!-- Rounded Squircle Background -->
+    android:viewportWidth="110"
+    android:viewportHeight="110">
+
+    <!-- Background full viewport -->
     <path
-        android:pathData="M24,8h48c12,0 24,12 24,24v48c0,12 -12,24 -24,24h-48c-12,0 -24,-12 -24,-24v-48c0,-12 12,-24 24,-24z"
+        android:pathData="M0,0h110v110h-110z"
         android:fillColor="#6366F1" />
 
+    <!-- Gradient accent -->
     <path
-        android:pathData="M48,8h24c12,0 24,12 24,24v24c0,12 -12,24 -24,24z"
+        android:pathData="M55,0h27c9.94,0 18,8.06 18,18v27c0,9.94 -8.06,18 -18,18z"
         android:fillColor="#EC4899" />
 
-    <!-- Geometric M Vector Path -->
+    <!-- LOGO M: tetap gunakan path aslimu -->
     <path
-        android:pathData="M26,68 L26,32 L48,54 L70,32 L70,68"
+        android:pathData="M31,74 L31,38 L54,60 L77,38 L77,74"
         android:strokeWidth="8"
         android:strokeColor="#FFFFFF"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
 
-    <!-- Central Transformation Node -->
-    <path
-        android:pathData="M48,26 A5,5 0 1,1 48,25.99 Z"
-        android:fillColor="#FFFFFF" />
 </vector>

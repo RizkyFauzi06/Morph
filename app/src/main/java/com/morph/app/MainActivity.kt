@@ -71,6 +71,12 @@ class MainActivity : ComponentActivity() {
     companion object {
         var isAppInForeground = false
     }
+    
+    private var sharedUri by mutableStateOf<Uri?>(null)
+    private var sharedFileName by mutableStateOf("Menunggu file...")
+    private var sharedMimeType by mutableStateOf("*/*")
+    private var isStandaloneMode by mutableStateOf(true)
+    private var showShareSheet by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -84,21 +90,27 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent) {
         val isInitialStandalone = intent.action == Intent.ACTION_MAIN
-        var sharedUri: Uri? = null
-        var fileName = "Menunggu file..."
-        var mimeType = "*/*"
-
+        
         if (!isInitialStandalone && intent.action == Intent.ACTION_SEND) {
-            sharedUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
             } else {
                 @Suppress("DEPRECATION")
-                intent.getParcelableExtra(Intent.EXTRA_STREAM)
+                intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
             }
-            sharedUri?.let { uri ->
-                fileName = getFileNameFromUri(this, uri)
-                mimeType = contentResolver.getType(uri) ?: "*/*"
+            
+            if (uri != null) {
+                // Simpan ke variabel kelas, bukan variabel lokal
+                sharedUri = uri
+                sharedFileName = getFileNameFromUri(this, uri)
+                sharedMimeType = contentResolver.getType(uri) ?: "*/*"
+                
+                // Paksa buka layar transparan & munculkan BottomSheet
+                isStandaloneMode = false
+                showShareSheet = true
             }
+        } else {
+            isStandaloneMode = true
         }
 
         setContent {
@@ -110,7 +122,6 @@ class MainActivity : ComponentActivity() {
             var currentThemeOption by remember { mutableStateOf(prefs.themeOption) }
 
             // Dual-State Navigation: Standalone vs Share Mode
-            var isStandaloneMode by remember { mutableStateOf(isInitialStandalone) }
             var currentTab by remember { mutableStateOf(MorphTab.Home) }
 
             // Double-back-to-exit (PBI: Back Navigation)
@@ -275,32 +286,30 @@ class MainActivity : ComponentActivity() {
                         }
                     } else {
                         // --- LAYAR SHARE OVERLAY (Transparan) ---
-                        if (sharedUri != null) {
+                        if (sharedUri != null && showShareSheet) {
                             LaunchedEffect(Unit) { askNotificationPermission() }
 
-                            var showShareSheet by remember { mutableStateOf(true) }
-                            if (showShareSheet) {
-                                BottomSheetConverter(
-                                    fileUri = sharedUri,
-                                    fileName = fileName,
-                                    mimeType = mimeType,
-                                    defaultQuality = prefs.qualityPreset,
-                                    onDismiss = {
-                                        showShareSheet = false
-                                        finish() // Tutup overlay transparan
-                                    },
-                                    onConvertStarted = {
-                                        showShareSheet = false
-                                        Toast.makeText(this@MainActivity, "Konversi dimulai di latar belakang...", Toast.LENGTH_SHORT).show()
-                                        // PBI 8.2.3: Perilaku Tutup Otomatis
-                                        if (prefs.closeAfterShare) {
-                                            finish()
-                                        } else {
-                                            isStandaloneMode = true
-                                        }
+                            BottomSheetConverter(
+                                fileUri = sharedUri!!, // Gunakan sharedUri dari kelas
+                                fileName = sharedFileName,
+                                mimeType = sharedMimeType,
+                                defaultQuality = prefs.qualityPreset,
+                                onDismiss = {
+                                    showShareSheet = false
+                                    finish() // Tutup overlay transparan
+                                },
+                                onConvertStarted = {
+                                    showShareSheet = false
+                                    Toast.makeText(this@MainActivity, "Konversi dimulai di latar belakang...", Toast.LENGTH_SHORT).show()
+                                    // PBI 8.2.3: Perilaku Tutup Otomatis
+                                    if (prefs.closeAfterShare) {
+                                        finish()
+                                    } else {
+                                        isStandaloneMode = true
+                                        currentTab = MorphTab.Home
                                     }
-                                )
-                            }
+                                }
+                            )
                         }
                     }
                 }
