@@ -71,8 +71,8 @@ fun HomeScreen(
         when (selectedCategory) {
             "Video" -> morphFiles.filter { it.extension.lowercase() in listOf("mp4", "mkv", "avi", "mov", "webm") }
             "Audio" -> morphFiles.filter { it.extension.lowercase() in listOf("mp3", "m4a", "wav", "ogg", "opus") }
-            "Dokumen" -> morphFiles.filter { it.extension.lowercase() in listOf("pdf", "txt", "doc", "docx") }
-            "Gambar" -> morphFiles.filter { it.extension.lowercase() in listOf("png", "jpg", "jpeg", "webp", "gif") }
+            "Dokumen" -> morphFiles.filter { it.extension.lowercase() in listOf("pdf", "txt", "doc", "docx", "epub") }
+            "Gambar" -> morphFiles.filter { it.extension.lowercase() in listOf("png", "jpg", "jpeg", "webp", "gif", "svg") }
             else -> morphFiles
         }
     }

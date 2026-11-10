@@ -12,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -20,6 +21,24 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morph.app.MorphService
 import com.morph.app.ui.components.formatFileSize
+
+// --- HELPER: Deteksi apakah pasangan input→output mendukung Lossless Stream Copy ---
+fun isLosslessCompatible(inputExt: String, outputExt: String, mimeType: String): Boolean {
+    val videoContainerRemap = setOf("mp4", "mkv", "mov", "m4v", "ts")
+    val audioLosslessRemap = setOf("m4a")
+    return when {
+        // Video ke video container yang sama codec-nya (H.264/H.265 remux)
+        mimeType.startsWith("video/") &&
+            inputExt in videoContainerRemap &&
+            outputExt in videoContainerRemap &&
+            inputExt != outputExt -> true
+        // Audio AAC remux m4a → m4a
+        mimeType.startsWith("audio/") &&
+            inputExt in audioLosslessRemap &&
+            outputExt in audioLosslessRemap -> true
+        else -> false
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -49,8 +68,9 @@ fun BottomSheetConverter(
         }
     }
 
+    val inputExt = fileName.substringAfterLast('.', "").lowercase()
     var selectedQuality by remember { mutableStateOf(defaultQuality) }
-    val formatsToOptions = remember(fileName, mimeType) { getTargetFormats(fileName, mimeType) }
+    val formatsToOptions: List<String> = remember(fileName, mimeType) { getTargetFormats(fileName, mimeType) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -65,7 +85,6 @@ fun BottomSheetConverter(
                 .padding(top = 4.dp, bottom = 42.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Drag Handle already rendered by ModalBottomSheet
             Text(
                 text = "Pilih Format Tujuan",
                 style = MaterialTheme.typography.titleLarge,
@@ -150,23 +169,36 @@ fun BottomSheetConverter(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // --- FORMAT OPTIONS GRID ---
+            // --- FORMAT OPTIONS GRID (Using for loop instead of .forEach) ---
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                formatsToOptions.forEach { format ->
+                for (format in formatsToOptions) {
                     val isPdfCompress = format.lowercase() == "pdf" &&
                             (fileName.endsWith(".pdf", ignoreCase = true) || mimeType == "application/pdf")
-                    val buttonLabel = if (isPdfCompress) "KOMPRES PDF" else format.uppercase()
+
+                    // Auto-detect lossless: jika format didukung stream copy
+                    val isLossless = isLosslessCompatible(inputExt, format.lowercase(), mimeType)
+                    val buttonLabel = when {
+                        isPdfCompress -> "KOMPRES PDF"
+                        isLossless -> "⚡ ${format.uppercase()}"
+                        else -> format.uppercase()
+                    }
+
+                    // Tentukan quality yang akan dikirim: lossless otomatis jika kompatibel
+                    val effectiveQuality = if (isLossless) 3 else if (selectedQuality == 3) 0 else selectedQuality
+
+                    val btnColor = if (isLossless) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
+                    val btnTextColor = if (isLossless) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.onPrimary
 
                     Button(
                         onClick = {
                             val serviceIntent = Intent(context, MorphService::class.java).apply {
                                 putExtra("INPUT_URI", fileUri)
                                 putExtra("TARGET_FORMAT", format)
-                                putExtra("QUALITY_PRESET", selectedQuality)
+                                putExtra("QUALITY_PRESET", effectiveQuality)
                             }
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                                 context.startForegroundService(serviceIntent)
@@ -177,8 +209,8 @@ fun BottomSheetConverter(
                         },
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
+                            containerColor = btnColor,
+                            contentColor = btnTextColor
                         ),
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)
                     ) {
@@ -189,6 +221,17 @@ fun BottomSheetConverter(
                         )
                     }
                 }
+            }
+
+            // Info: jika user pilih "Instan" tapi format tidak lossless-compatible
+            if (selectedQuality == 3) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "ℹ️ Format tanpa ⚡ akan otomatis menggunakan kualitas encode tertinggi",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
             }
         }
     }
@@ -204,16 +247,30 @@ fun getTargetFormats(fileName: String, mimeType: String): List<String> {
             mimeType == "application/pdf" ||
             originalExt == "pdf"
 
-    if (mimeType.startsWith("video/")) {
-        availableFormats.addAll(listOf("mp4", "mkv", "avi", "gif", "mp3", "m4a"))
-    } else if (mimeType.startsWith("image/")) {
-        availableFormats.addAll(listOf("png", "jpg", "webp", "pdf"))
-    } else if (mimeType.startsWith("audio/")) {
-        availableFormats.addAll(listOf("mp3", "m4a", "wav"))
-    } else if (mimeType == "application/pdf" || originalExt == "pdf") {
-        availableFormats.addAll(listOf("pdf", "jpg", "png"))
-    } else {
-        availableFormats.addAll(listOf("mp4", "png", "mp3", "pdf"))
+    when {
+        mimeType.startsWith("video/") -> {
+            availableFormats.addAll(listOf("mp4", "mkv", "avi", "mov", "gif", "mp3", "m4a"))
+        }
+        mimeType.startsWith("image/") -> {
+            availableFormats.addAll(listOf("png", "jpg", "webp", "pdf"))
+        }
+        mimeType.startsWith("audio/") -> {
+            availableFormats.addAll(listOf("mp3", "m4a", "wav"))
+        }
+        mimeType == "application/pdf" || originalExt == "pdf" -> {
+            availableFormats.addAll(listOf("pdf", "jpg", "png"))
+        }
+        // SVG support
+        originalExt == "svg" || mimeType == "image/svg+xml" -> {
+            availableFormats.addAll(listOf("png", "jpg"))
+        }
+        // EPUB support
+        originalExt == "epub" || mimeType == "application/epub+zip" -> {
+            availableFormats.addAll(listOf("txt"))
+        }
+        else -> {
+            availableFormats.addAll(listOf("mp4", "png", "mp3", "pdf"))
+        }
     }
 
     if (!isCompressible) {

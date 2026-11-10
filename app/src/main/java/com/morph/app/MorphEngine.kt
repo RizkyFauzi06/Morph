@@ -71,6 +71,18 @@ object MorphEngine {
             return
         }
 
+        // --- RUTE 4: SVG ke PNG/JPG via AndroidSVG ---
+        if (inputExt == "svg" && targetExt in listOf("png", "jpg", "jpeg")) {
+            convertSvgToImage(context, inputUri, targetExt, originalFileName, qualityPreset, onProgress, onSuccess, onError)
+            return
+        }
+
+        // --- RUTE 5: EPUB ke TXT via epublib ---
+        if (inputExt == "epub" && targetExt == "txt") {
+            convertEpubToTxt(context, inputUri, originalFileName, onProgress, onSuccess, onError)
+            return
+        }
+
         // --- RUTE 4: Audio / Video via FFmpeg Engine (Termasuk PBI 11: Lossless Stream Copy) ---
         GlobalScope.launch(Dispatchers.IO) {
             try {
@@ -100,8 +112,18 @@ object MorphEngine {
                 val videoBitrateBps = (originalBitrateBps * 0.9).toLong()
 
                 // PBI 11: Parameter Kualitas & Lossless Stream Copy
-                val qualityArgs = if (qualityPreset == 3) {
-                    // LOSSLESS STREAM COPY: Tidak melakukan encoding ulang, langsung salin stream bitstream!
+                // Verifikasi kompatibilitas stream copy
+                val isContainerLosslessSupported = (targetExt in listOf("mp4", "mkv", "mov", "m4v", "ts") && inputExt in listOf("mp4", "mkv", "mov", "m4v", "ts")) ||
+                        (targetExt == "m4a" && inputExt == "m4a")
+
+                val effectivePreset = if (qualityPreset == 3 && !isContainerLosslessSupported) {
+                    0 // Otomatis fallback ke kualitas encode Tertinggi jika format tidak mendukung Stream Copy
+                } else {
+                    qualityPreset
+                }
+
+                val qualityArgs = if (effectivePreset == 3) {
+                    // LOSSLESS STREAM COPY: Tidak melakukan encoding ulang, langsung salin bitstream!
                     if (targetExt in listOf("mp4", "mkv", "mov", "avi", "webm")) {
                         "-c copy"
                     } else if (targetExt in listOf("m4a", "aac", "mp3")) {
@@ -110,7 +132,7 @@ object MorphEngine {
                         "-c copy"
                     }
                 } else if (targetExt in listOf("mp4", "mkv", "webm", "avi", "mov")) {
-                    when (qualityPreset) {
+                    when (effectivePreset) {
                         0 -> "-b:v $videoBitrateBps -b:a 256k"
                         1 -> {
                             val targetBv = (videoBitrateBps * 0.5).toLong()
@@ -123,7 +145,7 @@ object MorphEngine {
                         else -> "-b:v $videoBitrateBps -b:a 256k"
                     }
                 } else if (targetExt in listOf("mp3", "m4a", "ogg", "opus", "wav")) {
-                    when (qualityPreset) {
+                    when (effectivePreset) {
                         0 -> "-b:a 320k"
                         1 -> "-b:a 128k"
                         2 -> "-b:a 64k"
@@ -556,5 +578,200 @@ object MorphEngine {
     fun cancelCurrentConversion() {
         FFmpegKit.cancel()
         currentStatus.value = ConvertState.Idle
+    }
+
+    // --- SVG KE PNG/JPG via AndroidSVG ---
+    private fun convertSvgToImage(
+        context: Context,
+        inputUri: Uri,
+        targetExtension: String,
+        originalFileName: String,
+        qualityPreset: Int,
+        onProgress: (String, Int) -> Unit,
+        onSuccess: (String) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        GlobalScope.launch(Dispatchers.IO) {
+            try {
+                currentStatus.value = ConvertState.Converting(targetExtension, 20)
+                onProgress("Memuat file SVG...", 20)
+
+                val svg = context.contentResolver.openInputStream(inputUri)?.use { input ->
+                    com.caverock.androidsvg.SVG.getFromInputStream(input)
+                } ?: throw IllegalStateException("Tidak dapat membaca file SVG")
+
+                currentStatus.value = ConvertState.Converting(targetExtension, 50)
+                onProgress("Merender vektor SVG...", 50)
+
+                val svgWidth = svg.documentWidth.let { if (it > 0) it.toInt() else 1024 }
+                val svgHeight = svg.documentHeight.let { if (it > 0) it.toInt() else 1024 }
+
+                val scaleFactor = when (qualityPreset) {
+                    0, 3 -> 2.0f
+                    1    -> 1.5f
+                    2    -> 1.0f
+                    else -> 2.0f
+                }
+
+                val finalWidth = (svgWidth * scaleFactor).toInt()
+                val finalHeight = (svgHeight * scaleFactor).toInt()
+
+                val bitmap = Bitmap.createBitmap(finalWidth, finalHeight, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bitmap)
+                canvas.drawColor(android.graphics.Color.WHITE)
+                svg.renderToCanvas(canvas)
+
+                currentStatus.value = ConvertState.Converting(targetExtension, 80)
+                onProgress("Menyimpan gambar...", 80)
+
+                val format = if (targetExtension == "png") Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
+                val qualityVal = when (qualityPreset) {
+                    0, 3 -> 100
+                    1    -> 85
+                    2    -> 65
+                    else -> 100
+                }
+
+                val cacheFile = File(context.cacheDir, "temp_svg_output.$targetExtension")
+                FileOutputStream(cacheFile).use { fos ->
+                    bitmap.compress(format, qualityVal, fos)
+                }
+                bitmap.recycle()
+
+                val finalPath = saveToDownloads(context, cacheFile, originalFileName, targetExtension)
+                cacheFile.delete()
+
+                launch(Dispatchers.Main) {
+                    if (finalPath != null) {
+                        currentStatus.value = ConvertState.Success
+                        onSuccess(finalPath)
+                    } else {
+                        currentStatus.value = ConvertState.Error("Gagal menyimpan gambar SVG", inputUri, targetExtension)
+                        onError("Gagal menyimpan gambar SVG")
+                    }
+                }
+            } catch (e: Exception) {
+                launch(Dispatchers.Main) {
+                    currentStatus.value = ConvertState.Error("Gagal render SVG: ${e.message}", inputUri, targetExtension)
+                    onError("Gagal render SVG: ${e.message}")
+                }
+            }
+        }
+    }
+
+    // --- EPUB KE TXT via Standard Zip Parser (EPUB = ZIP Container) ---
+    private fun convertEpubToTxt(
+        context: Context,
+        inputUri: Uri,
+        originalFileName: String,
+        onProgress: (String, Int) -> Unit,
+        onSuccess: (String) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        GlobalScope.launch(Dispatchers.IO) {
+            try {
+                currentStatus.value = ConvertState.Converting("txt", 15)
+                onProgress("Membaca berkas EPUB...", 15)
+
+                val cacheEpub = File(context.cacheDir, "temp_in.epub")
+                context.contentResolver.openInputStream(inputUri)?.use { input ->
+                    FileOutputStream(cacheEpub).use { output -> input.copyTo(output) }
+                } ?: throw IllegalStateException("Tidak dapat membaca berkas EPUB")
+
+                val zipFile = java.util.zip.ZipFile(cacheEpub)
+                val entries = zipFile.entries().toList()
+
+                // Cari file content.opf untuk metadata (jika ada)
+                var bookTitle = ""
+                var bookAuthor = ""
+                val opfEntry = entries.firstOrNull { it.name.endsWith(".opf", ignoreCase = true) }
+                if (opfEntry != null) {
+                    val opfContent = zipFile.getInputStream(opfEntry).bufferedReader(Charsets.UTF_8).readText()
+                    bookTitle = Regex("<dc:title[^>]*>(.*?)</dc:title>", RegexOption.DOT_MATCHES_ALL)
+                        .find(opfContent)?.groupValues?.get(1)?.trim() ?: ""
+                    bookAuthor = Regex("<dc:creator[^>]*>(.*?)</dc:creator>", RegexOption.DOT_MATCHES_ALL)
+                        .find(opfContent)?.groupValues?.get(1)?.trim() ?: ""
+                }
+
+                // Dapatkan daftar file html/xhtml
+                val htmlEntries = entries.filter { entry ->
+                    !entry.isDirectory && (entry.name.endsWith(".xhtml", ignoreCase = true) ||
+                            entry.name.endsWith(".html", ignoreCase = true) ||
+                            entry.name.endsWith(".htm", ignoreCase = true))
+                }.sortedBy { it.name }
+
+                if (htmlEntries.isEmpty()) {
+                    zipFile.close()
+                    cacheEpub.delete()
+                    throw IllegalStateException("Tidak ditemukan teks bab dalam berkas EPUB")
+                }
+
+                val sb = StringBuilder()
+                if (bookTitle.isNotEmpty()) sb.appendLine("JUDUL: $bookTitle")
+                if (bookAuthor.isNotEmpty()) sb.appendLine("PENULIS: $bookAuthor")
+                if (bookTitle.isNotEmpty() || bookAuthor.isNotEmpty()) {
+                    sb.appendLine()
+                    sb.appendLine("=".repeat(60))
+                    sb.appendLine()
+                }
+
+                htmlEntries.forEachIndexed { index, entry ->
+                    try {
+                        val html = zipFile.getInputStream(entry).bufferedReader(Charsets.UTF_8).readText()
+                        val text = html
+                            .replace(Regex("<style[^>]*>[\\s\\S]*?</style>", RegexOption.IGNORE_CASE), "")
+                            .replace(Regex("<script[^>]*>[\\s\\S]*?</script>", RegexOption.IGNORE_CASE), "")
+                            .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
+                            .replace(Regex("</p>|</div>|</h1>|</h2>|</h3>|</h4>|</h5>|</h6>|</li>", RegexOption.IGNORE_CASE), "\n\n")
+                            .replace(Regex("<[^>]+>"), "")
+                            .replace(Regex("&nbsp;", RegexOption.IGNORE_CASE), " ")
+                            .replace(Regex("&amp;", RegexOption.IGNORE_CASE), "&")
+                            .replace(Regex("&lt;", RegexOption.IGNORE_CASE), "<")
+                            .replace(Regex("&gt;", RegexOption.IGNORE_CASE), ">")
+                            .replace(Regex("&quot;", RegexOption.IGNORE_CASE), "\"")
+                            .replace(Regex("&#39;|&apos;", RegexOption.IGNORE_CASE), "'")
+                            .replace(Regex("[ \\t]+"), " ")
+                            .replace(Regex("\\n{3,}"), "\n\n")
+                            .trim()
+
+                        if (text.isNotBlank()) {
+                            sb.appendLine(text)
+                            sb.appendLine()
+                        }
+
+                        val percent = ((index + 1).toFloat() / htmlEntries.size * 70).toInt() + 25
+                        currentStatus.value = ConvertState.Converting("txt", percent)
+                        onProgress("Mengekstrak bagian ${index + 1} dari ${htmlEntries.size}...", percent)
+                    } catch (_: Exception) {}
+                }
+
+                zipFile.close()
+                cacheEpub.delete()
+
+                currentStatus.value = ConvertState.Converting("txt", 95)
+                onProgress("Menyimpan file teks...", 95)
+
+                val cacheFile = File(context.cacheDir, "temp_epub_output.txt")
+                cacheFile.writeText(sb.toString(), Charsets.UTF_8)
+
+                val finalPath = saveToDownloads(context, cacheFile, originalFileName, "txt")
+                cacheFile.delete()
+
+                launch(Dispatchers.Main) {
+                    if (finalPath != null) {
+                        currentStatus.value = ConvertState.Success
+                        onSuccess(finalPath)
+                    } else {
+                        currentStatus.value = ConvertState.Error("Gagal menyimpan file TXT", inputUri, "txt")
+                        onError("Gagal menyimpan file TXT")
+                    }
+                }
+            } catch (e: Exception) {
+                launch(Dispatchers.Main) {
+                    currentStatus.value = ConvertState.Error("Gagal konversi EPUB: ${e.message}", inputUri, "txt")
+                    onError("Gagal konversi EPUB: ${e.message}")
+                }
+            }
+        }
     }
 }

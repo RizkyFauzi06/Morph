@@ -20,6 +20,11 @@ class MorphService : Service() {
     private val NOTIFICATION_ID = 143
     private var isCancelled = false // Pelacak pembatalan
 
+    override fun onCreate() {
+        super.onCreate()
+        createNotificationChannel() // Pastikan channel dibuat sebelum startForeground
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // DETEKSI TOMBOL BATAL
         if (intent?.action == "ACTION_CANCEL_CONVERSION") {
@@ -38,7 +43,14 @@ class MorphService : Service() {
         }
 
         isCancelled = false // Reset saat konversi baru dimulai
-        val inputUri = intent?.getParcelableExtra<Uri>("INPUT_URI")
+        
+        // FIX: getParcelableExtra deprecated di API 33+
+        val inputUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent?.getParcelableExtra("INPUT_URI", Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent?.getParcelableExtra<Uri>("INPUT_URI")
+        }
         val targetFormat = intent?.getStringExtra("TARGET_FORMAT") ?: ""
         
         // TANGKAP PILIHAN KUALITAS DARI BOTTOM SHEET
@@ -63,9 +75,9 @@ class MorphService : Service() {
                 inputUri = inputUri,
                 outputExtension = targetFormat,
                 originalFileName = originalName,
-                qualityPreset = qualityPreset, // TAMBAHKAN PARAMETER INI
+                qualityPreset = qualityPreset,
                 onProgress = { progressText, percentage ->
-                    // BUG FIX: Jangan update notifikasi jika sudah dibatalkan
+                    // Smart Notification: hanya update jika aplikasi di background dan belum dibatalkan
                     if (!MainActivity.isAppInForeground && !isCancelled) {
                         val updateNotif = buildNotification("Mengonversi ke ${targetFormat.uppercase()}", progressText, true, percentage)
                         val manager = getSystemService(NotificationManager::class.java)
@@ -74,21 +86,30 @@ class MorphService : Service() {
                 },
                 onSuccess = { finalPath ->
                     if (!isCancelled) {
-                        val successNotif = buildNotification("Konversi Selesai", "Buka Morph untuk melihat hasil", false)
-                        val manager = getSystemService(NotificationManager::class.java)
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
                         else @Suppress("DEPRECATION") stopForeground(true)
-                        manager.notify(NOTIFICATION_ID + 1, successNotif)
+                        
+                        // Smart Notification: tampilkan notif selesai HANYA jika di background
+                        if (!MainActivity.isAppInForeground) {
+                            val successNotif = buildNotification("✅ Konversi Selesai", "Buka Morph untuk melihat hasil", false)
+                            val manager = getSystemService(NotificationManager::class.java)
+                            manager.notify(NOTIFICATION_ID + 1, successNotif)
+                        }
+                        // Jika di foreground, in-app banner sudah ditampilkan otomatis via MorphEngine.currentStatus
                     }
                     stopSelf()
                 },
                 onError = { errorMessage ->
                     if (!isCancelled) {
-                        val errorNotif = buildNotification("Konversi Gagal", errorMessage, false)
-                        val manager = getSystemService(NotificationManager::class.java)
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
                         else @Suppress("DEPRECATION") stopForeground(true)
-                        manager.notify(NOTIFICATION_ID + 1, errorNotif)
+                        
+                        // Smart Notification: tampilkan notif error HANYA jika di background
+                        if (!MainActivity.isAppInForeground) {
+                            val errorNotif = buildNotification("❌ Konversi Gagal", errorMessage, false)
+                            val manager = getSystemService(NotificationManager::class.java)
+                            manager.notify(NOTIFICATION_ID + 1, errorNotif)
+                        }
                     }
                     stopSelf()
                 }

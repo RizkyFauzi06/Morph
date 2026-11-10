@@ -8,15 +8,18 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Handyman
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -86,11 +89,15 @@ class MainActivity : ComponentActivity() {
         var mimeType = "*/*"
 
         if (!isInitialStandalone && intent.action == Intent.ACTION_SEND) {
-            @Suppress("DEPRECATION")
-            sharedUri = intent.getParcelableExtra(Intent.EXTRA_STREAM)
-            if (sharedUri != null) {
-                fileName = sharedUri.lastPathSegment ?: "File"
-                mimeType = contentResolver.getType(sharedUri) ?: "*/*"
+            sharedUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(Intent.EXTRA_STREAM)
+            }
+            sharedUri?.let { uri ->
+                fileName = getFileNameFromUri(this, uri)
+                mimeType = contentResolver.getType(uri) ?: "*/*"
             }
         }
 
@@ -105,6 +112,32 @@ class MainActivity : ComponentActivity() {
             // Dual-State Navigation: Standalone vs Share Mode
             var isStandaloneMode by remember { mutableStateOf(isInitialStandalone) }
             var currentTab by remember { mutableStateOf(MorphTab.Home) }
+
+            // Double-back-to-exit (PBI: Back Navigation)
+            var backPressedOnce by remember { mutableStateOf(false) }
+
+            // BackHandler: tab non-Home → kembali ke Home; Home → double back exit
+            BackHandler(enabled = isStandaloneMode) {
+                if (currentTab != MorphTab.Home) {
+                    currentTab = MorphTab.Home
+                    backPressedOnce = false
+                } else {
+                    if (backPressedOnce) {
+                        (context as? ComponentActivity)?.finish()
+                    } else {
+                        backPressedOnce = true
+                        Toast.makeText(context, "Tekan sekali lagi untuk keluar", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+
+            // Reset flag double-back setelah 2 detik
+            LaunchedEffect(backPressedOnce) {
+                if (backPressedOnce) {
+                    kotlinx.coroutines.delay(2000)
+                    backPressedOnce = false
+                }
+            }
 
             // Converted files state
             var morphFiles by remember { mutableStateOf(getMorphFiles()) }
@@ -161,7 +194,7 @@ class MainActivity : ComponentActivity() {
                                     NavigationBarItem(
                                         selected = currentTab == MorphTab.Tools,
                                         onClick = { currentTab = MorphTab.Tools },
-                                        icon = { Icon(Icons.Default.Handyman, contentDescription = "Alat") },
+                                        icon = { Icon(Icons.Default.Build, contentDescription = "Alat") },
                                         label = { Text("Alat", fontWeight = if (currentTab == MorphTab.Tools) FontWeight.Bold else FontWeight.Normal) }
                                     )
                                     NavigationBarItem(
@@ -204,12 +237,13 @@ class MainActivity : ComponentActivity() {
                                         )
 
                                         // BottomSheet Picker Trigger
-                                        if (showBottomSheetFromPicker && fileUriFromPicker != null) {
-                                            val pickerFileName = fileUriFromPicker?.lastPathSegment ?: "File Terpilih"
-                                            val pickerMimeType = contentResolver.getType(fileUriFromPicker!!) ?: "*/*"
+                                        val currentPickerUri = fileUriFromPicker
+                                        if (showBottomSheetFromPicker && currentPickerUri != null) {
+                                            val pickerFileName = getFileNameFromUri(context, currentPickerUri)
+                                            val pickerMimeType = context.contentResolver.getType(currentPickerUri) ?: "*/*"
 
                                             BottomSheetConverter(
-                                                fileUri = fileUriFromPicker!!,
+                                                fileUri = currentPickerUri,
                                                 fileName = pickerFileName,
                                                 mimeType = pickerMimeType,
                                                 defaultQuality = prefs.qualityPreset,
@@ -221,7 +255,8 @@ class MainActivity : ComponentActivity() {
 
                                     MorphTab.Tools -> {
                                         ToolsScreen(
-                                            onPickFileForTool = { filePickerLauncher.launch("*/*") }
+                                            onPickFileForTool = { filePickerLauncher.launch("*/*") },
+                                            onBackClick = { currentTab = MorphTab.Home }
                                         )
                                     }
 
@@ -231,7 +266,8 @@ class MainActivity : ComponentActivity() {
                                             onThemeChange = { newTheme ->
                                                 currentThemeOption = newTheme
                                                 prefs.themeOption = newTheme
-                                            }
+                                            },
+                                            onBackClick = { currentTab = MorphTab.Home }
                                         )
                                     }
                                 }
@@ -282,6 +318,20 @@ class MainActivity : ComponentActivity() {
 }
 
 // --- UTILITY METHODS FOR FILE ACCESS & SHARING ---
+fun getFileNameFromUri(context: Context, uri: Uri): String {
+    var name: String? = null
+    try {
+        val cursor = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+        cursor?.use { c ->
+            if (c.moveToFirst()) {
+                val nameIdx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (nameIdx != -1) name = c.getString(nameIdx)
+            }
+        }
+    } catch (_: Exception) {}
+    return name ?: uri.lastPathSegment?.substringAfterLast('/') ?: "File"
+}
+
 fun checkNotifPermission(context: Context): Boolean {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED

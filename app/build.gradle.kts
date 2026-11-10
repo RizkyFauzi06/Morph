@@ -34,4 +34,6 @@ dependencies {
     implementation("androidx.compose.material:material:1.5.4") // Dibutuhkan untuk pullrefresh
     implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.compose.material:material-icons-extended")
+    // SVG Renderer (PBI Sprint 3 - Apache 2.0)
+    implementation("com.caverock:androidsvg-aar:1.4")
 }

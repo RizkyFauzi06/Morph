@@ -5,9 +5,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -26,6 +26,7 @@ import com.morph.app.ui.theme.MorphViolet
 @Composable
 fun ToolsScreen(
     onPickFileForTool: () -> Unit,
+    onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -36,18 +37,33 @@ fun ToolsScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                Text(
-                    text = "Pusat Alat & Utilitas",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Text(
-                    text = "Modul konversi teknis & fitur ekspansi Morph",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBackClick) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Kembali",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+                Spacer(modifier = Modifier.width(4.dp))
+                Column {
+                    Text(
+                        text = "Pusat Alat & Utilitas",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        text = "Modul konversi teknis & fitur ekspansi Morph",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
 
@@ -90,7 +106,33 @@ fun ToolsScreen(
             )
         }
 
-        // TOOL 4: Batch Queue Converter (PBI 8.3 Teaser)
+        // TOOL 4: SVG Converter (PBI Sprint 3)
+        item {
+            ToolFeatureCard(
+                title = "SVG ke PNG/JPG",
+                subtitle = "Render file vektor SVG menjadi gambar bitmap PNG atau JPG untuk dibagikan atau digunakan di berbagai aplikasi.",
+                icon = Icons.Default.AutoAwesome,
+                iconTint = Color(0xFF8B5CF6),
+                badgeText = "Sprint 3 Aktif",
+                badgeColor = Color(0xFF10B981),
+                onClick = onPickFileForTool
+            )
+        }
+
+        // TOOL 5: EPUB Converter (PBI Sprint 3)
+        item {
+            ToolFeatureCard(
+                title = "EPUB ke TXT",
+                subtitle = "Ekstrak seluruh isi teks dari buku digital EPUB menjadi file teks biasa yang bisa dibaca di aplikasi apapun.",
+                icon = Icons.Default.Book,
+                iconTint = Color(0xFFF97316),
+                badgeText = "Sprint 3 Aktif",
+                badgeColor = Color(0xFF10B981),
+                onClick = onPickFileForTool
+            )
+        }
+
+        // TOOL 6: Batch Queue Converter (PBI 8.3 Teaser)
         item {
             ToolFeatureCard(
                 title = "Antrean Konversi Massal (Batch)",
@@ -103,7 +145,7 @@ fun ToolsScreen(
             )
         }
 
-        // TOOL 5: Web-to-Morph (PBI 9 Teaser)
+        // TOOL 7: Web-to-Morph (PBI 9 Teaser)
         item {
             ToolFeatureCard(
                 title = "Web-to-Morph (URL Catcher)",
