@@ -1,56 +1,72 @@
 package com.morph.app
+
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.webkit.MimeTypeMap
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
-import android.os.Environment
-import android.webkit.MimeTypeMap
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Icon
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.ListItem
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.core.content.FileProvider
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import androidx.compose.runtime.collectAsState
-import kotlinx.coroutines.delay
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.io.File
 import java.text.DecimalFormat
 import kotlin.math.log10
 import kotlin.math.pow
 
 class MainActivity : ComponentActivity() {
 
-    // Launcher untuk minta izin
+    // Launcher untuk minta izin notifikasi (PBI 7.5)
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
@@ -88,13 +104,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent) {
-        // DETEKSI LOGIKA: Apakah dibuka dari Launcher (Ikon) atau Share?
-        val isStandalone = intent.action == Intent.ACTION_MAIN
+        val isInitialStandalone = intent.action == Intent.ACTION_MAIN
         var sharedUri: Uri? = null
         var fileName = "Menunggu file..."
         var mimeType = "*/*"
 
-        if (!isStandalone) {
+        if (!isInitialStandalone) {
             when (intent.action) {
                 Intent.ACTION_SEND -> {
                     @Suppress("DEPRECATION")
@@ -111,35 +126,61 @@ class MainActivity : ComponentActivity() {
             val context = LocalContext.current
             val prefs = remember { MorphPrefs(context) }
             
-            // Logika Deteksi Tema (PBI 8.2.2)
-            val isDarkTheme = when (prefs.themeOption) {
-                1 -> false
-                2 -> true
-                else -> androidx.compose.foundation.isSystemInDarkTheme()
+            // PBI 8.2.2: Reactive Theme State (Sistem / Terang / Gelap)
+            var currentThemeOption by remember { mutableStateOf(prefs.themeOption) }
+            val isDarkTheme = when (currentThemeOption) {
+                1 -> false // Terang
+                2 -> true  // Gelap
+                else -> isSystemInDarkTheme() // Ikuti Sistem
             }
 
-            MaterialTheme(
-                // Jika Anda punya custom color scheme, taruh di sini. Untuk default, biarkan kosong agar otomatis mengikuti sistem M3.
-                // colorScheme = if (isDarkTheme) darkColorScheme() else lightColorScheme() 
-            ) {
-                val backgroundColor = if (isStandalone) MaterialTheme.colorScheme.background else Color.Transparent
-                
-                // --- STATE NAVIGASI SEDERHANA ---
+            val appColorScheme = if (isDarkTheme) {
+                darkColorScheme(
+                    primary = Color(0xFFA5B4FC),
+                    onPrimary = Color(0xFF1E1B4B),
+                    primaryContainer = Color(0xFF3730A3),
+                    onPrimaryContainer = Color(0xFFE0E7FF),
+                    secondary = Color(0xFFC4B5FD),
+                    background = Color(0xFF0F172A),
+                    surface = Color(0xFF1E293B),
+                    surfaceVariant = Color(0xFF334155),
+                    onSurface = Color(0xFFF1F5F9),
+                    onSurfaceVariant = Color(0xFF94A3B8)
+                )
+            } else {
+                lightColorScheme(
+                    primary = Color(0xFF4F46E5),
+                    onPrimary = Color.White,
+                    primaryContainer = Color(0xFFEEF2FF),
+                    onPrimaryContainer = Color(0xFF312E81),
+                    secondary = Color(0xFF7C3AED),
+                    background = Color(0xFFF8FAFC),
+                    surface = Color.White,
+                    surfaceVariant = Color(0xFFF1F5F9),
+                    onSurface = Color(0xFF0F172A),
+                    onSurfaceVariant = Color(0xFF64748B)
+                )
+            }
+
+            // PBI 8.2.3: Perilaku Dual-State & Tutup Otomatis
+            var isStandaloneMode by remember { mutableStateOf(isInitialStandalone) }
+
+            MaterialTheme(colorScheme = appColorScheme) {
+                val backgroundColor = if (isStandaloneMode) MaterialTheme.colorScheme.background else Color.Transparent
                 var currentScreen by remember { mutableStateOf("home") }
+
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = backgroundColor
                 ) {
-                    if (isStandalone) {
+                    if (isStandaloneMode) {
                         if (currentScreen == "home") {
-                            // Layar Utama
                             HomeScreen(
                                 onPickFileClick = { standaloneFilePickerLauncher.launch("*/*") },
                                 onRequestPermission = { askNotificationPermission() },
-                                onSettingsClick = { currentScreen = "settings" } // LEMPAR FUNGSI KLIK
+                                onSettingsClick = { currentScreen = "settings" }
                             )
                             
-                            // BottomSheet
                             if (showBottomSheetFromPicker && fileUriFromPicker != null) {
                                 val pickerFileName = fileUriFromPicker?.lastPathSegment ?: "File Terpilih"
                                 val pickerMimeType = contentResolver.getType(fileUriFromPicker!!) ?: "*/*"
@@ -148,17 +189,23 @@ class MainActivity : ComponentActivity() {
                                     fileUri = fileUriFromPicker!!,
                                     fileName = pickerFileName,
                                     mimeType = pickerMimeType,
-                                    onDismiss = { showBottomSheetFromPicker = false }
+                                    defaultQuality = prefs.qualityPreset,
+                                    onDismiss = { showBottomSheetFromPicker = false },
+                                    onConvertStarted = { showBottomSheetFromPicker = false }
                                 )
                             }
                         } else if (currentScreen == "settings") {
-                            // Layar Pengaturan
                             SettingsScreen(
+                                currentTheme = currentThemeOption,
+                                onThemeChange = { newTheme ->
+                                    currentThemeOption = newTheme
+                                    prefs.themeOption = newTheme
+                                },
                                 onBackClick = { currentScreen = "home" }
                             )
                         }
                     } else {
-                        // --- LAYAR SHARE (Tembus Pandang) ---
+                        // --- LAYAR SHARE (Transparan) ---
                         if (sharedUri != null) {
                             LaunchedEffect(Unit) { askNotificationPermission() }
                             
@@ -168,12 +215,20 @@ class MainActivity : ComponentActivity() {
                                     fileUri = sharedUri,
                                     fileName = fileName,
                                     mimeType = mimeType,
+                                    defaultQuality = prefs.qualityPreset,
                                     onDismiss = { 
                                         showShareSheet = false
-                                        // LOGIKA 8.2.3: Periksa apakah disuruh auto-close
-                                        val prefs = MorphPrefs(this@MainActivity)
+                                        finish() // Batalkan dan tutup aktivitas transparan
+                                    },
+                                    onConvertStarted = {
+                                        showShareSheet = false
+                                        Toast.makeText(this@MainActivity, "Konversi dimulai di latar belakang...", Toast.LENGTH_SHORT).show()
+                                        // PBI 8.2.3: Tutup Otomatis kembali ke aplikasi asal jika aktif
                                         if (prefs.closeAfterShare) {
-                                            finish() 
+                                            finish()
+                                        } else {
+                                            // Jika switch mati, tetap buka Markas Utama untuk melihat progress
+                                            isStandaloneMode = true
                                         }
                                     }
                                 )
@@ -194,7 +249,65 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// Ui Home Screen dan Izin
+// --- PBI 10: OFFICIAL MORPH LOGO COMPOSABLE ---
+@Composable
+fun MorphLogo(modifier: Modifier = Modifier.size(56.dp)) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val radius = minOf(w, h) / 2f
+        val center = Offset(w / 2f, h / 2f)
+
+        // Vibrant Gradient Circle
+        drawCircle(
+            brush = Brush.linearGradient(
+                colors = listOf(Color(0xFF6366F1), Color(0xFF8B5CF6), Color(0xFFEC4899)),
+                start = Offset(0f, 0f),
+                end = Offset(w, h)
+            ),
+            radius = radius,
+            center = center
+        )
+
+        // Elegant Dynamic Morph Curve
+        val path = Path().apply {
+            moveTo(w * 0.28f, h * 0.64f)
+            cubicTo(
+                w * 0.28f, h * 0.64f,
+                w * 0.34f, h * 0.35f,
+                w * 0.44f, h * 0.35f
+            )
+            cubicTo(
+                w * 0.52f, h * 0.35f,
+                w * 0.48f, h * 0.62f,
+                w * 0.56f, h * 0.62f
+            )
+            cubicTo(
+                w * 0.63f, h * 0.62f,
+                w * 0.70f, h * 0.40f,
+                w * 0.70f, h * 0.40f
+            )
+        }
+        drawPath(
+            path = path,
+            color = Color.White,
+            style = Stroke(
+                width = w * 0.08f,
+                cap = StrokeCap.Round,
+                join = StrokeJoin.Round
+            )
+        )
+
+        // Glowing Accent Dot
+        drawCircle(
+            color = Color.White,
+            radius = w * 0.045f,
+            center = Offset(w * 0.50f, h * 0.27f)
+        )
+    }
+}
+
+// --- UI HOME SCREEN & HISTORY (MARKAS UTAMA) ---
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun HomeScreen(
@@ -234,12 +347,12 @@ fun HomeScreen(
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
-                    MainActivity.isAppInForeground = true // Latar depan
+                    MainActivity.isAppInForeground = true
                     hasNotificationPermission = checkNotifPermission(context)
                     refreshFiles()
                 }
                 Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
-                    MainActivity.isAppInForeground = false // Masuk latar belakang
+                    MainActivity.isAppInForeground = false
                 }
                 else -> {}
             }
@@ -250,14 +363,16 @@ fun HomeScreen(
             lifecycleOwner.lifecycle.removeObserver(observer) 
         }
     }
-    
-    
 
     Scaffold(
         floatingActionButton = {
             if (morphFiles.isNotEmpty()) {
-                FloatingActionButton(onClick = onPickFileClick, containerColor = MaterialTheme.colorScheme.primary) {
-                    Text("+", style = MaterialTheme.typography.headlineMedium) 
+                FloatingActionButton(
+                    onClick = onPickFileClick, 
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Pilih File Baru")
                 }
             }
         },
@@ -268,42 +383,95 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp),horizontalArrangement = Arrangement.End) 
-            {
-                IconButton(onClick = onSettingsClick) {Text("⚙️", style = MaterialTheme.typography.headlineMedium)}
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                "Morph",
-                style = MaterialTheme.typography.displayMedium,
-                color = MaterialTheme.colorScheme.primary)
-                // --- IN-APP PROGRESS UI (PBI 8.9 Tambah Tombol Batal) ---
+                // Top Bar with Settings
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    IconButton(onClick = onSettingsClick) {
+                        Icon(
+                            Icons.Default.Settings, 
+                            contentDescription = "Pengaturan",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                // Official Logo & Branding Header
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                ) {
+                    MorphLogo(modifier = Modifier.size(44.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            "Morph",
+                            style = MaterialTheme.typography.headlineLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            "Universal File Converter",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // --- IN-APP PROGRESS UI DENGAN TOMBOL BATAL (PBI 8.8 & 8.9) ---
                 if (engineState is MorphEngine.ConvertState.Converting) {
                     val progress = (engineState as MorphEngine.ConvertState.Converting).progress
                     val format = (engineState as MorphEngine.ConvertState.Converting).format.uppercase()
-                    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                    ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(), 
+                                horizontalArrangement = Arrangement.SpaceBetween, 
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Text("Memproses ke $format...", style = MaterialTheme.typography.labelLarge)
-                                // Tombol Pembatalan
-                                IconButton(onClick = { MorphEngine.cancelCurrentConversion() }, modifier = Modifier.size(24.dp)) {
-                                    Text("✖", color = MaterialTheme.colorScheme.error)
+                                IconButton(
+                                    onClick = { MorphEngine.cancelCurrentConversion() }, 
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Close, 
+                                        contentDescription = "Batalkan", 
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
                                 }
                             }
                             Spacer(modifier = Modifier.height(8.dp))
-                            LinearProgressIndicator(progress = progress / 100f, modifier = Modifier.fillMaxWidth().height(8.dp), color = MaterialTheme.colorScheme.primary)
+                            LinearProgressIndicator(
+                                progress = { progress / 100f }, 
+                                modifier = Modifier.fillMaxWidth().height(8.dp), 
+                                color = MaterialTheme.colorScheme.primary
+                            )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text("$progress%", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.End, style = MaterialTheme.typography.labelMedium)
                         }
                     }
-                    Spacer(modifier = Modifier.height(16.dp))
                 }
-                // --- KARTU ERROR & RETRY (PBI 8.1.4 & 8.1.10) ---
+
+                // --- KARTU ERROR & RETRY ---
                 if (engineState is MorphEngine.ConvertState.Error) {
                     val errorState = engineState as MorphEngine.ConvertState.Error
-                    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), 
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                    ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Konversi Gagal", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Konversi Gagal", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(errorState.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
                             Spacer(modifier = Modifier.height(8.dp))
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -322,54 +490,73 @@ fun HomeScreen(
                                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(serviceIntent)
                                             else context.startService(serviceIntent)
                                         },
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onErrorContainer, contentColor = MaterialTheme.colorScheme.errorContainer)
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.onErrorContainer, 
+                                            contentColor = MaterialTheme.colorScheme.errorContainer
+                                        )
                                     ) {
+                                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
                                         Text("Coba Lagi")
                                     }
                                 }
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.height(16.dp))
                 }
-            // ----------------------------------------------------
 
-            // Edukasi Izin (PBI 7.5)
-            if (!hasNotificationPermission) {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer), modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("⚠️ Izin Notifikasi Diperlukan", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onErrorContainer)
-                        Text("Morph butuh izin ini agar sistem tidak mematikan proses konversi file besar Anda di latar belakang.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Button(onClick = { onRequestPermission() }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onErrorContainer, contentColor = MaterialTheme.colorScheme.errorContainer)) {
-                            Text("Izinkan Notifikasi")
+                // Edukasi Izin Notifikasi (PBI 7.5)
+                if (!hasNotificationPermission) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer), 
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Izin Notifikasi Diperlukan", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Morph butuh izin notifikasi agar sistem tidak mematikan konversi file besar Anda di latar belakang.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(
+                                onClick = { onRequestPermission() }, 
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onErrorContainer, contentColor = MaterialTheme.colorScheme.errorContainer)
+                            ) {
+                                Text("Izinkan Notifikasi")
+                            }
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(16.dp))
-            }
 
-            // LOGIKA DINAMIS PBI 8.1 (Kosong vs Berisi)
-           if (morphFiles.isEmpty()) {
+                // Riwayat File (Empty vs Populated)
+                if (morphFiles.isEmpty()) {
                     Spacer(modifier = Modifier.weight(1f))
-                    Button(onClick = onPickFileClick, modifier = Modifier.size(160.dp), shape = androidx.compose.foundation.shape.CircleShape, elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)) {
+                    Button(
+                        onClick = onPickFileClick, 
+                        modifier = Modifier.size(150.dp), 
+                        shape = CircleShape, 
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
+                    ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("+", style = MaterialTheme.typography.displayMedium)
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(44.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text("Pilih File")
                         }
                     }
                     Spacer(modifier = Modifier.weight(1f))
                 } else {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-                        Text("File Anda", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
+                        Text("File Anda (${morphFiles.size})", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
                         items(morphFiles) { file ->
-                            // PBI 8.1.7 & 8.1.9: STATE UNTUK MENU DROPDOWN & DIALOG HAPUS
                             var expanded by remember { mutableStateOf(false) }
                             var showDeleteDialog by remember { mutableStateOf(false) }
+
                             if (showDeleteDialog) {
                                 AlertDialog(
                                     onDismissRequest = { showDeleteDialog = false },
@@ -393,17 +580,17 @@ fun HomeScreen(
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                             ) {
                                 ListItem(
-                                    headlineContent = { Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    headlineContent = { Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium) },
                                     supportingContent = { Text(formatFileSize(file.length())) },
                                     trailingContent = { 
                                         Box {
-                                            // Tombol Titik Tiga (Dropdown)
                                             IconButton(onClick = { expanded = true }) {
-                                                Text("⋮", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                                                Icon(Icons.Default.MoreVert, contentDescription = "Pilihan Menu", tint = MaterialTheme.colorScheme.primary)
                                             }
                                             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                                                 DropdownMenuItem(
                                                     text = { Text("Bagikan") },
+                                                    leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
                                                     onClick = {
                                                         expanded = false
                                                         shareFileDirectly(context, file)
@@ -411,6 +598,7 @@ fun HomeScreen(
                                                 )
                                                 DropdownMenuItem(
                                                     text = { Text("Hapus", color = MaterialTheme.colorScheme.error) },
+                                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
                                                     onClick = {
                                                         expanded = false
                                                         showDeleteDialog = true
@@ -431,12 +619,17 @@ fun HomeScreen(
     }
 }
 
-
-
-//UI Bottom Sheet
+// --- UI BOTTOM SHEET CONVERTER DENGAN LOSSLESS COPY & PARAMETER KUALITAS ---
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun BottomSheetConverter(fileUri: Uri, fileName: String, mimeType: String, onDismiss: () -> Unit) {
+fun BottomSheetConverter(
+    fileUri: Uri, 
+    fileName: String, 
+    mimeType: String, 
+    defaultQuality: Int,
+    onDismiss: () -> Unit,
+    onConvertStarted: () -> Unit
+) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val context = LocalContext.current
     
@@ -455,16 +648,17 @@ fun BottomSheetConverter(fileUri: Uri, fileName: String, mimeType: String, onDis
         }
     }
     
-    // --- UX BARU: State Kualitas Lokal ---
-    var selectedQuality by remember { mutableStateOf(0) } // 0: Tinggi, 1: Sedang, 2: Rendah
+    // PBI 11: Kualitas Default mengikuti Pengaturan pengguna
+    var selectedQuality by remember { mutableStateOf(defaultQuality) }
+    val formatsToOptions = remember(fileName, mimeType) { getTargetFormats(fileName, mimeType) }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 48.dp, top = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Ubah Format File", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 4.dp))
-            
+            Text("Ubah Format File", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "$fileName • $fileSizeStr", 
                 style = MaterialTheme.typography.bodyMedium, 
@@ -472,51 +666,87 @@ fun BottomSheetConverter(fileUri: Uri, fileName: String, mimeType: String, onDis
                 maxLines = 1, overflow = TextOverflow.Ellipsis
             )
 
-            // --- UX BARU: UI Pemilih Kualitas Elegan ---
+            // PBI 11: Pemilih Kualitas & Stream Copy
             Spacer(modifier = Modifier.height(16.dp))
-            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp), horizontalArrangement = Arrangement.Center) {
-                listOf("Tinggi", "Sedang", "Rendah").forEachIndexed { index, title ->
+            Text("Kualitas & Mode Output", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            val qualityOptions = listOf(
+                Pair("Tinggi", 0),
+                Pair("Sedang", 1),
+                Pair("Rendah", 2),
+                Pair("⚡ Instan (Lossless)", 3)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), 
+                horizontalArrangement = Arrangement.Center
+            ) {
+                qualityOptions.forEach { (title, index) ->
                     val isSelected = selectedQuality == index
                     Surface(
-                        modifier = Modifier.clickable { selectedQuality = index }.padding(horizontal = 4.dp),
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        modifier = Modifier.clickable { selectedQuality = index }.padding(horizontal = 3.dp),
+                        shape = RoundedCornerShape(12.dp),
                         color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                        border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null
+                        border = if (isSelected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null
                     ) {
                         Text(
                             text = title, 
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), 
-                            style = MaterialTheme.typography.labelMedium, 
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), 
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                             color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
             }
 
-            val formatsToOptions = getTargetFormats(fileName, mimeType)
+            // Keterangan UX Kualitas Dinamis
+            val qualityHint = when (selectedQuality) {
+                0 -> "Kualitas penuh (Bitrate 100% dipertahankan)"
+                1 -> "Kompresi seimbang (Ukuran berkurang ~50%)"
+                2 -> "Kompresi agresif (Resolusi 720p / ukuran hemat)"
+                3 -> "Salin stream tanpa encode ulang. Super instan & kualitas 100% asli"
+                else -> ""
+            }
+            Text(
+                text = qualityHint,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (selectedQuality == 3) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+            Text("Pilih Format Tujuan:", style = MaterialTheme.typography.labelLarge)
+            Spacer(modifier = Modifier.height(12.dp))
+
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 formatsToOptions.forEach { format ->
+                    val isPdfCompress = format.lowercase() == "pdf" && (fileName.endsWith(".pdf", ignoreCase = true) || mimeType == "application/pdf")
+                    val buttonLabel = if (isPdfCompress) "KOMPRES PDF" else format.uppercase()
+
                     Button(
                         onClick = {
                             val serviceIntent = Intent(context, MorphService::class.java).apply {
                                 putExtra("INPUT_URI", fileUri)
                                 putExtra("TARGET_FORMAT", format)
-                                putExtra("QUALITY_PRESET", selectedQuality) // KIRIM KUALITAS KE SERVICE
+                                putExtra("QUALITY_PRESET", selectedQuality)
                             }
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                                 context.startForegroundService(serviceIntent)
                             } else {
                                 context.startService(serviceIntent)
                             }
-                            onDismiss()
+                            onConvertStarted()
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text(format.uppercase())
+                        Text(buttonLabel, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -524,73 +754,121 @@ fun BottomSheetConverter(fileUri: Uri, fileName: String, mimeType: String, onDis
     }
 }
 
-// UI Setting and many more
+// --- UI SETTINGS SCREEN (PENGATURAN) ---
 @Composable
-fun SettingsScreen(onBackClick: () -> Unit) {
+fun SettingsScreen(
+    currentTheme: Int,
+    onThemeChange: (Int) -> Unit,
+    onBackClick: () -> Unit
+) {
     val context = LocalContext.current
     val prefs = remember { MorphPrefs(context) }
     
-    // State untuk memicu re-render UI saat diswitch
-    var themeOption by remember { mutableStateOf(prefs.themeOption) }
     var keepName by remember { mutableStateOf(prefs.keepOriginalName) }
     var closeShare by remember { mutableStateOf(prefs.closeAfterShare) }
-    var quality by remember { mutableStateOf(prefs.qualityPreset) }
+    var qualityPreset by remember { mutableStateOf(prefs.qualityPreset) }
 
     Scaffold(
         topBar = {
-            Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBackClick) { Text("⬅ Kembali") }
-                Spacer(modifier = Modifier.width(16.dp))
-                Text("Pengaturan", style = MaterialTheme.typography.titleLarge)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp), 
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBackClick) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Pengaturan", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             }
         }
     ) { padding ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 24.dp)) {
             
-            // PBI 8.2.1: Output Directory
+            // PBI 8.2.2: Tema Aplikasi (Sistem / Terang / Gelap)
             item {
-                Text("Penyimpanan", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                Text("Tampilan", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                 Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Lokasi Output File", style = MaterialTheme.typography.bodyLarge)
-                        Text("Downloads/Morph", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("(Fitur ubah folder akan hadir di pembaruan mendatang)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                        Text("Tema Aplikasi", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            FilterChip(
+                                selected = currentTheme == 0,
+                                onClick = { onThemeChange(0) },
+                                label = { Text("Sistem") }
+                            )
+                            FilterChip(
+                                selected = currentTheme == 1,
+                                onClick = { onThemeChange(1) },
+                                label = { Text("Terang") }
+                            )
+                            FilterChip(
+                                selected = currentTheme == 2,
+                                onClick = { onThemeChange(2) },
+                                label = { Text("Gelap") }
+                            )
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // PBI 8.2.2: Tema
+            // PBI 11 & PBI 8.2.7: Kualitas Konversi Default
             item {
-                Text("Tampilan", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                Text("Mesin Konversi & Kualitas", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                 Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Tema Aplikasi", style = MaterialTheme.typography.bodyLarge)
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            TextButton(onClick = { themeOption = 0; prefs.themeOption = 0 }) { Text("Sistem", color = if (themeOption == 0) MaterialTheme.colorScheme.primary else Color.Gray) }
-                            TextButton(onClick = { themeOption = 1; prefs.themeOption = 1 }) { Text("Terang", color = if (themeOption == 1) MaterialTheme.colorScheme.primary else Color.Gray) }
-                            TextButton(onClick = { themeOption = 2; prefs.themeOption = 2 }) { Text("Gelap", color = if (themeOption == 2) MaterialTheme.colorScheme.primary else Color.Gray) }
+                        Text("Kualitas Output Default", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        Text("Parameter awal saat BottomSheet konversi terbuka", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(modifier = Modifier.height(10.dp))
+                        
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf(
+                                Pair("Tinggi", 0),
+                                Pair("Sedang", 1),
+                                Pair("Rendah", 2),
+                                Pair("Instan", 3)
+                            ).forEach { (title, idx) ->
+                                FilterChip(
+                                    selected = qualityPreset == idx,
+                                    onClick = { 
+                                        qualityPreset = idx
+                                        prefs.qualityPreset = idx
+                                    },
+                                    label = { Text(title) }
+                                )
+                            }
                         }
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
             }
+
             // PBI 8.2.3, 8.2.4, 8.2.5: Behavior & Toggles
             item {
                 Text("Perilaku Aplikasi", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                 Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                     Column {
-                        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp), 
+                            horizontalArrangement = Arrangement.SpaceBetween, 
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Pertahankan Nama Asli", style = MaterialTheme.typography.bodyLarge)
-                                Text("Jangan tambah angka acak jika tidak bentrok", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Pertahankan Nama Asli", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                                Text("Hindari penambahan suffix jika tidak ada file bentrok", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Switch(checked = keepName, onCheckedChange = { keepName = it; prefs.keepOriginalName = it })
                         }
-                        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        HorizontalDivider()
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp), 
+                            horizontalArrangement = Arrangement.SpaceBetween, 
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Tutup Otomatis", style = MaterialTheme.typography.bodyLarge)
-                                Text("Tutup Morph setelah memilih format via Share", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Tutup Otomatis (Share)", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                                Text("Kembali ke Galeri/Aplikasi asal setelah memilih format via Share", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Switch(checked = closeShare, onCheckedChange = { closeShare = it; prefs.closeAfterShare = it })
                         }
@@ -599,20 +877,38 @@ fun SettingsScreen(onBackClick: () -> Unit) {
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // PBI 8.2.6 & 8.2.8: Cleanup & About
+            // PBI 8.2.1: Lokasi Penyimpanan
+            item {
+                Text("Penyimpanan", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Lokasi Output File", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        Text("Downloads/Morph", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                        Text("File tersimpan rapi sesuai standar Scoped Storage Android", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // PBI 8.2.6 & 8.2.8: Cleanup & About Logo
             item {
                 Text("Sistem", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                 Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Morph v1.8 (The Share MVP)", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
-                        Text("Universal File Converter by Rizki Fauzi", style = MaterialTheme.typography.bodySmall)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            MorphLogo(modifier = Modifier.size(40.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text("Morph v2.0 (Sprint 3)", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                Text("Universal File Converter by Rizki Fauzi", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
                         Spacer(modifier = Modifier.height(16.dp))
-                        
                         Button(
                             onClick = { 
                                 val cacheDir = context.cacheDir
                                 cacheDir.deleteRecursively()
-                                Toast.makeText(context, "File sampah sementara berhasil dihapus!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "File cache sementara berhasil dibersihkan!", Toast.LENGTH_SHORT).show()
                             },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.error)
@@ -627,29 +923,32 @@ fun SettingsScreen(onBackClick: () -> Unit) {
     }
 }
 
+// --- PEMETAAN FORMAT CERDAS (PBI 2.5, 11, 13) ---
 fun getTargetFormats(fileName: String, mimeType: String): List<String> {
     val originalExt = fileName.substringAfterLast('.', "").lowercase()
     val availableFormats = mutableListOf<String>()
 
-    // Deteksi apakah file ini masuk akal untuk dikompresi ke format yang sama
     val isCompressible = mimeType.startsWith("video/") || 
                          mimeType.startsWith("image/") || 
                          mimeType.startsWith("audio/") || 
                          mimeType == "application/pdf" || 
                          originalExt == "pdf"
 
-    // Tentukan daftar format tujuan berdasarkan tipe file
-    if (mimeType.startsWith("video/")) availableFormats.addAll(listOf("mp4", "mkv", "avi", "gif", "mp3", "m4a"))
-    else if (mimeType.startsWith("image/")) availableFormats.addAll(listOf("png", "jpg", "webp"))
-    else if (mimeType.startsWith("audio/")) availableFormats.addAll(listOf("mp3", "m4a", "wav"))
-    else if (mimeType == "application/pdf" || originalExt == "pdf") availableFormats.addAll(listOf("pdf", "jpg", "png")) // PERSIAPAN PDF
-    else availableFormats.addAll(listOf("mp4", "png", "mp3")) // Default fallback
+    if (mimeType.startsWith("video/")) {
+        availableFormats.addAll(listOf("mp4", "mkv", "avi", "gif", "mp3", "m4a"))
+    } else if (mimeType.startsWith("image/")) {
+        availableFormats.addAll(listOf("png", "jpg", "webp", "pdf"))
+    } else if (mimeType.startsWith("audio/")) {
+        availableFormats.addAll(listOf("mp3", "m4a", "wav"))
+    } else if (mimeType == "application/pdf" || originalExt == "pdf") {
+        availableFormats.addAll(listOf("pdf", "jpg", "png"))
+    } else {
+        availableFormats.addAll(listOf("mp4", "png", "mp3", "pdf"))
+    }
 
-    // LOGIKA PINTAR: Hapus format asal JIKA BUKAN file yang bisa dikompresi
     if (!isCompressible) {
         availableFormats.remove(originalExt)
     } else {
-        // Jika bisa dikompresi, pastikan format aslinya ada di urutan teratas agar mudah diklik
         if (!availableFormats.contains(originalExt) && originalExt.isNotEmpty()) {
             availableFormats.add(0, originalExt)
         }
@@ -658,7 +957,7 @@ fun getTargetFormats(fileName: String, mimeType: String): List<String> {
     return availableFormats.distinct()
 }
 
-fun checkNotifPermission(context: android.content.Context): Boolean {
+fun checkNotifPermission(context: Context): Boolean {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
     } else true
@@ -668,14 +967,13 @@ fun getMorphFiles(): List<File> {
     val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
     val morphDir = File(downloadsDir, "Morph")
     return if (morphDir.exists() && morphDir.isDirectory) {
-        // Ambil semua file yang bukan folder, lalu urutkan dari yang terbaru (descending)
         morphDir.listFiles()?.filter { it.isFile }?.sortedByDescending { it.lastModified() } ?: emptyList()
     } else {
         emptyList()
     }
 }
 
-fun openFileDirectly(context: android.content.Context, file: File) {
+fun openFileDirectly(context: Context, file: File) {
     try {
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
         val mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: "*/*"
@@ -690,7 +988,7 @@ fun openFileDirectly(context: android.content.Context, file: File) {
     }
 }
 
-fun shareFileDirectly(context: android.content.Context, file: File) {
+fun shareFileDirectly(context: Context, file: File) {
     try {
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
         val mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: "*/*"
@@ -706,7 +1004,6 @@ fun shareFileDirectly(context: android.content.Context, file: File) {
     }
 }
 
-//Format Size Math
 fun formatFileSize(bytes: Long): String {
     if (bytes <= 0) return "0 B"
     val units = arrayOf("B", "KB", "MB", "GB", "TB")
@@ -715,8 +1012,8 @@ fun formatFileSize(bytes: Long): String {
 }
 
 // --- PENGELOLA PENGATURAN (PBI 8.2) ---
-class MorphPrefs(context: android.content.Context) {
-    private val prefs = context.getSharedPreferences("morph_settings", android.content.Context.MODE_PRIVATE)
+class MorphPrefs(context: Context) {
+    private val prefs = context.getSharedPreferences("morph_settings", Context.MODE_PRIVATE)
 
     var themeOption: Int // 0: System, 1: Light, 2: Dark
         get() = prefs.getInt("theme", 0)
@@ -734,7 +1031,7 @@ class MorphPrefs(context: android.content.Context) {
         get() = prefs.getBoolean("close_share", true)
         set(value) = prefs.edit().putBoolean("close_share", value).apply()
 
-    var qualityPreset: Int // 0: High, 1: Medium, 2: Low (Disiapkan untuk Sprint 3)
+    var qualityPreset: Int // 0: Tinggi, 1: Sedang, 2: Rendah, 3: Instan (Lossless)
         get() = prefs.getInt("quality", 0)
         set(value) = prefs.edit().putInt("quality", value).apply()
 }
