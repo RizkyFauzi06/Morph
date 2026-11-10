@@ -8,6 +8,8 @@
     <application
         android:allowBackup="true"
         android:label="Morph"
+        android:icon="@drawable/ic_morph_logo"
+        android:roundIcon="@drawable/ic_morph_logo"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
         <service

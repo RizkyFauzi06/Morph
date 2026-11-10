@@ -1,0 +1,28 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+    <!-- Circular Background Base -->
+    <path
+        android:pathData="M48,8C25.9,8 8,25.9 8,48s17.9,40 40,40s40,-17.9 40,-40S70.1,8 48,8z"
+        android:fillColor="#6366F1" />
+
+    <!-- Accent Inner Shadow / Depth Arc -->
+    <path
+        android:pathData="M48,8 C70.1,8 88,25.9 88,48 C88,70.1 70.1,88 48,88 C36,88 25,82 17,73 C26,82 36,86 48,86 C69,86 86,69 86,48 C86,27 69,10 48,10 Z"
+        android:fillColor="#EC4899" />
+
+    <!-- Morph Dynamic Swirl / Wave M symbol -->
+    <path
+        android:pathData="M28,62 C28,62 32,34 42,34 C50,34 46,60 54,60 C60,60 68,38 68,38"
+        android:strokeWidth="7"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Overlapping Accent Loop / Glow Dot -->
+    <path
+        android:pathData="M48,26 A4,4 0 1,1 48,25.99 Z"
+        android:fillColor="#FFFFFF" />
+</vector>

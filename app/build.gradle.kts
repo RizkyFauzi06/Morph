@@ -32,4 +32,6 @@ dependencies {
     // Tambahkan baris di bawah ini untuk menambal crash "NoClassDefFoundError"
     implementation("com.arthenica:smart-exception-java:0.2.1")
     implementation("androidx.compose.material:material:1.5.4") // Dibutuhkan untuk pullrefresh
+    implementation("androidx.compose.material:material-icons-core")
+    implementation("androidx.compose.material:material-icons-extended")
 }
