@@ -20,25 +20,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morph.app.MorphService
+import com.morph.app.core.ConversionCapabilityManager
 import com.morph.app.ui.components.formatFileSize
-
-// --- HELPER: Deteksi apakah pasangan input→output mendukung Lossless Stream Copy ---
-fun isLosslessCompatible(inputExt: String, outputExt: String, mimeType: String): Boolean {
-    val videoContainerRemap = setOf("mp4", "mkv", "mov", "m4v", "ts")
-    val audioLosslessRemap = setOf("m4a")
-    return when {
-        // Video ke video container yang sama codec-nya (H.264/H.265 remux)
-        mimeType.startsWith("video/") &&
-            inputExt in videoContainerRemap &&
-            outputExt in videoContainerRemap &&
-            inputExt != outputExt -> true
-        // Audio AAC remux m4a → m4a
-        mimeType.startsWith("audio/") &&
-            inputExt in audioLosslessRemap &&
-            outputExt in audioLosslessRemap -> true
-        else -> false
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -68,16 +51,18 @@ fun BottomSheetConverter(
         }
     }
 
-    val inputExt = fileName.substringAfterLast('.', "").lowercase()
+    val inputExt = fileName.substringAfterLast('.', "").trim().lowercase()
     var selectedQuality by remember { mutableStateOf(defaultQuality) }
-    val formatsToOptions: List<String> = remember(fileName, mimeType) { getTargetFormats(fileName, mimeType) }
+    val formatsToOptions: List<String> = remember(fileName, mimeType) {
+        ConversionCapabilityManager.getTargetFormats(fileName, mimeType)
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         containerColor = MaterialTheme.colorScheme.surface
-     ) {
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -173,7 +158,7 @@ fun BottomSheetConverter(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // --- FORMAT OPTIONS GRID (Using for loop instead of .forEach) ---
+            // --- FORMAT OPTIONS GRID ---
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
@@ -184,18 +169,26 @@ fun BottomSheetConverter(
                             (fileName.endsWith(".pdf", ignoreCase = true) || mimeType == "application/pdf")
 
                     // Auto-detect lossless: jika format didukung stream copy
-                    val isLossless = isLosslessCompatible(inputExt, format.lowercase(), mimeType)
+                    val isLossless = ConversionCapabilityManager.isLosslessCompatible(inputExt, format.lowercase(), mimeType)
+
+                    // Tentukan quality yang akan dikirim:
+                    // Gunakan preset 3 (Stream Copy) jika user memilih Instan (3) DAN format mendukungnya.
+                    // Jika user memilih preset lain (Tinggi/Sedang/Rendah), hormati pilihan user!
+                    val effectiveQuality = if (selectedQuality == 3) {
+                        if (isLossless) 3 else 0
+                    } else {
+                        selectedQuality
+                    }
+
+                    val isCurrentStreamCopy = effectiveQuality == 3
                     val buttonLabel = when {
                         isPdfCompress -> "KOMPRES PDF"
-                        isLossless -> "⚡ ${format.uppercase()}"
+                        isCurrentStreamCopy -> "⚡ ${format.uppercase()}"
                         else -> format.uppercase()
                     }
 
-                    // Tentukan quality yang akan dikirim: lossless otomatis jika kompatibel
-                    val effectiveQuality = if (isLossless) 3 else if (selectedQuality == 3) 0 else selectedQuality
-
-                    val btnColor = if (isLossless) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
-                    val btnTextColor = if (isLossless) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.onPrimary
+                    val btnColor = if (isCurrentStreamCopy) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
+                    val btnTextColor = if (isCurrentStreamCopy) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.onPrimary
 
                     Button(
                         onClick = {
@@ -239,51 +232,4 @@ fun BottomSheetConverter(
             }
         }
     }
-}
-
-fun getTargetFormats(fileName: String, mimeType: String): List<String> {
-    val originalExt = fileName.substringAfterLast('.', "").lowercase()
-    val availableFormats = mutableListOf<String>()
-
-    val isCompressible = mimeType.startsWith("video/") ||
-            mimeType.startsWith("image/") ||
-            mimeType.startsWith("audio/") ||
-            mimeType == "application/pdf" ||
-            originalExt == "pdf"
-
-    when {
-        mimeType.startsWith("video/") -> {
-            availableFormats.addAll(listOf("mp4", "mkv", "avi", "mov", "gif", "mp3", "m4a"))
-        }
-        mimeType.startsWith("image/") -> {
-            availableFormats.addAll(listOf("png", "jpg", "webp", "pdf"))
-        }
-        mimeType.startsWith("audio/") -> {
-            availableFormats.addAll(listOf("mp3", "m4a", "wav"))
-        }
-        mimeType == "application/pdf" || originalExt == "pdf" -> {
-            availableFormats.addAll(listOf("pdf", "jpg", "png"))
-        }
-        // SVG support
-        originalExt == "svg" || mimeType == "image/svg+xml" -> {
-            availableFormats.addAll(listOf("png", "jpg"))
-        }
-        // EPUB support
-        originalExt == "epub" || mimeType == "application/epub+zip" -> {
-            availableFormats.addAll(listOf("txt"))
-        }
-        else -> {
-            availableFormats.addAll(listOf("mp4", "png", "mp3", "pdf"))
-        }
-    }
-
-    if (!isCompressible) {
-        availableFormats.remove(originalExt)
-    } else {
-        if (!availableFormats.contains(originalExt) && originalExt.isNotEmpty()) {
-            availableFormats.add(0, originalExt)
-        }
-    }
-
-    return availableFormats.distinct()
 }

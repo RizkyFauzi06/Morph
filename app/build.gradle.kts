@@ -27,8 +27,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     debugImplementation("androidx.compose.ui:ui-tooling")
-    // fork komunitas yang aktif di-maintain tahun ini
-    implementation("dev.ffmpegkit-maintained:ffmpeg-kit-min:8.1.7")
+    // fork komunitas yang aktif di-maintain tahun ini (full variant: includes libvpx, libvorbis, opus, lame)
+    implementation("dev.ffmpegkit-maintained:ffmpeg-kit-full:8.1.7")
     // Tambahkan baris di bawah ini untuk menambal crash "NoClassDefFoundError"
     implementation("com.arthenica:smart-exception-java:0.2.1")
     implementation("androidx.compose.material:material:1.5.4") // Dibutuhkan untuk pullrefresh
@@ -36,4 +36,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     // SVG Renderer (PBI Sprint 3 - Apache 2.0)
     implementation("com.caverock:androidsvg-aar:1.4")
+
+    // Unit Testing
+    testImplementation("junit:junit:4.13.2")
 }

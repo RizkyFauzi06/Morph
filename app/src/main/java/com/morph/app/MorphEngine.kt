@@ -9,31 +9,35 @@ import android.graphics.pdf.PdfDocument
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.FFprobeKit
 import com.arthenica.ffmpegkit.ReturnCode
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
+import com.morph.app.core.*
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 
 object MorphEngine {
-    
+
+    private const val TAG = "MorphEngine"
+
     sealed class ConvertState {
         object Idle : ConvertState()
         data class Converting(val format: String, val progress: Int) : ConvertState()
         object Success : ConvertState()
         data class Error(val message: String, val originalUri: Uri? = null, val targetFormat: String = "") : ConvertState()
     }
-    
-    // Pipa yang dipantau oleh UI
+
     val currentStatus = MutableStateFlow<ConvertState>(ConvertState.Idle)
+
+    // Managed Coroutine Scope tied to the Engine lifecycle
+    private val engineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var activeJob: Job? = null
 
     fun convert(
         context: Context,
@@ -45,164 +49,62 @@ object MorphEngine {
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
-        val inputExt = originalFileName.substringAfterLast('.', "").lowercase()
-        val targetExt = outputExtension.lowercase()
+        val inputExt = originalFileName.substringAfterLast('.', "").trim().lowercase()
+        val targetExt = outputExtension.trim().removePrefix(".").lowercase()
 
-        // --- RUTE 1: Input Dokumen PDF (PBI 2.5 & 13) ---
-        if (inputExt == "pdf") {
-            if (targetExt in listOf("jpg", "jpeg", "png", "webp")) {
-                convertPdfToImages(context, inputUri, targetExt, originalFileName, qualityPreset, onProgress, onSuccess, onError)
-                return
-            } else if (targetExt == "pdf") {
-                compressPdf(context, inputUri, originalFileName, qualityPreset, onProgress, onSuccess, onError)
-                return
-            }
-        }
+        // Cancel any pending conversion job before starting a new one
+        activeJob?.cancel()
 
-        // --- RUTE 2: Output PDF dari Gambar (Image ke PDF) ---
-        if (targetExt == "pdf" && inputExt in listOf("jpg", "jpeg", "png", "webp", "bmp", "heic")) {
-            convertImageToPdf(context, inputUri, originalFileName, onProgress, onSuccess, onError)
-            return
-        }
-
-        // --- RUTE 3: Native Image Converter (JPG, PNG, WEBP) ---
-        if (targetExt in listOf("png", "jpg", "jpeg", "webp")) {
-            convertImageNatively(context, inputUri, targetExt, originalFileName, qualityPreset, onProgress, onSuccess, onError)
-            return
-        }
-
-        // --- RUTE 4: SVG ke PNG/JPG via AndroidSVG ---
-        if (inputExt == "svg" && targetExt in listOf("png", "jpg", "jpeg")) {
-            convertSvgToImage(context, inputUri, targetExt, originalFileName, qualityPreset, onProgress, onSuccess, onError)
-            return
-        }
-
-        // --- RUTE 5: EPUB ke TXT via epublib ---
-        if (inputExt == "epub" && targetExt == "txt") {
-            convertEpubToTxt(context, inputUri, originalFileName, onProgress, onSuccess, onError)
-            return
-        }
-
-        // --- RUTE 4: Audio / Video via FFmpeg Engine (Termasuk PBI 11: Lossless Stream Copy) ---
-        GlobalScope.launch(Dispatchers.IO) {
+        activeJob = engineScope.launch {
             try {
-                currentStatus.value = ConvertState.Converting(targetExt, 0)
-                onProgress("Menyiapkan file multimedia...", 0)
-
-                val inputSuffix = if (inputExt.isNotEmpty()) ".$inputExt" else ""
-                val cacheInputFile = File(context.cacheDir, "temp_input_morph$inputSuffix")
-                context.contentResolver.openInputStream(inputUri)?.use { input ->
-                    FileOutputStream(cacheInputFile).use { output ->
-                        input.copyTo(output)
+                // Route 1: PDF Document Input
+                if (inputExt == "pdf") {
+                    if (targetExt in listOf("jpg", "jpeg", "png", "webp")) {
+                        convertPdfToImages(context, inputUri, targetExt, originalFileName, qualityPreset, onProgress, onSuccess, onError)
+                        return@launch
+                    } else if (targetExt == "pdf") {
+                        compressPdf(context, inputUri, originalFileName, qualityPreset, onProgress, onSuccess, onError)
+                        return@launch
                     }
                 }
 
-                val cacheOutputFile = File(context.cacheDir, "temp_output_morph.$targetExt")
-
-                // Dapatkan durasi dan metadata
-                val mediaInfo = FFprobeKit.getMediaInformation(cacheInputFile.absolutePath).mediaInformation
-                val totalDurationStr = mediaInfo?.duration
-                val totalDurationMs = (totalDurationStr?.toDoubleOrNull()?.times(1000))?.toLong() ?: 0L
-
-                val originalBitrateBps = if (totalDurationMs > 0) {
-                    ((cacheInputFile.length() * 8.0) / (totalDurationMs / 1000.0)).toLong()
-                } else {
-                    5000000L
-                }
-                val videoBitrateBps = (originalBitrateBps * 0.9).toLong()
-
-                // PBI 11: Parameter Kualitas & Lossless Stream Copy
-                // Verifikasi kompatibilitas stream copy
-                val isContainerLosslessSupported = (targetExt in listOf("mp4", "mkv", "mov", "m4v", "ts") && inputExt in listOf("mp4", "mkv", "mov", "m4v", "ts")) ||
-                        (targetExt == "m4a" && inputExt == "m4a")
-
-                val effectivePreset = if (qualityPreset == 3 && !isContainerLosslessSupported) {
-                    0 // Otomatis fallback ke kualitas encode Tertinggi jika format tidak mendukung Stream Copy
-                } else {
-                    qualityPreset
+                // Route 2: Image to PDF
+                if (targetExt == "pdf" && inputExt in listOf("jpg", "jpeg", "png", "webp", "bmp", "heic", "heif")) {
+                    convertImageToPdf(context, inputUri, originalFileName, onProgress, onSuccess, onError)
+                    return@launch
                 }
 
-                val qualityArgs = if (effectivePreset == 3) {
-                    // LOSSLESS STREAM COPY: Tidak melakukan encoding ulang, langsung salin bitstream!
-                    if (targetExt in listOf("mp4", "mkv", "mov", "avi", "webm")) {
-                        "-c copy"
-                    } else if (targetExt in listOf("m4a", "aac", "mp3")) {
-                        "-vn -c:a copy"
-                    } else {
-                        "-c copy"
-                    }
-                } else if (targetExt in listOf("mp4", "mkv", "webm", "avi", "mov")) {
-                    when (effectivePreset) {
-                        0 -> "-b:v $videoBitrateBps -b:a 256k"
-                        1 -> {
-                            val targetBv = (videoBitrateBps * 0.5).toLong()
-                            "-b:v $targetBv -b:a 128k"
-                        }
-                        2 -> {
-                            val targetBv = (videoBitrateBps * 0.25).toLong()
-                            "-vf \"scale=trunc(iw/2)*2:720\" -b:v $targetBv -b:a 96k"
-                        }
-                        else -> "-b:v $videoBitrateBps -b:a 256k"
-                    }
-                } else if (targetExt in listOf("mp3", "m4a", "ogg", "opus", "wav")) {
-                    when (effectivePreset) {
-                        0 -> "-b:a 320k"
-                        1 -> "-b:a 128k"
-                        2 -> "-b:a 64k"
-                        else -> "-b:a 192k"
-                    }
-                } else {
-                    ""
+                // Route 3: Vector SVG to Bitmap Image
+                if (inputExt == "svg" && targetExt in listOf("png", "jpg", "jpeg", "webp")) {
+                    convertSvgToImage(context, inputUri, targetExt, originalFileName, qualityPreset, onProgress, onSuccess, onError)
+                    return@launch
                 }
 
-                val command = "-y -i \"${cacheInputFile.absolutePath}\" $qualityArgs \"${cacheOutputFile.absolutePath}\""
-                FFmpegKit.executeAsync(
-                    command,
-                    { session ->
-                        val returnCode = session.returnCode
-                        if (ReturnCode.isSuccess(returnCode)) {
-                            val finalPath = saveToDownloads(context, cacheOutputFile, originalFileName, targetExt)
-                            cacheOutputFile.delete()
-                            cacheInputFile.delete()
-                            if (finalPath != null) {
-                                currentStatus.value = ConvertState.Success
-                                onSuccess(finalPath)
-                            } else {
-                                currentStatus.value = ConvertState.Error("Gagal memindahkan file ke Downloads.", inputUri, targetExt)
-                                onError("Gagal memindahkan file ke Downloads.")
-                            }
-                        } else if (ReturnCode.isCancel(returnCode)) {
-                            currentStatus.value = ConvertState.Idle
-                            cacheOutputFile.delete()
-                            cacheInputFile.delete()
-                            onError("Konversi dibatalkan pengguna.")
-                        } else {
-                            val errMessage = if (qualityPreset == 3) {
-                                "Stream Copy tidak kompatibel untuk file ini. Silakan gunakan kualitas Tinggi atau Sedang."
-                            } else {
-                                "Gagal Konversi (Kode: ${returnCode.value})"
-                            }
-                            currentStatus.value = ConvertState.Error(errMessage, inputUri, targetExt)
-                            cacheOutputFile.delete()
-                            cacheInputFile.delete()
-                            onError(errMessage)
-                        }
-                    },
-                    { _ -> },
-                    { statistics ->
-                        if (totalDurationMs > 0) {
-                            val percentage = ((statistics.time.toFloat() / totalDurationMs) * 100).toInt().coerceIn(0, 100)
-                            currentStatus.value = ConvertState.Converting(targetExt, percentage)
-                            onProgress("Telah diproses: $percentage%", percentage)
-                        } else {
-                            val secondsProcessed = statistics.time / 1000
-                            currentStatus.value = ConvertState.Converting(targetExt, 0)
-                            onProgress("Telah diproses: $secondsProcessed detik", 0)
-                        }
-                    }
-                )
+                // Route 4: E-Book EPUB to TXT
+                if (inputExt == "epub" && targetExt == "txt") {
+                    convertEpubToTxt(context, inputUri, originalFileName, onProgress, onSuccess, onError)
+                    return@launch
+                }
+
+                // Route 5: Native Raster Image Converter
+                if (inputExt in listOf("png", "jpg", "jpeg", "webp", "bmp") &&
+                    targetExt in listOf("png", "jpg", "jpeg", "webp", "bmp")
+                ) {
+                    convertImageNatively(context, inputUri, targetExt, originalFileName, qualityPreset, onProgress, onSuccess, onError)
+                    return@launch
+                }
+
+                // Route 6: Multimedia (Video & Audio) via FFmpeg Engine
+                convertMediaWithFFmpeg(context, inputUri, inputExt, targetExt, originalFileName, qualityPreset, onProgress, onSuccess, onError)
+
+            } catch (e: CancellationException) {
+                withContext(Dispatchers.Main) {
+                    currentStatus.value = ConvertState.Idle
+                    onError("Konversi dibatalkan.")
+                }
             } catch (e: Exception) {
-                launch(Dispatchers.Main) {
+                Log.e(TAG, "Conversion setup error", e)
+                withContext(Dispatchers.Main) {
                     currentStatus.value = ConvertState.Error("Gagal setup konversi: ${e.message}", inputUri, targetExt)
                     onError("Gagal setup konversi: ${e.message}")
                 }
@@ -210,8 +112,295 @@ object MorphEngine {
         }
     }
 
-    // --- PBI 2.5 & 13: KONVERSI PDF KE GAMBAR (JPG/PNG) NATIVE ANDROID ---
-    private fun convertPdfToImages(
+    // --- 1. MEDIA CONVERTER (FFMPEG) ---
+    private suspend fun convertMediaWithFFmpeg(
+        context: Context,
+        inputUri: Uri,
+        inputExt: String,
+        targetExt: String,
+        originalFileName: String,
+        qualityPreset: Int,
+        onProgress: (String, Int) -> Unit,
+        onSuccess: (String) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val tempInput = OutputManager.createTempFile(context, "in_media", inputExt)
+        val tempOutput = OutputManager.createTempFile(context, "out_media", targetExt)
+
+        try {
+            updateProgress(targetExt, "Menyiapkan file multimedia...", 5, onProgress)
+
+            // Copy input stream to temp cache file
+            context.contentResolver.openInputStream(inputUri)?.use { input ->
+                FileOutputStream(tempInput).use { output ->
+                    input.copyTo(output)
+                }
+            } ?: throw IOException("Tidak dapat membaca berkas input.")
+
+            if (!tempInput.exists() || tempInput.length() <= 0) {
+                throw IOException("Berkas input kosong atau tidak valid.")
+            }
+
+            // Probe media information via FFprobe
+            val mediaInfo = FFprobeKit.getMediaInformation(tempInput.absolutePath).mediaInformation
+            val totalDurationStr = mediaInfo?.duration
+            val totalDurationMs = (totalDurationStr?.toDoubleOrNull()?.times(1000))?.toLong() ?: 0L
+
+            val originalBitrateBps = if (totalDurationMs > 0) {
+                ((tempInput.length() * 8.0) / (totalDurationMs / 1000.0)).toLong()
+            } else {
+                4000000L
+            }
+            val videoBitrateBps = (originalBitrateBps * 0.9).toLong().coerceIn(400000L, 20000000L)
+
+            // Video rotation check
+            val videoRotation = getVideoRotation(mediaInfo)
+
+            // Lossless / Stream Copy validation
+            val isLosslessSupported = ConversionCapabilityManager.isLosslessCompatible(inputExt, targetExt)
+            // Crucial: If video has rotation metadata and target is MKV or WebM, stream copy causes unrotated orientation on Android
+            val isLosslessCapable = isLosslessSupported && !(videoRotation != 0 && targetExt in listOf("mkv", "webm"))
+
+            val effectivePreset = if (qualityPreset == 3 && !isLosslessCapable) {
+                0 // Fallback to High if format doesn't support stream copying
+            } else {
+                qualityPreset
+            }
+
+            val qualityArgs = buildFFmpegQualityArgs(inputExt, targetExt, effectivePreset, videoBitrateBps, videoRotation)
+            val command = "-y -i \"${tempInput.absolutePath}\" $qualityArgs \"${tempOutput.absolutePath}\""
+
+            val ffmpegSession = CompletableDeferred<ReturnCode>()
+
+            val session = FFmpegKit.executeAsync(
+                command,
+                { s -> ffmpegSession.complete(s.returnCode) },
+                { log -> Log.d(TAG, "[FFmpeg] ${log.message}") },
+                { stats ->
+                    if (totalDurationMs > 0) {
+                        val percentage = ((stats.time.toFloat() / totalDurationMs) * 95).toInt().coerceIn(5, 95)
+                        currentStatus.value = ConvertState.Converting(targetExt, percentage)
+                        onProgress("Telah diproses: $percentage%", percentage)
+                    } else {
+                        val seconds = stats.time / 1000
+                        currentStatus.value = ConvertState.Converting(targetExt, 50)
+                        onProgress("Telah diproses: ${seconds}s", 50)
+                    }
+                }
+            )
+
+            val returnCode = ffmpegSession.await()
+
+            if (ReturnCode.isSuccess(returnCode)) {
+                updateProgress(targetExt, "Menyelesaikan dan memvalidasi berkas...", 98, onProgress)
+
+                // Validate output file
+                when (val valResult = ConversionValidator.validateFile(tempOutput, targetExt)) {
+                    is ConversionValidator.ValidationResult.Invalid -> {
+                        OutputManager.cleanTempFiles(tempInput, tempOutput)
+                        withContext(Dispatchers.Main) {
+                            currentStatus.value = ConvertState.Error("Hasil tidak valid: ${valResult.reason}", inputUri, targetExt)
+                            onError("Hasil tidak valid: ${valResult.reason}")
+                        }
+                    }
+                    is ConversionValidator.ValidationResult.Valid -> {
+                        val finalPath = OutputManager.finalizeOutput(context, tempOutput, originalFileName, targetExt)
+                        OutputManager.cleanTempFiles(tempInput)
+                        withContext(Dispatchers.Main) {
+                            if (finalPath != null) {
+                                currentStatus.value = ConvertState.Success
+                                onProgress("Selesai 100%", 100)
+                                onSuccess(finalPath)
+                            } else {
+                                currentStatus.value = ConvertState.Error("Gagal menyimpan hasil ke direktori Downloads/Morph", inputUri, targetExt)
+                                onError("Gagal menyimpan hasil ke direktori Downloads/Morph")
+                            }
+                        }
+                    }
+                }
+            } else if (ReturnCode.isCancel(returnCode)) {
+                OutputManager.cleanTempFiles(tempInput, tempOutput)
+                withContext(Dispatchers.Main) {
+                    currentStatus.value = ConvertState.Idle
+                    onError("Konversi dibatalkan.")
+                }
+            } else {
+                val failLogs = session.allLogsAsString ?: ""
+                OutputManager.cleanTempFiles(tempInput, tempOutput)
+                val errorMessage = when {
+                    qualityPreset == 3 ->
+                        "Stream Copy tidak kompatibel untuk codec stream berkas ini. Gunakan kualitas Tinggi atau Sedang."
+                    failLogs.contains("does not support", ignoreCase = true) ->
+                        "Format tujuan tidak mendukung salah satu stream media dari berkas sumber."
+                    else ->
+                        "Gagal Konversi FFmpeg (Kode: ${returnCode.value})"
+                }
+                withContext(Dispatchers.Main) {
+                    currentStatus.value = ConvertState.Error(errorMessage, inputUri, targetExt)
+                    onError(errorMessage)
+                }
+            }
+        } catch (e: Exception) {
+            OutputManager.cleanTempFiles(tempInput, tempOutput)
+            throw e
+        }
+    }
+
+    private fun getVideoRotation(mediaInfo: com.arthenica.ffmpegkit.MediaInformation?): Int {
+        if (mediaInfo == null) return 0
+        val videoStream = mediaInfo.streams?.firstOrNull { it.type.equals("video", ignoreCase = true) } ?: return 0
+
+        // 1. Check stream tags ("rotate")
+        val tags = videoStream.tags
+        if (tags != null) {
+            val tagRotate = tags.optString("rotate", "").toIntOrNull()
+                ?: if (tags.has("rotate")) tags.optInt("rotate", 0) else null
+            if (tagRotate != null && tagRotate != 0) {
+                return ((tagRotate % 360) + 360) % 360
+            }
+        }
+
+        // 2. Check side_data_list in stream properties
+        try {
+            val allProps = videoStream.allProperties
+            val sideDataList = allProps?.optJSONArray("side_data_list")
+            if (sideDataList != null) {
+                for (i in 0 until sideDataList.length()) {
+                    val sideData = sideDataList.optJSONObject(i)
+                    if (sideData != null && sideData.has("rotation")) {
+                        val rot = sideData.optInt("rotation", 0)
+                        if (rot != 0) {
+                            return ((rot % 360) + 360) % 360
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Gagal membaca rotasi video dari side_data_list", e)
+        }
+
+        return 0
+    }
+
+    private fun buildFFmpegQualityArgs(
+        inputExt: String,
+        targetExt: String,
+        preset: Int,
+        videoBitrateBps: Long,
+        videoRotation: Int = 0
+    ): String {
+        // Stream Copy (Lossless Remuxing)
+        if (preset == 3) {
+            return when (targetExt) {
+                "mp4", "mov" -> "-c copy -sn -dn -movflags +faststart"
+                "mkv" -> "-c copy -sn -dn"
+                "m4a", "aac" -> "-vn -sn -dn -c:a copy"
+                else -> "-c copy"
+            }
+        }
+
+        // Target: Animated GIF
+        if (targetExt == "gif") {
+            val fps = when (preset) {
+                0 -> 15
+                1 -> 12
+                else -> 10
+            }
+            val maxDim = when (preset) {
+                0 -> 480
+                1 -> 360
+                else -> 240
+            }
+            val rotateArg = if (videoRotation != 0) "-metadata:s:v rotate=0 " else ""
+            val filterGraph = "fps=$fps,scale='if(gt(iw,ih),$maxDim,-2)':'if(gt(iw,ih),-2,$maxDim)':flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse"
+            return "-an -sn -dn $rotateArg-vf \"$filterGraph\""
+        }
+
+        // Target: WebM
+        if (targetExt == "webm") {
+            val rotateArg = if (videoRotation != 0) "-metadata:s:v rotate=0 " else ""
+            return when (preset) {
+                0 -> "-c:v libvpx-vp9 -b:v $videoBitrateBps -deadline realtime -cpu-used 4 -c:a libopus -b:a 192k $rotateArg"
+                1 -> {
+                    val halfBv = (videoBitrateBps * 0.6).toLong()
+                    "-c:v libvpx-vp9 -b:v $halfBv -deadline realtime -cpu-used 4 -c:a libopus -b:a 128k $rotateArg"
+                }
+                2 -> {
+                    val lowBv = (videoBitrateBps * 0.35).toLong()
+                    val scaleFilter = "scale='if(gt(iw,ih),854,-2)':'if(gt(iw,ih),-2,854)'"
+                    "-vf \"$scaleFilter\" -c:v libvpx-vp9 -b:v $lowBv -deadline realtime -cpu-used 4 -c:a libopus -b:a 96k $rotateArg"
+                }
+                else -> "-c:v libvpx-vp9 -b:v $videoBitrateBps -deadline realtime -cpu-used 4 -c:a libopus -b:a 128k $rotateArg"
+            }
+        }
+
+        // Target: Standard Video Containers (MP4, MKV, MOV, AVI)
+        if (targetExt in listOf("mp4", "mkv", "mov", "avi")) {
+            val rotateArg = if (videoRotation != 0) "-metadata:s:v rotate=0 " else ""
+            val fastStartArg = if (targetExt in listOf("mp4", "mov")) "-movflags +faststart " else ""
+            return when (preset) {
+                0 -> "$fastStartArg-b:v $videoBitrateBps -b:a 256k $rotateArg"
+                1 -> {
+                    val targetBv = (videoBitrateBps * 0.6).toLong()
+                    "$fastStartArg-b:v $targetBv -b:a 160k $rotateArg"
+                }
+                2 -> {
+                    val targetBv = (videoBitrateBps * 0.35).toLong()
+                    val scaleFilter = "scale='if(gt(iw,ih),854,-2)':'if(gt(iw,ih),-2,854)'"
+                    "$fastStartArg-vf \"$scaleFilter\" -b:v $targetBv -b:a 96k $rotateArg"
+                }
+                else -> "$fastStartArg-b:v $videoBitrateBps -b:a 256k $rotateArg"
+            }
+        }
+
+        // Target: Audio Formats
+        val audioCommon = "-vn -sn -dn"
+        return when (targetExt) {
+            "wav" -> "$audioCommon -c:a pcm_s16le"
+            "flac" -> "$audioCommon -c:a flac"
+            "mp3" -> {
+                val b = when (preset) {
+                    0 -> "320k"
+                    1 -> "192k"
+                    2 -> "128k"
+                    else -> "256k"
+                }
+                "$audioCommon -c:a libmp3lame -b:a $b"
+            }
+            "aac", "m4a" -> {
+                val b = when (preset) {
+                    0 -> "256k"
+                    1 -> "192k"
+                    2 -> "128k"
+                    else -> "192k"
+                }
+                val faststart = if (targetExt == "m4a") " -movflags +faststart" else ""
+                "$audioCommon -c:a aac -b:a $b$faststart"
+            }
+            "opus" -> {
+                val b = when (preset) {
+                    0 -> "160k"
+                    1 -> "128k"
+                    2 -> "96k"
+                    else -> "128k"
+                }
+                "$audioCommon -c:a libopus -b:a $b"
+            }
+            "ogg" -> {
+                val b = when (preset) {
+                    0 -> "256k"
+                    1 -> "160k"
+                    2 -> "112k"
+                    else -> "160k"
+                }
+                "$audioCommon -c:a libvorbis -b:a $b"
+            }
+            else -> audioCommon
+        }
+    }
+
+    // --- 2. PDF TO IMAGES ---
+    private suspend fun convertPdfToImages(
         context: Context,
         inputUri: Uri,
         targetExtension: String,
@@ -221,115 +410,97 @@ object MorphEngine {
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
-        GlobalScope.launch(Dispatchers.IO) {
-            try {
-                // Gunakan Main Thread khusus untuk update state awal agar aman
-                launch(Dispatchers.Main) {
-                    currentStatus.value = ConvertState.Converting(targetExtension, 10)
-                    onProgress("Membaca dokumen PDF...", 10)
-                }.join() // Tunggu selesai
+        val tempPdf = OutputManager.createTempFile(context, "in_pdf", "pdf")
+        val createdTempFiles = mutableListOf<File>()
 
-                val cacheInputFile = File(context.cacheDir, "temp_pdf_in.pdf")
-                context.contentResolver.openInputStream(inputUri)?.use { input ->
-                    FileOutputStream(cacheInputFile).use { output ->
-                        input.copyTo(output)
-                    }
-                }
+        try {
+            updateProgress(targetExtension, "Membaca dokumen PDF...", 10, onProgress)
 
-                val pfd = ParcelFileDescriptor.open(cacheInputFile, ParcelFileDescriptor.MODE_READ_ONLY)
-                val renderer = PdfRenderer(pfd)
-                val pageCount = renderer.pageCount
+            context.contentResolver.openInputStream(inputUri)?.use { input ->
+                FileOutputStream(tempPdf).use { output -> input.copyTo(output) }
+            } ?: throw IOException("Tidak dapat membaca dokumen PDF.")
 
-                if (pageCount == 0) {
-                    renderer.close()
-                    pfd.close()
-                    cacheInputFile.delete()
-                    throw IllegalStateException("Dokumen PDF tidak memiliki halaman.")
-                }
+            val pfd = ParcelFileDescriptor.open(tempPdf, ParcelFileDescriptor.MODE_READ_ONLY)
+            val renderer = PdfRenderer(pfd)
+            val pageCount = renderer.pageCount
 
-                // Resolusi render berbasis preset
-                val scale = when (qualityPreset) {
-                    0 -> 2.0f // Tinggi (144+ DPI)
-                    1 -> 1.5f // Sedang
-                    2 -> 1.0f // Rendah (72 DPI)
-                    3 -> 2.0f // Lossless
-                    else -> 1.5f
-                }
-
-                val format = if (targetExtension == "png") Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
-                val qualityVal = when (qualityPreset) {
-                    0 -> 100
-                    1 -> 80
-                    2 -> 60
-                    3 -> 100
-                    else -> 85
-                }
-
-                var lastSavedPath: String? = null
-                val baseName = originalFileName.substringBeforeLast('.', "doc")
-
-                for (i in 0 until pageCount) {
-                    // Cek pembatalan (agar tidak spam jika user membatalkan di tengah jalan)
-                    if (currentStatus.value is ConvertState.Idle) {
-                        throw java.util.concurrent.CancellationException("Dibatalkan pengguna")
-                    }
-
-                    val percent = (((i + 1).toFloat() / pageCount) * 85).toInt() + 10
-                    launch(Dispatchers.Main) {
-                        currentStatus.value = ConvertState.Converting(targetExtension, percent)
-                        onProgress("Merender halaman ${i + 1} dari $pageCount...", percent)
-                    }
-
-                    val page = renderer.openPage(i)
-                    val width = (page.width * scale).toInt()
-                    val height = (page.height * scale).toInt()
-                    
-                    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                    val canvas = Canvas(bitmap)
-                    canvas.drawColor(Color.WHITE) // PDF butuh latar belakang putih padat
-                    
-                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT) // Pakai mode PRINT agar tajam
-                    page.close()
-
-                    val pageSuffix = if (pageCount > 1) "_hal_${i + 1}" else ""
-                    val pageFileName = "$baseName$pageSuffix.$targetExtension"
-                    val cachePageFile = File(context.cacheDir, "temp_page_${i}.$targetExtension")
-                    
-                    FileOutputStream(cachePageFile).use { fos ->
-                        bitmap.compress(format, qualityVal, fos)
-                    }
-                    bitmap.recycle() // Bebaskan memori bitmap seketika!
-
-                    val savedPath = saveToDownloads(context, cachePageFile, pageFileName, targetExtension)
-                    cachePageFile.delete()
-                    if (savedPath != null) lastSavedPath = savedPath
-                }
-
+            if (pageCount == 0) {
                 renderer.close()
                 pfd.close()
-                cacheInputFile.delete()
+                throw IllegalStateException("Dokumen PDF tidak memiliki halaman.")
+            }
 
-                launch(Dispatchers.Main) {
-                    if (lastSavedPath != null) {
-                        currentStatus.value = ConvertState.Success
-                        val msg = if (pageCount > 1) "$pageCount halaman berhasil dikonversi ke Downloads/Morph" else lastSavedPath
-                        onSuccess(msg)
-                    } else {
-                        currentStatus.value = ConvertState.Error("Gagal menyimpan hasil gambar PDF", inputUri, targetExtension)
-                        onError("Gagal menyimpan hasil gambar PDF")
-                    }
+            val scale = when (qualityPreset) {
+                0, 3 -> 2.0f // High / Lossless (144+ DPI)
+                1    -> 1.5f // Medium
+                2    -> 1.0f // Low (72 DPI)
+                else -> 1.5f
+            }
+
+            val format = if (targetExtension == "png") Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
+            val qualityVal = when (qualityPreset) {
+                0, 3 -> 100
+                1    -> 85
+                2    -> 65
+                else -> 85
+            }
+
+            val baseName = originalFileName.substringBeforeLast('.', "doc")
+            var lastSavedPath: String? = null
+
+            for (i in 0 until pageCount) {
+                currentCoroutineContext().ensureActive()
+
+                val percent = (((i + 1).toFloat() / pageCount) * 85).toInt() + 10
+                updateProgress(targetExtension, "Merender halaman ${i + 1} dari $pageCount...", percent, onProgress)
+
+                val page = renderer.openPage(i)
+                val width = (page.width * scale).toInt()
+                val height = (page.height * scale).toInt()
+
+                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bitmap)
+                canvas.drawColor(Color.WHITE) // PDF pages need opaque white background
+
+                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
+                page.close()
+
+                val pageSuffix = if (pageCount > 1) "_hal_${i + 1}" else ""
+                val pageFileName = "$baseName$pageSuffix.$targetExtension"
+                val tempPageFile = OutputManager.createTempFile(context, "pdf_page_$i", targetExtension)
+                createdTempFiles.add(tempPageFile)
+
+                FileOutputStream(tempPageFile).use { fos ->
+                    bitmap.compress(format, qualityVal, fos)
                 }
-            } catch (e: Exception) {
-                launch(Dispatchers.Main) {
-                    currentStatus.value = ConvertState.Error("Gagal ekstrak gambar PDF: ${e.message}", inputUri, targetExtension)
-                    onError("Gagal ekstrak gambar PDF: ${e.message}")
+                bitmap.recycle()
+
+                val savedPath = OutputManager.finalizeOutput(context, tempPageFile, pageFileName, targetExtension)
+                if (savedPath != null) lastSavedPath = savedPath
+            }
+
+            renderer.close()
+            pfd.close()
+            OutputManager.cleanTempFiles(tempPdf, *createdTempFiles.toTypedArray())
+
+            withContext(Dispatchers.Main) {
+                if (lastSavedPath != null) {
+                    currentStatus.value = ConvertState.Success
+                    val msg = if (pageCount > 1) "$pageCount halaman berhasil diekstrak ke Downloads/Morph" else lastSavedPath
+                    onSuccess(msg)
+                } else {
+                    currentStatus.value = ConvertState.Error("Gagal menyimpan hasil gambar PDF", inputUri, targetExtension)
+                    onError("Gagal menyimpan hasil gambar PDF")
                 }
             }
+        } catch (e: Exception) {
+            OutputManager.cleanTempFiles(tempPdf, *createdTempFiles.toTypedArray())
+            throw e
         }
     }
 
-    // --- PBI 2.5 & 13: KOMPRESI PDF (REDUCE FILE SIZE SECARA CERDAS) ---
-    private fun compressPdf(
+    // --- 3. PDF COMPRESSOR ---
+    private suspend fun compressPdf(
         context: Context,
         inputUri: Uri,
         originalFileName: String,
@@ -338,99 +509,92 @@ object MorphEngine {
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
-        GlobalScope.launch(Dispatchers.IO) {
-            try {
-                currentStatus.value = ConvertState.Converting("pdf", 10)
-                onProgress("Menganalisis ukuran PDF...", 10)
+        val tempInput = OutputManager.createTempFile(context, "comp_in", "pdf")
+        val tempOutput = OutputManager.createTempFile(context, "comp_out", "pdf")
 
-                val cacheInputFile = File(context.cacheDir, "temp_pdf_comp_in.pdf")
-                context.contentResolver.openInputStream(inputUri)?.use { input ->
-                    FileOutputStream(cacheInputFile).use { output ->
-                        input.copyTo(output)
-                    }
-                }
+        try {
+            updateProgress("pdf", "Menganalisis ukuran PDF...", 10, onProgress)
 
-                val pfd = ParcelFileDescriptor.open(cacheInputFile, ParcelFileDescriptor.MODE_READ_ONLY)
-                val renderer = PdfRenderer(pfd)
-                val pageCount = renderer.pageCount
+            context.contentResolver.openInputStream(inputUri)?.use { input ->
+                FileOutputStream(tempInput).use { output -> input.copyTo(output) }
+            } ?: throw IOException("Tidak dapat membaca dokumen PDF.")
 
-                if (pageCount == 0) {
-                    renderer.close()
-                    pfd.close()
-                    cacheInputFile.delete()
-                    throw IllegalStateException("Dokumen PDF kosong.")
-                }
+            val pfd = ParcelFileDescriptor.open(tempInput, ParcelFileDescriptor.MODE_READ_ONLY)
+            val renderer = PdfRenderer(pfd)
+            val pageCount = renderer.pageCount
 
-                val (scale, jpegQuality) = when (qualityPreset) {
-                    0 -> Pair(1.0f, 85) // Tinggi
-                    1 -> Pair(0.8f, 65) // Sedang (Disarankan)
-                    2 -> Pair(0.6f, 45) // Rendah (Kompresi Maksimal)
-                    3 -> Pair(1.0f, 95) // Lossless
-                    else -> Pair(0.8f, 65)
-                }
-
-                val pdfDocument = PdfDocument()
-
-                for (i in 0 until pageCount) {
-                    val page = renderer.openPage(i)
-                    val width = (page.width * scale).toInt()
-                    val height = (page.height * scale).toInt()
-                    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                    val canvas = Canvas(bitmap)
-                    canvas.drawColor(Color.WHITE)
-                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                    page.close()
-
-                    val baos = ByteArrayOutputStream()
-                    bitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality, baos)
-                    val compressedBytes = baos.toByteArray()
-                    val compressedBitmap = BitmapFactory.decodeByteArray(compressedBytes, 0, compressedBytes.size)
-                    bitmap.recycle()
-
-                    val pageInfo = PdfDocument.PageInfo.Builder(width, height, i + 1).create()
-                    val docPage = pdfDocument.startPage(pageInfo)
-                    docPage.canvas.drawBitmap(compressedBitmap, 0f, 0f, null)
-                    pdfDocument.finishPage(docPage)
-                    compressedBitmap.recycle()
-
-                    val percent = (((i + 1).toFloat() / pageCount) * 80).toInt() + 10
-                    currentStatus.value = ConvertState.Converting("pdf", percent)
-                    onProgress("Mengompres halaman ${i + 1} dari $pageCount...", percent)
-                }
-
+            if (pageCount == 0) {
                 renderer.close()
                 pfd.close()
+                throw IllegalStateException("Dokumen PDF kosong.")
+            }
 
-                val cacheOutputFile = File(context.cacheDir, "temp_pdf_compressed.pdf")
-                FileOutputStream(cacheOutputFile).use { fos ->
-                    pdfDocument.writeTo(fos)
-                }
-                pdfDocument.close()
-                cacheInputFile.delete()
+            val (scale, jpegQuality) = when (qualityPreset) {
+                0 -> Pair(1.0f, 85)
+                1 -> Pair(0.8f, 65)
+                2 -> Pair(0.6f, 45)
+                3 -> Pair(1.0f, 95)
+                else -> Pair(0.8f, 65)
+            }
 
-                val finalPath = saveToDownloads(context, cacheOutputFile, originalFileName, "pdf")
-                cacheOutputFile.delete()
+            val pdfDocument = PdfDocument()
 
-                launch(Dispatchers.Main) {
-                    if (finalPath != null) {
-                        currentStatus.value = ConvertState.Success
-                        onSuccess(finalPath)
-                    } else {
-                        currentStatus.value = ConvertState.Error("Gagal menyimpan hasil kompresi PDF", inputUri, "pdf")
-                        onError("Gagal menyimpan hasil kompresi PDF")
-                    }
-                }
-            } catch (e: Exception) {
-                launch(Dispatchers.Main) {
-                    currentStatus.value = ConvertState.Error("Gagal kompres PDF: ${e.message}", inputUri, "pdf")
-                    onError("Gagal kompres PDF: ${e.message}")
+            for (i in 0 until pageCount) {
+                currentCoroutineContext().ensureActive()
+
+                val page = renderer.openPage(i)
+                val width = (page.width * scale).toInt()
+                val height = (page.height * scale).toInt()
+                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bitmap)
+                canvas.drawColor(Color.WHITE)
+                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                page.close()
+
+                val baos = ByteArrayOutputStream()
+                bitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality, baos)
+                val compressedBytes = baos.toByteArray()
+                val compressedBitmap = BitmapFactory.decodeByteArray(compressedBytes, 0, compressedBytes.size)
+                bitmap.recycle()
+
+                val pageInfo = PdfDocument.PageInfo.Builder(width, height, i + 1).create()
+                val docPage = pdfDocument.startPage(pageInfo)
+                docPage.canvas.drawBitmap(compressedBitmap, 0f, 0f, null)
+                pdfDocument.finishPage(docPage)
+                compressedBitmap.recycle()
+
+                val percent = (((i + 1).toFloat() / pageCount) * 80).toInt() + 10
+                updateProgress("pdf", "Mengompres halaman ${i + 1} dari $pageCount...", percent, onProgress)
+            }
+
+            renderer.close()
+            pfd.close()
+
+            FileOutputStream(tempOutput).use { fos ->
+                pdfDocument.writeTo(fos)
+            }
+            pdfDocument.close()
+
+            val finalPath = OutputManager.finalizeOutput(context, tempOutput, originalFileName, "pdf")
+            OutputManager.cleanTempFiles(tempInput, tempOutput)
+
+            withContext(Dispatchers.Main) {
+                if (finalPath != null) {
+                    currentStatus.value = ConvertState.Success
+                    onSuccess(finalPath)
+                } else {
+                    currentStatus.value = ConvertState.Error("Gagal menyimpan hasil kompresi PDF", inputUri, "pdf")
+                    onError("Gagal menyimpan hasil kompresi PDF")
                 }
             }
+        } catch (e: Exception) {
+            OutputManager.cleanTempFiles(tempInput, tempOutput)
+            throw e
         }
     }
 
-    // --- FITUR EKSPANSI: IMAGE KE PDF ---
-    private fun convertImageToPdf(
+    // --- 4. IMAGE TO PDF ---
+    private suspend fun convertImageToPdf(
         context: Context,
         inputUri: Uri,
         originalFileName: String,
@@ -438,61 +602,55 @@ object MorphEngine {
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
-        GlobalScope.launch(Dispatchers.IO) {
-            try {
-                currentStatus.value = ConvertState.Converting("pdf", 30)
-                onProgress("Memuat gambar...", 30)
+        val tempOutput = OutputManager.createTempFile(context, "img_pdf", "pdf")
+        try {
+            updateProgress("pdf", "Memuat gambar...", 30, onProgress)
 
-                val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    val source = android.graphics.ImageDecoder.createSource(context.contentResolver, inputUri)
-                    android.graphics.ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
-                        // Paksa Android menggunakan memori RAM biasa (Software), bukan VRAM GPU (Hardware)
-                        decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
-                        decoder.isMutableRequired = true
-                    }
+            val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val source = android.graphics.ImageDecoder.createSource(context.contentResolver, inputUri)
+                android.graphics.ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
+                    decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+                    decoder.isMutableRequired = true
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                android.provider.MediaStore.Images.Media.getBitmap(context.contentResolver, inputUri)
+            }
+
+            updateProgress("pdf", "Menyusun lembar PDF...", 60, onProgress)
+
+            val pdfDocument = PdfDocument()
+            val pageInfo = PdfDocument.PageInfo.Builder(bitmap.width, bitmap.height, 1).create()
+            val page = pdfDocument.startPage(pageInfo)
+            page.canvas.drawBitmap(bitmap, 0f, 0f, null)
+            pdfDocument.finishPage(page)
+            bitmap.recycle()
+
+            FileOutputStream(tempOutput).use { fos ->
+                pdfDocument.writeTo(fos)
+            }
+            pdfDocument.close()
+
+            val finalPath = OutputManager.finalizeOutput(context, tempOutput, originalFileName, "pdf")
+            OutputManager.cleanTempFiles(tempOutput)
+
+            withContext(Dispatchers.Main) {
+                if (finalPath != null) {
+                    currentStatus.value = ConvertState.Success
+                    onSuccess(finalPath)
                 } else {
-                    @Suppress("DEPRECATION")
-                    android.provider.MediaStore.Images.Media.getBitmap(context.contentResolver, inputUri)
-                }
-
-                currentStatus.value = ConvertState.Converting("pdf", 60)
-                onProgress("Menyusun lembar PDF...", 60)
-
-                val pdfDocument = PdfDocument()
-                val pageInfo = PdfDocument.PageInfo.Builder(bitmap.width, bitmap.height, 1).create()
-                val page = pdfDocument.startPage(pageInfo)
-                page.canvas.drawBitmap(bitmap, 0f, 0f, null)
-                pdfDocument.finishPage(page)
-
-                val cacheOutputFile = File(context.cacheDir, "temp_img_to_pdf.pdf")
-                FileOutputStream(cacheOutputFile).use { fos ->
-                    pdfDocument.writeTo(fos)
-                }
-                pdfDocument.close()
-
-                val finalPath = saveToDownloads(context, cacheOutputFile, originalFileName, "pdf")
-                cacheOutputFile.delete()
-
-                launch(Dispatchers.Main) {
-                    if (finalPath != null) {
-                        currentStatus.value = ConvertState.Success
-                        onSuccess(finalPath)
-                    } else {
-                        currentStatus.value = ConvertState.Error("Gagal membuat PDF dari gambar", inputUri, "pdf")
-                        onError("Gagal membuat PDF dari gambar")
-                    }
-                }
-            } catch (e: Exception) {
-                launch(Dispatchers.Main) {
-                    currentStatus.value = ConvertState.Error("Gagal render PDF: ${e.message}", inputUri, "pdf")
-                    onError("Gagal render PDF: ${e.message}")
+                    currentStatus.value = ConvertState.Error("Gagal membuat PDF dari gambar", inputUri, "pdf")
+                    onError("Gagal membuat PDF dari gambar")
                 }
             }
+        } catch (e: Exception) {
+            OutputManager.cleanTempFiles(tempOutput)
+            throw e
         }
     }
 
-    // --- NATIVE IMAGE CONVERTER ---
-    private fun convertImageNatively(
+    // --- 5. NATIVE IMAGE CONVERTER ---
+    private suspend fun convertImageNatively(
         context: Context,
         inputUri: Uri,
         extension: String,
@@ -502,103 +660,84 @@ object MorphEngine {
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
-        GlobalScope.launch(Dispatchers.IO) {
-            try {
-                currentStatus.value = ConvertState.Converting(extension, 50)
-                onProgress("Memproses gambar...", 50)
+        val targetExt = extension.trim().removePrefix(".").lowercase()
+        val tempOutput = OutputManager.createTempFile(context, "img_out", targetExt)
 
-                val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    val source = android.graphics.ImageDecoder.createSource(context.contentResolver, inputUri)
-                    android.graphics.ImageDecoder.decodeBitmap(source)
+        try {
+            updateProgress(targetExt, "Memproses gambar...", 40, onProgress)
+
+            val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val source = android.graphics.ImageDecoder.createSource(context.contentResolver, inputUri)
+                android.graphics.ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
+                    decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                android.provider.MediaStore.Images.Media.getBitmap(context.contentResolver, inputUri)
+            }
+
+            updateProgress(targetExt, "Mengompresi gambar...", 70, onProgress)
+
+            if (targetExt == "bmp") {
+                BmpWriter.writeBitmapAsBmp(bitmap, tempOutput)
+                bitmap.recycle()
+            } else {
+                val isJpg = targetExt == "jpg" || targetExt == "jpeg"
+                val finalBitmap = if (isJpg && bitmap.hasAlpha()) {
+                    // Composite alpha over solid white background to prevent black distortion
+                    val opaqueBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+                    val canvas = Canvas(opaqueBitmap)
+                    canvas.drawColor(Color.WHITE)
+                    canvas.drawBitmap(bitmap, 0f, 0f, null)
+                    bitmap.recycle()
+                    opaqueBitmap
                 } else {
-                    @Suppress("DEPRECATION")
-                    android.provider.MediaStore.Images.Media.getBitmap(context.contentResolver, inputUri)
+                    bitmap
                 }
 
-                val format = when (extension.lowercase()) {
+                val format = when (targetExt) {
                     "png" -> Bitmap.CompressFormat.PNG
-                    "webp" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) 
-                                Bitmap.CompressFormat.WEBP_LOSSLESS 
-                              else 
-                                @Suppress("DEPRECATION") Bitmap.CompressFormat.WEBP
+                    "webp" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        Bitmap.CompressFormat.WEBP_LOSSLESS
+                    } else {
+                        @Suppress("DEPRECATION") Bitmap.CompressFormat.WEBP
+                    }
                     else -> Bitmap.CompressFormat.JPEG
                 }
 
                 val qualitySetting = when (qualityPreset) {
-                    0 -> 100 // Tinggi
-                    1 -> 80  // Sedang
-                    2 -> 50  // Rendah
-                    3 -> 100 // Lossless
-                    else -> 100
+                    0, 3 -> 100 // High / Lossless
+                    1    -> 85  // Medium
+                    2    -> 65  // Low
+                    else -> 90
                 }
 
-                val cacheFile = File(context.cacheDir, "temp_image.$extension")
-                FileOutputStream(cacheFile).use { fos ->
-                    bitmap.compress(format, qualitySetting, fos)
+                FileOutputStream(tempOutput).use { fos ->
+                    finalBitmap.compress(format, qualitySetting, fos)
                 }
+                finalBitmap.recycle()
+            }
 
-                val finalPath = saveToDownloads(context, cacheFile, originalFileName, extension)
-                cacheFile.delete()
-                
-                launch(Dispatchers.Main) {
-                    if (finalPath != null) {
-                        currentStatus.value = ConvertState.Success
-                        onSuccess(finalPath)
-                    } else {
-                        currentStatus.value = ConvertState.Error("Gagal menyimpan gambar", inputUri, extension)
-                        onError("Gagal menyimpan gambar")
-                    }
-                }
-            } catch (e: Exception) {
-                launch(Dispatchers.Main) { 
-                    currentStatus.value = ConvertState.Error("Gagal render gambar: ${e.message}", inputUri, extension)
-                    onError("Gagal render gambar: ${e.message}") 
+            val finalPath = OutputManager.finalizeOutput(context, tempOutput, originalFileName, targetExt)
+            OutputManager.cleanTempFiles(tempOutput)
+
+            withContext(Dispatchers.Main) {
+                if (finalPath != null) {
+                    currentStatus.value = ConvertState.Success
+                    onSuccess(finalPath)
+                } else {
+                    currentStatus.value = ConvertState.Error("Gagal menyimpan gambar hasil", inputUri, targetExt)
+                    onError("Gagal menyimpan gambar hasil")
                 }
             }
-        }
-    }
-
-    fun saveToDownloads(context: Context, cachedFile: File, originalName: String, targetFormat: String): String? {
-        val prefs = MorphPrefs(context)
-        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        val morphDir = File(downloadsDir, "Morph")
-        if (!morphDir.exists()) morphDir.mkdirs()
-
-        val baseName = originalName.substringBeforeLast(".", "file")
-        var finalName = if (prefs.keepOriginalName) {
-            "$baseName.$targetFormat"
-        } else {
-            "${baseName}_morph_converted.$targetFormat"
-        }
-        var destFile = File(morphDir, finalName)
-
-        var counter = 1
-        while (destFile.exists()) {
-            finalName = if (prefs.keepOriginalName) {
-                "${baseName}($counter).$targetFormat"
-            } else {
-                "${baseName}_morph_converted_$counter.$targetFormat"
-            }
-            destFile = File(morphDir, finalName)
-            counter++
-        }
-
-        return try {
-            cachedFile.copyTo(destFile, overwrite = true)
-            destFile.absolutePath
         } catch (e: Exception) {
-            null
+            OutputManager.cleanTempFiles(tempOutput)
+            throw e
         }
     }
-    
-    // Fungsi Pembatalan Global
-    fun cancelCurrentConversion() {
-        FFmpegKit.cancel()
-        currentStatus.value = ConvertState.Idle
-    }
 
-    // --- SVG KE PNG/JPG via AndroidSVG ---
-    private fun convertSvgToImage(
+    // --- 6. SVG CONVERTER ---
+    private suspend fun convertSvgToImage(
         context: Context,
         inputUri: Uri,
         targetExtension: String,
@@ -608,76 +747,38 @@ object MorphEngine {
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
-        GlobalScope.launch(Dispatchers.IO) {
-            try {
-                currentStatus.value = ConvertState.Converting(targetExtension, 20)
-                onProgress("Memuat file SVG...", 20)
-
-                val svg = context.contentResolver.openInputStream(inputUri)?.use { input ->
-                    com.caverock.androidsvg.SVG.getFromInputStream(input)
-                } ?: throw IllegalStateException("Tidak dapat membaca file SVG")
-
-                currentStatus.value = ConvertState.Converting(targetExtension, 50)
-                onProgress("Merender vektor SVG...", 50)
-
-                val svgWidth = svg.documentWidth.let { if (it > 0) it.toInt() else 1024 }
-                val svgHeight = svg.documentHeight.let { if (it > 0) it.toInt() else 1024 }
-
-                val scaleFactor = when (qualityPreset) {
-                    0, 3 -> 2.0f
-                    1    -> 1.5f
-                    2    -> 1.0f
-                    else -> 2.0f
+        var tempSvgOut: File? = null
+        try {
+            tempSvgOut = SvgConverter.convertSvg(
+                context = context,
+                inputUri = inputUri,
+                targetExtension = targetExtension,
+                qualityPreset = qualityPreset,
+                onProgress = { step, percent ->
+                    updateProgress(targetExtension, step, percent, onProgress)
                 }
+            )
 
-                val finalWidth = (svgWidth * scaleFactor).toInt()
-                val finalHeight = (svgHeight * scaleFactor).toInt()
+            val finalPath = OutputManager.finalizeOutput(context, tempSvgOut, originalFileName, targetExtension)
+            OutputManager.cleanTempFiles(tempSvgOut)
 
-                val bitmap = Bitmap.createBitmap(finalWidth, finalHeight, Bitmap.Config.ARGB_8888)
-                val canvas = Canvas(bitmap)
-                canvas.drawColor(android.graphics.Color.WHITE)
-                svg.renderToCanvas(canvas)
-
-                currentStatus.value = ConvertState.Converting(targetExtension, 80)
-                onProgress("Menyimpan gambar...", 80)
-
-                val format = if (targetExtension == "png") Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
-                val qualityVal = when (qualityPreset) {
-                    0, 3 -> 100
-                    1    -> 85
-                    2    -> 65
-                    else -> 100
-                }
-
-                val cacheFile = File(context.cacheDir, "temp_svg_output.$targetExtension")
-                FileOutputStream(cacheFile).use { fos ->
-                    bitmap.compress(format, qualityVal, fos)
-                }
-                bitmap.recycle()
-
-                val finalPath = saveToDownloads(context, cacheFile, originalFileName, targetExtension)
-                cacheFile.delete()
-
-                launch(Dispatchers.Main) {
-                    if (finalPath != null) {
-                        currentStatus.value = ConvertState.Success
-                        onSuccess(finalPath)
-                    } else {
-                        currentStatus.value = ConvertState.Error("Gagal menyimpan gambar SVG", inputUri, targetExtension)
-                        onError("Gagal menyimpan gambar SVG")
-                    }
-                }
-            } catch (e: Exception) {
-                launch(Dispatchers.Main) {
-                    currentStatus.value = ConvertState.Error("Gagal render SVG: ${e.message}", inputUri, targetExtension)
-                    onError("Gagal render SVG: ${e.message}")
+            withContext(Dispatchers.Main) {
+                if (finalPath != null) {
+                    currentStatus.value = ConvertState.Success
+                    onSuccess(finalPath)
+                } else {
+                    currentStatus.value = ConvertState.Error("Gagal menyimpan gambar SVG", inputUri, targetExtension)
+                    onError("Gagal menyimpan gambar SVG")
                 }
             }
+        } catch (e: Exception) {
+            OutputManager.cleanTempFiles(tempSvgOut)
+            throw e
         }
     }
 
-    // --- EPUB KE TXT via Standard Zip Parser (EPUB = ZIP Container) ---
-    private fun convertEpubToTxt(
+    // --- 7. EPUB TO TXT ---
+    private suspend fun convertEpubToTxt(
         context: Context,
         inputUri: Uri,
         originalFileName: String,
@@ -685,110 +786,55 @@ object MorphEngine {
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
-        GlobalScope.launch(Dispatchers.IO) {
-            try {
-                currentStatus.value = ConvertState.Converting("txt", 15)
-                onProgress("Membaca berkas EPUB...", 15)
+        val tempEpub = OutputManager.createTempFile(context, "in_epub", "epub")
+        val tempTxt = OutputManager.createTempFile(context, "out_txt", "txt")
 
-                val cacheEpub = File(context.cacheDir, "temp_in.epub")
-                context.contentResolver.openInputStream(inputUri)?.use { input ->
-                    FileOutputStream(cacheEpub).use { output -> input.copyTo(output) }
-                } ?: throw IllegalStateException("Tidak dapat membaca berkas EPUB")
+        try {
+            updateProgress("txt", "Membaca berkas EPUB...", 10, onProgress)
 
-                val zipFile = java.util.zip.ZipFile(cacheEpub)
-                val entries = zipFile.entries().toList()
+            context.contentResolver.openInputStream(inputUri)?.use { input ->
+                FileOutputStream(tempEpub).use { output -> input.copyTo(output) }
+            } ?: throw IOException("Tidak dapat membaca berkas EPUB.")
 
-                // Cari file content.opf untuk metadata (jika ada)
-                var bookTitle = ""
-                var bookAuthor = ""
-                val opfEntry = entries.firstOrNull { it.name.endsWith(".opf", ignoreCase = true) }
-                if (opfEntry != null) {
-                    val opfContent = zipFile.getInputStream(opfEntry).bufferedReader(Charsets.UTF_8).readText()
-                    bookTitle = Regex("<dc:title[^>]*>(.*?)</dc:title>", RegexOption.DOT_MATCHES_ALL)
-                        .find(opfContent)?.groupValues?.get(1)?.trim() ?: ""
-                    bookAuthor = Regex("<dc:creator[^>]*>(.*?)</dc:creator>", RegexOption.DOT_MATCHES_ALL)
-                        .find(opfContent)?.groupValues?.get(1)?.trim() ?: ""
-                }
+            val extractedText = EpubParser.parseEpubToText(tempEpub) { step, percent ->
+                updateProgress("txt", step, percent, onProgress)
+            }
 
-                // Dapatkan daftar file html/xhtml
-                val htmlEntries = entries.filter { entry ->
-                    !entry.isDirectory && (entry.name.endsWith(".xhtml", ignoreCase = true) ||
-                            entry.name.endsWith(".html", ignoreCase = true) ||
-                            entry.name.endsWith(".htm", ignoreCase = true))
-                }.sortedBy { it.name }
+            updateProgress("txt", "Menyimpan teks hasil ekstraksi...", 95, onProgress)
+            tempTxt.writeText(extractedText, Charsets.UTF_8)
 
-                if (htmlEntries.isEmpty()) {
-                    zipFile.close()
-                    cacheEpub.delete()
-                    throw IllegalStateException("Tidak ditemukan teks bab dalam berkas EPUB")
-                }
+            val finalPath = OutputManager.finalizeOutput(context, tempTxt, originalFileName, "txt")
+            OutputManager.cleanTempFiles(tempEpub, tempTxt)
 
-                val sb = StringBuilder()
-                if (bookTitle.isNotEmpty()) sb.appendLine("JUDUL: $bookTitle")
-                if (bookAuthor.isNotEmpty()) sb.appendLine("PENULIS: $bookAuthor")
-                if (bookTitle.isNotEmpty() || bookAuthor.isNotEmpty()) {
-                    sb.appendLine()
-                    sb.appendLine("=".repeat(60))
-                    sb.appendLine()
-                }
-
-                htmlEntries.forEachIndexed { index, entry ->
-                    try {
-                        val html = zipFile.getInputStream(entry).bufferedReader(Charsets.UTF_8).readText()
-                        val text = html
-                            .replace(Regex("<style[^>]*>[\\s\\S]*?</style>", RegexOption.IGNORE_CASE), "")
-                            .replace(Regex("<script[^>]*>[\\s\\S]*?</script>", RegexOption.IGNORE_CASE), "")
-                            .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
-                            .replace(Regex("</p>|</div>|</h1>|</h2>|</h3>|</h4>|</h5>|</h6>|</li>", RegexOption.IGNORE_CASE), "\n\n")
-                            .replace(Regex("<[^>]+>"), "")
-                            .replace(Regex("&nbsp;", RegexOption.IGNORE_CASE), " ")
-                            .replace(Regex("&amp;", RegexOption.IGNORE_CASE), "&")
-                            .replace(Regex("&lt;", RegexOption.IGNORE_CASE), "<")
-                            .replace(Regex("&gt;", RegexOption.IGNORE_CASE), ">")
-                            .replace(Regex("&quot;", RegexOption.IGNORE_CASE), "\"")
-                            .replace(Regex("&#39;|&apos;", RegexOption.IGNORE_CASE), "'")
-                            .replace(Regex("[ \\t]+"), " ")
-                            .replace(Regex("\\n{3,}"), "\n\n")
-                            .trim()
-
-                        if (text.isNotBlank()) {
-                            sb.appendLine(text)
-                            sb.appendLine()
-                        }
-
-                        val percent = ((index + 1).toFloat() / htmlEntries.size * 70).toInt() + 25
-                        currentStatus.value = ConvertState.Converting("txt", percent)
-                        onProgress("Mengekstrak bagian ${index + 1} dari ${htmlEntries.size}...", percent)
-                    } catch (_: Exception) {}
-                }
-
-                zipFile.close()
-                cacheEpub.delete()
-
-                currentStatus.value = ConvertState.Converting("txt", 95)
-                onProgress("Menyimpan file teks...", 95)
-
-                val cacheFile = File(context.cacheDir, "temp_epub_output.txt")
-                cacheFile.writeText(sb.toString(), Charsets.UTF_8)
-
-                val finalPath = saveToDownloads(context, cacheFile, originalFileName, "txt")
-                cacheFile.delete()
-
-                launch(Dispatchers.Main) {
-                    if (finalPath != null) {
-                        currentStatus.value = ConvertState.Success
-                        onSuccess(finalPath)
-                    } else {
-                        currentStatus.value = ConvertState.Error("Gagal menyimpan file TXT", inputUri, "txt")
-                        onError("Gagal menyimpan file TXT")
-                    }
-                }
-            } catch (e: Exception) {
-                launch(Dispatchers.Main) {
-                    currentStatus.value = ConvertState.Error("Gagal konversi EPUB: ${e.message}", inputUri, "txt")
-                    onError("Gagal konversi EPUB: ${e.message}")
+            withContext(Dispatchers.Main) {
+                if (finalPath != null) {
+                    currentStatus.value = ConvertState.Success
+                    onSuccess(finalPath)
+                } else {
+                    currentStatus.value = ConvertState.Error("Gagal menyimpan file TXT", inputUri, "txt")
+                    onError("Gagal menyimpan file TXT")
                 }
             }
+        } catch (e: Exception) {
+            OutputManager.cleanTempFiles(tempEpub, tempTxt)
+            throw e
         }
+    }
+
+    private fun updateProgress(
+        format: String,
+        message: String,
+        percent: Int,
+        onProgress: (String, Int) -> Unit
+    ) {
+        currentStatus.value = ConvertState.Converting(format, percent)
+        onProgress(message, percent)
+    }
+
+    fun cancelCurrentConversion() {
+        activeJob?.cancel()
+        activeJob = null
+        FFmpegKit.cancel()
+        currentStatus.value = ConvertState.Idle
     }
 }

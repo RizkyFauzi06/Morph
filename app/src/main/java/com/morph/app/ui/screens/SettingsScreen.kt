@@ -348,7 +348,7 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.width(14.dp))
                     Column {
                         Text(
-                            text = "Morph v2.0 (Professional Edition)",
+                            text = "Morph v0.9.3 (Professional Edition)",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface

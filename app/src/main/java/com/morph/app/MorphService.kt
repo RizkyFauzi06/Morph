@@ -63,12 +63,7 @@ class MorphService : Service() {
             val initialNotif = buildNotification("Morph berjalan", "Mengonversi file...", true, 0)
             startForeground(NOTIFICATION_ID, initialNotif)
 
-            val cursor = contentResolver.query(inputUri, null, null, null, null)
-            val originalName = if (cursor != null && cursor.moveToFirst()) {
-                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                if (nameIndex != -1) cursor.getString(nameIndex) else "file"
-            } else "file"
-            cursor?.close()
+            val originalName = getFileNameFromUri(this, inputUri)
 
             MorphEngine.convert(
                 context = this,

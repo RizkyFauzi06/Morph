@@ -26,6 +26,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morph.app.MorphEngine
+import com.morph.app.core.FileCategory
+import com.morph.app.core.FileCategoryManager
 import com.morph.app.ui.components.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -65,15 +67,16 @@ fun HomeScreen(
 
     // Category Filter State
     var selectedCategory by remember { mutableStateOf("Semua") }
-    val categories = listOf("Semua", "Video", "Audio", "Dokumen", "Gambar")
+    val categories = listOf("Semua", "Video", "Audio", "Gambar", "Dokumen", "Arsip", "Lainnya")
 
     val filteredFiles = remember(morphFiles, selectedCategory) {
-        when (selectedCategory) {
-            "Video" -> morphFiles.filter { it.extension.lowercase() in listOf("mp4", "mkv", "avi", "mov", "webm") }
-            "Audio" -> morphFiles.filter { it.extension.lowercase() in listOf("mp3", "m4a", "wav", "ogg", "opus") }
-            "Dokumen" -> morphFiles.filter { it.extension.lowercase() in listOf("pdf", "txt", "doc", "docx", "epub") }
-            "Gambar" -> morphFiles.filter { it.extension.lowercase() in listOf("png", "jpg", "jpeg", "webp", "gif", "svg") }
-            else -> morphFiles
+        if (selectedCategory == "Semua") {
+            morphFiles
+        } else {
+            morphFiles.filter { file ->
+                val cat = FileCategoryManager.getCategory(file.extension)
+                cat.displayName.equals(selectedCategory, ignoreCase = true)
+            }
         }
     }
 

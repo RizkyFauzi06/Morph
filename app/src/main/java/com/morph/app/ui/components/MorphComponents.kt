@@ -30,6 +30,7 @@ import java.io.File
 import java.text.DecimalFormat
 import kotlin.math.log10
 import kotlin.math.pow
+import com.morph.app.core.FileCategoryManager
 
 // Shared visual constants
 private val CardRadius = 16.dp
@@ -359,18 +360,7 @@ fun FileHistoryItemCard(
     val ext = file.extension.uppercase()
 
     // Format-specific accent colors
-    val badgeColor = when (ext) {
-        "MP4", "MKV", "WEBM", "AVI", "MOV" -> MorphPink
-
-        "MP3", "M4A", "WAV", "OGG" -> MorphViolet
-
-        "PNG", "JPG", "JPEG", "WEBP" ->
-            MaterialTheme.colorScheme.tertiary
-
-        "PDF" -> MaterialTheme.colorScheme.error
-
-        else -> MorphIndigo
-    }
+    val badgeColor = FileCategoryManager.getExtensionBadgeColor(file.extension)
 
     Card(
         modifier = modifier

@@ -1,6 +1,7 @@
 package com.morph.app
 
 import android.Manifest
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -33,6 +34,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.morph.app.core.OutputManager
 import com.morph.app.ui.screens.BottomSheetConverter
 import com.morph.app.ui.screens.HomeScreen
 import com.morph.app.ui.screens.SettingsScreen
@@ -348,8 +350,7 @@ fun checkNotifPermission(context: Context): Boolean {
 }
 
 fun getMorphFiles(): List<File> {
-    val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-    val morphDir = File(downloadsDir, "Morph")
+    val morphDir = OutputManager.getMorphDirectory()
     return if (morphDir.exists() && morphDir.isDirectory) {
         morphDir.listFiles()?.filter { it.isFile }?.sortedByDescending { it.lastModified() } ?: emptyList()
     } else {
@@ -357,16 +358,45 @@ fun getMorphFiles(): List<File> {
     }
 }
 
+fun getExplicitMimeType(extension: String): String {
+    val ext = extension.lowercase()
+    return when (ext) {
+        "opus" -> "audio/opus"
+        "ogg", "oga" -> "audio/ogg"
+        "flac" -> "audio/flac"
+        "wav" -> "audio/wav"
+        "m4a" -> "audio/mp4"
+        "mp3" -> "audio/mpeg"
+        "aac" -> "audio/aac"
+        "webm" -> "video/webm"
+        "mkv" -> "video/x-matroska"
+        "mp4" -> "video/mp4"
+        "mov" -> "video/quicktime"
+        "png" -> "image/png"
+        "jpg", "jpeg" -> "image/jpeg"
+        "webp" -> "image/webp"
+        "bmp" -> "image/bmp"
+        "svg" -> "image/svg+xml"
+        "pdf" -> "application/pdf"
+        "txt" -> "text/plain"
+        "epub" -> "application/epub+zip"
+        else -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"
+    }
+}
+
 fun openFileDirectly(context: Context, file: File) {
     try {
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
-        val mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: "*/*"
+        val mimeType = getExplicitMimeType(file.extension)
 
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, mimeType)
+            clipData = ClipData.newRawUri("", uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        context.startActivity(intent)
+        } 
+        // UBAH BARIS INI: Memaksa OS memunculkan popup Chooser agar tidak dibajak MI Browser
+        val chooserIntent = Intent.createChooser(intent, "Buka ${file.extension.uppercase()} dengan...")
+        context.startActivity(chooserIntent)
     } catch (e: Exception) {
         Toast.makeText(context, "Tidak ada aplikasi untuk membuka ${file.extension.uppercase()}", Toast.LENGTH_SHORT).show()
     }
@@ -375,11 +405,12 @@ fun openFileDirectly(context: Context, file: File) {
 fun shareFileDirectly(context: Context, file: File) {
     try {
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
-        val mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: "*/*"
+        val mimeType = getExplicitMimeType(file.extension)
 
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = mimeType
             putExtra(Intent.EXTRA_STREAM, uri)
+            clipData = ClipData.newRawUri("", uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         context.startActivity(Intent.createChooser(intent, "Bagikan via..."))
