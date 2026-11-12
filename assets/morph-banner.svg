@@ -1,0 +1,172 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 440" width="1200" height="440" fill="none">
+  <defs>
+    <linearGradient id="bannerBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#080D1A"/>
+      <stop offset="45%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#1E1B4B"/>
+    </linearGradient>
+    <linearGradient id="primaryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818CF8"/>
+      <stop offset="50%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#4F46E5"/>
+    </linearGradient>
+    <linearGradient id="pinkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F472B6"/>
+      <stop offset="100%" stop-color="#EC4899"/>
+    </linearGradient>
+    <linearGradient id="badgeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1F2937" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#111827" stop-opacity="0.8"/>
+    </linearGradient>
+    <filter id="neonGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="25" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="cardGlow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#6366F1" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Background Canvas -->
+  <rect width="1200" height="440" rx="24" fill="url(#bannerBg)"/>
+  <rect width="1200" height="440" rx="24" stroke="#312E81" stroke-width="2" fill="none"/>
+
+  <!-- Decorative Background Glows -->
+  <circle cx="150" cy="80" r="180" fill="#6366F1" opacity="0.12" filter="url(#neonGlow)"/>
+  <circle cx="1050" cy="360" r="220" fill="#EC4899" opacity="0.1" filter="url(#neonGlow)"/>
+  <circle cx="680" cy="180" r="140" fill="#8B5CF6" opacity="0.08" filter="url(#neonGlow)"/>
+
+  <!-- Subtle Grid Dots -->
+  <g opacity="0.15">
+    <circle cx="80" cy="60" r="2" fill="#818CF8"/><circle cx="160" cy="60" r="2" fill="#818CF8"/>
+    <circle cx="240" cy="60" r="2" fill="#818CF8"/><circle cx="320" cy="60" r="2" fill="#818CF8"/>
+    <circle cx="80" cy="140" r="2" fill="#818CF8"/><circle cx="160" cy="140" r="2" fill="#818CF8"/>
+    <circle cx="240" cy="140" r="2" fill="#818CF8"/><circle cx="320" cy="140" r="2" fill="#818CF8"/>
+  </g>
+
+  <!-- Left Side: Branding and Info -->
+  <g transform="translate(80, 75)">
+    <!-- App Logo Icon -->
+    <g transform="translate(0, 0)">
+      <rect width="90" height="90" rx="24" fill="url(#primaryGrad)" filter="url(#cardGlow)"/>
+      <path d="M45,0 h23 c12,0 22,10 22,22 v23 c0,0 -20,0 -45,-20 c-5,-5 0,-25 0,-25 z" fill="url(#pinkGrad)"/>
+      <circle cx="68" cy="22" r="18" fill="url(#pinkGrad)" opacity="0.8"/>
+      <path d="M25,66 L25,32 L45,52 L65,32 L65,66" stroke="#FFFFFF" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </g>
+
+    <!-- Project Title -->
+    <text x="110" y="58" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="52" font-weight="900" fill="#FFFFFF" letter-spacing="-1">
+      Morph
+    </text>
+    <text x="270" y="32" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#EC4899" letter-spacing="2">
+      v2.0 STABLE
+    </text>
+
+    <!-- Subtitle / Tagline -->
+    <text x="110" y="85" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="18" font-weight="600" fill="#94A3B8">
+      Universal Offline File Transformer for Android
+    </text>
+
+    <!-- Description Paragraph -->
+    <text x="0" y="145" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#CBD5E1" line-height="24">
+      <tspan x="0" dy="0">High-performance on-device multimedia and document conversion engine.</tspan>
+      <tspan x="0" dy="24">Zero cloud dependencies, zero data leaks, 100% private, powered by Kotlin,</tspan>
+      <tspan x="0" dy="24">Jetpack Compose Material 3, and FFmpegKit Full.</tspan>
+    </text>
+
+    <!-- Pills / Badges Row -->
+    <g transform="translate(0, 230)">
+      <!-- Badge 1: 100% Offline -->
+      <rect width="130" height="34" rx="17" fill="url(#badgeGrad)" stroke="#10B981" stroke-width="1.2"/>
+      <circle cx="16" cy="17" r="4.5" fill="#10B981"/>
+      <text x="28" y="22" font-family="sans-serif" font-size="12" font-weight="700" fill="#34D399">100% OFFLINE</text>
+
+      <!-- Badge 2: Sequential Queue -->
+      <rect x="142" width="145" height="34" rx="17" fill="url(#badgeGrad)" stroke="#6366F1" stroke-width="1.2"/>
+      <text x="156" y="22" font-family="sans-serif" font-size="12" font-weight="600" fill="#A5B4FC">⚡ BATCH QUEUE</text>
+
+      <!-- Badge 3: Share-to-Morph -->
+      <rect x="299" width="155" height="34" rx="17" fill="url(#badgeGrad)" stroke="#EC4899" stroke-width="1.2"/>
+      <text x="313" y="22" font-family="sans-serif" font-size="12" font-weight="600" fill="#F472B6">↗ SHARE TO CONVERT</text>
+
+      <!-- Badge 4: Android 8.0 - 15+ -->
+      <rect x="466" width="125" height="34" rx="17" fill="url(#badgeGrad)" stroke="#475569" stroke-width="1.2"/>
+      <text x="480" y="22" font-family="sans-serif" font-size="12" font-weight="600" fill="#94A3B8">API 26 – 37</text>
+    </g>
+  </g>
+
+  <!-- Right Side: Visual Hero Device Preview -->
+  <g transform="translate(730, 35)">
+    <!-- Device Frame Shadow -->
+    <rect x="20" y="15" width="370" height="360" rx="36" fill="#000000" opacity="0.4" filter="url(#cardGlow)"/>
+
+    <!-- Device Frame (Dark Obsidian Surface) -->
+    <rect x="10" y="5" width="370" height="360" rx="32" fill="#0B0F19" stroke="#374151" stroke-width="2"/>
+
+    <!-- Device Screen Content -->
+    <!-- Status / Header Bar -->
+    <g transform="translate(35, 25)">
+      <!-- Mini Logo -->
+      <rect width="32" height="32" rx="10" fill="url(#primaryGrad)"/>
+      <path d="M9,23 L9,11 L16,18 L23,11 L23,23" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" fill="none"/>
+      
+      <text x="42" y="18" font-family="sans-serif" font-size="15" font-weight="800" fill="#F3F4F6">Morph</text>
+      <text x="42" y="30" font-family="sans-serif" font-size="9" font-weight="500" fill="#9CA3AF">Universal File Transformer</text>
+
+      <!-- Total Files Badge -->
+      <rect x="235" y="4" width="75" height="24" rx="12" fill="#312E81" stroke="#4F46E5" stroke-width="1"/>
+      <text x="246" y="20" font-family="sans-serif" font-size="10" font-weight="700" fill="#A5B4FC">12 Berkas</text>
+    </g>
+
+    <!-- Active Live Conversion Card -->
+    <g transform="translate(30, 75)">
+      <rect width="330" height="100" rx="18" fill="#182234" stroke="#6366F1" stroke-width="1.5"/>
+      
+      <!-- Top info row -->
+      <text x="16" y="26" font-family="sans-serif" font-size="11" font-weight="700" fill="#818CF8">MENGONVERSI (2/5)</text>
+      <text x="280" y="26" font-family="sans-serif" font-size="12" font-weight="800" fill="#6366F1">64%</text>
+
+      <text x="16" y="46" font-family="sans-serif" font-size="13" font-weight="700" fill="#F9FAFB">vacation_clip.mkv → MP4</text>
+      <text x="16" y="62" font-family="sans-serif" font-size="10" font-weight="400" fill="#94A3B8">Encoding video stream via FFmpegKit...</text>
+
+      <!-- Progress Bar Track -->
+      <rect x="16" y="74" width="298" height="8" rx="4" fill="#1F2937"/>
+      <!-- Progress Bar Fill -->
+      <rect x="16" y="74" width="190" height="8" rx="4" fill="url(#primaryGrad)"/>
+    </g>
+
+    <!-- Converted Items List Preview -->
+    <g transform="translate(30, 190)">
+      <!-- Item 1: PDF -->
+      <rect width="330" height="52" rx="14" fill="#111827" stroke="#1F2937" stroke-width="1"/>
+      <rect x="12" y="10" width="32" height="32" rx="8" fill="#DC2626" opacity="0.2"/>
+      <text x="20" y="30" font-family="sans-serif" font-size="10" font-weight="800" fill="#EF4444">PDF</text>
+      <text x="54" y="24" font-family="sans-serif" font-size="12" font-weight="600" fill="#F3F4F6">Annual_Report_2026.pdf</text>
+      <text x="54" y="38" font-family="sans-serif" font-size="10" font-weight="400" fill="#6B7280">1.8 MB · Hari ini 14:20</text>
+      <circle cx="304" cy="26" r="12" fill="#1F2937"/>
+      <text x="299" y="30" font-family="sans-serif" font-size="12" fill="#9CA3AF">↗</text>
+
+      <!-- Item 2: MP3 -->
+      <g transform="translate(0, 58)">
+        <rect width="330" height="52" rx="14" fill="#111827" stroke="#1F2937" stroke-width="1"/>
+        <rect x="12" y="10" width="32" height="32" rx="8" fill="#6366F1" opacity="0.2"/>
+        <text x="18" y="30" font-family="sans-serif" font-size="10" font-weight="800" fill="#818CF8">MP3</text>
+        <text x="54" y="24" font-family="sans-serif" font-size="12" font-weight="600" fill="#F3F4F6">Podcast_Episode_42.mp3</text>
+        <text x="54" y="38" font-family="sans-serif" font-size="10" font-weight="400" fill="#6B7280">48.3 MB · Kemarin 19:05</text>
+        <circle cx="304" cy="26" r="12" fill="#1F2937"/>
+        <text x="299" y="30" font-family="sans-serif" font-size="12" fill="#9CA3AF">↗</text>
+      </g>
+    </g>
+
+    <!-- Bottom Navigation Bar -->
+    <g transform="translate(30, 315)">
+      <line x1="0" y1="0" x2="330" y2="0" stroke="#1F2937" stroke-width="1"/>
+      <text x="35" y="22" font-family="sans-serif" font-size="11" font-weight="700" fill="#6366F1">● Beranda</text>
+      <text x="145" y="22" font-family="sans-serif" font-size="11" font-weight="500" fill="#6B7280">Tools</text>
+      <text x="245" y="22" font-family="sans-serif" font-size="11" font-weight="500" fill="#6B7280">Pengaturan</text>
+    </g>
+  </g>
+</svg>

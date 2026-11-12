@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 480" width="960" height="480" fill="none">
+  <defs>
+    <linearGradient id="archBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#090D16"/>
+      <stop offset="100%" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="brandBox" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#312E81"/>
+      <stop offset="100%" stop-color="#1E1B4B"/>
+    </linearGradient>
+    <linearGradient id="engineBox" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4C1D95"/>
+      <stop offset="100%" stop-color="#581C87"/>
+    </linearGradient>
+    <filter id="boxShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <rect width="960" height="480" rx="20" fill="url(#archBg)" stroke="#1F2937" stroke-width="2"/>
+
+  <!-- Diagram Title -->
+  <text x="40" y="44" font-family="sans-serif" font-size="18" font-weight="800" fill="#FFFFFF">Morph — Clean Architectural Pipeline</text>
+  <text x="40" y="66" font-family="sans-serif" font-size="12" font-weight="500" fill="#9CA3AF">Unidirectional Data Flow &amp; Sequential Queue Engine</text>
+
+  <!-- Layer 1: Ingress & Input -->
+  <g transform="translate(40, 95)">
+    <rect width="250" height="340" rx="16" fill="#0E1626" stroke="#1E293B" stroke-width="1.5"/>
+    <rect x="16" y="14" width="218" height="28" rx="8" fill="#1E293B"/>
+    <text x="125" y="33" font-family="sans-serif" font-size="12" font-weight="700" fill="#93C5FD" text-anchor="middle">1. INPUT &amp; TRIGGERS</text>
+
+    <!-- Block 1 -->
+    <rect x="20" y="60" width="210" height="70" rx="12" fill="#182234" stroke="#374151" stroke-width="1" filter="url(#boxShadow)"/>
+    <text x="32" y="86" font-family="sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">System Share Menu</text>
+    <text x="32" y="104" font-family="sans-serif" font-size="11" font-weight="500" fill="#94A3B8">ACTION_SEND (Single file)</text>
+    <text x="32" y="118" font-family="sans-serif" font-size="11" font-weight="500" fill="#94A3B8">ACTION_SEND_MULTIPLE</text>
+
+    <!-- Block 2 -->
+    <rect x="20" y="145" width="210" height="70" rx="12" fill="#182234" stroke="#374151" stroke-width="1" filter="url(#boxShadow)"/>
+    <text x="32" y="171" font-family="sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">Standalone File Picker</text>
+    <text x="32" y="189" font-family="sans-serif" font-size="11" font-weight="500" fill="#94A3B8">GetMultipleContents()</text>
+    <text x="32" y="203" font-family="sans-serif" font-size="11" font-weight="500" fill="#94A3B8">Multi-selection / SAF uri</text>
+
+    <!-- Block 3 -->
+    <rect x="20" y="230" width="210" height="75" rx="12" fill="#182234" stroke="#374151" stroke-width="1" filter="url(#boxShadow)"/>
+    <text x="32" y="255" font-family="sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">Validation &amp; Mime Detect</text>
+    <text x="32" y="273" font-family="sans-serif" font-size="11" font-weight="500" fill="#94A3B8">ConversionValidator.kt</text>
+    <text x="32" y="287" font-family="sans-serif" font-size="11" font-weight="500" fill="#94A3B8">Filter empty or web URL</text>
+  </g>
+
+  <!-- Arrow 1 to 2 -->
+  <path d="M295,265 L345,265" stroke="#6366F1" stroke-width="2.5" stroke-dasharray="4 3"/>
+  <polygon points="345,261 355,265 345,269" fill="#6366F1"/>
+
+  <!-- Layer 2: Core Queue & Service -->
+  <g transform="translate(355, 95)">
+    <rect width="250" height="340" rx="16" fill="#0E1626" stroke="#6366F1" stroke-width="1.5"/>
+    <rect x="16" y="14" width="218" height="28" rx="8" fill="#312E81"/>
+    <text x="125" y="33" font-family="sans-serif" font-size="12" font-weight="700" fill="#A5B4FC" text-anchor="middle">2. QUEUE &amp; SERVICE</text>
+
+    <!-- Block 1 -->
+    <rect x="20" y="60" width="210" height="85" rx="12" fill="url(#brandBox)" stroke="#6366F1" stroke-width="1" filter="url(#boxShadow)"/>
+    <text x="32" y="85" font-family="sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">ConversionQueueManager</text>
+    <text x="32" y="103" font-family="sans-serif" font-size="11" font-weight="500" fill="#C7D2FE">• StateFlow&lt;List&lt;Job&gt;&gt;</text>
+    <text x="32" y="117" font-family="sans-serif" font-size="11" font-weight="500" fill="#C7D2FE">• Sequential FIFO Execution</text>
+    <text x="32" y="131" font-family="sans-serif" font-size="11" font-weight="500" fill="#C7D2FE">• Isolated Error Handling</text>
+
+    <!-- Block 2 -->
+    <rect x="20" y="160" width="210" height="75" rx="12" fill="url(#brandBox)" stroke="#6366F1" stroke-width="1" filter="url(#boxShadow)"/>
+    <text x="32" y="185" font-family="sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">MorphService (Foreground)</text>
+    <text x="32" y="203" font-family="sans-serif" font-size="11" font-weight="500" fill="#C7D2FE">• dataSync Service Type</text>
+    <text x="32" y="217" font-family="sans-serif" font-size="11" font-weight="500" fill="#C7D2FE">• Prevents System OOM Kill</text>
+
+    <!-- Block 3 -->
+    <rect x="20" y="250" width="210" height="65" rx="12" fill="url(#brandBox)" stroke="#6366F1" stroke-width="1" filter="url(#boxShadow)"/>
+    <text x="32" y="275" font-family="sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">Smart Notifications</text>
+    <text x="32" y="293" font-family="sans-serif" font-size="11" font-weight="500" fill="#C7D2FE">Live Progress (X/Total) + Batal</text>
+  </g>
+
+  <!-- Arrow 2 to 3 -->
+  <path d="M610,265 L660,265" stroke="#EC4899" stroke-width="2.5" stroke-dasharray="4 3"/>
+  <polygon points="660,261 670,265 660,269" fill="#EC4899"/>
+
+  <!-- Layer 3: Multimedia Engines & Output -->
+  <g transform="translate(670, 95)">
+    <rect width="250" height="340" rx="16" fill="#0E1626" stroke="#1E293B" stroke-width="1.5"/>
+    <rect x="16" y="14" width="218" height="28" rx="8" fill="#1E293B"/>
+    <text x="125" y="33" font-family="sans-serif" font-size="12" font-weight="700" fill="#F472B6" text-anchor="middle">3. CONVERSION ENGINES</text>
+
+    <!-- Engine 1 -->
+    <rect x="20" y="55" width="210" height="60" rx="12" fill="#182234" stroke="#374151" stroke-width="1"/>
+    <text x="32" y="78" font-family="sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">FFmpegKit Full 8.1.7</text>
+    <text x="32" y="96" font-family="sans-serif" font-size="10.5" font-weight="500" fill="#94A3B8">Video &amp; Audio Transcode / Extract</text>
+
+    <!-- Engine 2 -->
+    <rect x="20" y="125" width="210" height="60" rx="12" fill="#182234" stroke="#374151" stroke-width="1"/>
+    <text x="32" y="148" font-family="sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">AndroidSVG 1.4</text>
+    <text x="32" y="166" font-family="sans-serif" font-size="10.5" font-weight="500" fill="#94A3B8">Vector SVG to PNG with Alpha</text>
+
+    <!-- Engine 3 -->
+    <rect x="20" y="195" width="210" height="60" rx="12" fill="#182234" stroke="#374151" stroke-width="1"/>
+    <text x="32" y="218" font-family="sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">Native Bitmap &amp; PDF</text>
+    <text x="32" y="236" font-family="sans-serif" font-size="10.5" font-weight="500" fill="#94A3B8">PdfRenderer &amp; BmpWriter</text>
+
+    <!-- Engine 4 -->
+    <rect x="20" y="265" width="210" height="60" rx="12" fill="#182234" stroke="#374151" stroke-width="1"/>
+    <text x="32" y="288" font-family="sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">EpubParser (XML &amp; ZIP)</text>
+    <text x="32" y="306" font-family="sans-serif" font-size="10.5" font-weight="500" fill="#94A3B8">OPF Spine extraction to TXT</text>
+  </g>
+</svg>
