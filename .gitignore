@@ -39,11 +39,9 @@ google-services.json
 # Android Profiling
 *.hprof
 
-# ==========================================
-# TAMBAHAN BARU: Sembunyikan Test Lokal & Markdown Dokumen CLI
-# ==========================================
+# Local test files - do not upload to GitHub
+app/src/test/
 
-# Mengabaikan file/folder uji coba manual atau test lokal di luar unit test resmi app/src/test
 # (Jika Anda memiliki file sampah test terpisah di luar source code utama)
 **/test_sandboxes/
 **/local_tests/
