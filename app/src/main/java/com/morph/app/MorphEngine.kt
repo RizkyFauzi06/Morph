@@ -39,6 +39,89 @@ object MorphEngine {
     private val engineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var activeJob: Job? = null
 
+    suspend fun executeConversion(
+        context: Context,
+        inputUri: Uri,
+        outputExtension: String,
+        originalFileName: String,
+        qualityPreset: Int,
+        onProgress: (String, Int) -> Unit
+    ): String = withContext(Dispatchers.IO) {
+        val inputExt = originalFileName.substringAfterLast('.', "").trim().lowercase()
+        val targetExt = outputExtension.trim().removePrefix(".").lowercase()
+        activeJob = coroutineContext[Job]
+
+        val resultDeferred = CompletableDeferred<String>()
+
+        try {
+            when {
+                // Route 1: PDF Document Input
+                inputExt == "pdf" && targetExt in listOf("jpg", "jpeg", "png", "webp") -> {
+                    convertPdfToImages(context, inputUri, targetExt, originalFileName, qualityPreset, onProgress,
+                        { path -> resultDeferred.complete(path) },
+                        { err -> resultDeferred.completeExceptionally(IOException(err)) }
+                    )
+                }
+                inputExt == "pdf" && targetExt == "pdf" -> {
+                    compressPdf(context, inputUri, originalFileName, qualityPreset, onProgress,
+                        { path -> resultDeferred.complete(path) },
+                        { err -> resultDeferred.completeExceptionally(IOException(err)) }
+                    )
+                }
+
+                // Route 2: Image to PDF
+                targetExt == "pdf" && inputExt in listOf("jpg", "jpeg", "png", "webp", "bmp", "heic", "heif") -> {
+                    convertImageToPdf(context, inputUri, originalFileName, onProgress,
+                        { path -> resultDeferred.complete(path) },
+                        { err -> resultDeferred.completeExceptionally(IOException(err)) }
+                    )
+                }
+
+                // Route 3: Vector SVG to Bitmap Image
+                inputExt == "svg" && targetExt in listOf("png", "jpg", "jpeg", "webp") -> {
+                    convertSvgToImage(context, inputUri, targetExt, originalFileName, qualityPreset, onProgress,
+                        { path -> resultDeferred.complete(path) },
+                        { err -> resultDeferred.completeExceptionally(IOException(err)) }
+                    )
+                }
+
+                // Route 4: E-Book EPUB to TXT
+                inputExt == "epub" && targetExt == "txt" -> {
+                    convertEpubToTxt(context, inputUri, originalFileName, onProgress,
+                        { path -> resultDeferred.complete(path) },
+                        { err -> resultDeferred.completeExceptionally(IOException(err)) }
+                    )
+                }
+
+                // Route 5: Native Raster Image Converter
+                inputExt in listOf("png", "jpg", "jpeg", "webp", "bmp") &&
+                    targetExt in listOf("png", "jpg", "jpeg", "webp", "bmp") -> {
+                    convertImageNatively(context, inputUri, targetExt, originalFileName, qualityPreset, onProgress,
+                        { path -> resultDeferred.complete(path) },
+                        { err -> resultDeferred.completeExceptionally(IOException(err)) }
+                    )
+                }
+
+                // Route 6: Multimedia (Video & Audio) via FFmpeg Engine
+                else -> {
+                    convertMediaWithFFmpeg(context, inputUri, inputExt, targetExt, originalFileName, qualityPreset, onProgress,
+                        { path -> resultDeferred.complete(path) },
+                        { err -> resultDeferred.completeExceptionally(IOException(err)) }
+                    )
+                }
+            }
+
+            resultDeferred.await()
+        } finally {
+            if (activeJob == coroutineContext[Job]) {
+                activeJob = null
+            }
+            withContext(NonCancellable) {
+                currentStatus.value = ConvertState.Idle
+            }
+        }
+    }
+
     fun convert(
         context: Context,
         inputUri: Uri,
@@ -49,7 +132,6 @@ object MorphEngine {
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
-        val inputExt = originalFileName.substringAfterLast('.', "").trim().lowercase()
         val targetExt = outputExtension.trim().removePrefix(".").lowercase()
 
         // Cancel any pending conversion job before starting a new one
@@ -57,46 +139,18 @@ object MorphEngine {
 
         activeJob = engineScope.launch {
             try {
-                // Route 1: PDF Document Input
-                if (inputExt == "pdf") {
-                    if (targetExt in listOf("jpg", "jpeg", "png", "webp")) {
-                        convertPdfToImages(context, inputUri, targetExt, originalFileName, qualityPreset, onProgress, onSuccess, onError)
-                        return@launch
-                    } else if (targetExt == "pdf") {
-                        compressPdf(context, inputUri, originalFileName, qualityPreset, onProgress, onSuccess, onError)
-                        return@launch
-                    }
+                val finalPath = executeConversion(
+                    context = context,
+                    inputUri = inputUri,
+                    outputExtension = targetExt,
+                    originalFileName = originalFileName,
+                    qualityPreset = qualityPreset,
+                    onProgress = onProgress
+                )
+                withContext(Dispatchers.Main) {
+                    currentStatus.value = ConvertState.Success
+                    onSuccess(finalPath)
                 }
-
-                // Route 2: Image to PDF
-                if (targetExt == "pdf" && inputExt in listOf("jpg", "jpeg", "png", "webp", "bmp", "heic", "heif")) {
-                    convertImageToPdf(context, inputUri, originalFileName, onProgress, onSuccess, onError)
-                    return@launch
-                }
-
-                // Route 3: Vector SVG to Bitmap Image
-                if (inputExt == "svg" && targetExt in listOf("png", "jpg", "jpeg", "webp")) {
-                    convertSvgToImage(context, inputUri, targetExt, originalFileName, qualityPreset, onProgress, onSuccess, onError)
-                    return@launch
-                }
-
-                // Route 4: E-Book EPUB to TXT
-                if (inputExt == "epub" && targetExt == "txt") {
-                    convertEpubToTxt(context, inputUri, originalFileName, onProgress, onSuccess, onError)
-                    return@launch
-                }
-
-                // Route 5: Native Raster Image Converter
-                if (inputExt in listOf("png", "jpg", "jpeg", "webp", "bmp") &&
-                    targetExt in listOf("png", "jpg", "jpeg", "webp", "bmp")
-                ) {
-                    convertImageNatively(context, inputUri, targetExt, originalFileName, qualityPreset, onProgress, onSuccess, onError)
-                    return@launch
-                }
-
-                // Route 6: Multimedia (Video & Audio) via FFmpeg Engine
-                convertMediaWithFFmpeg(context, inputUri, inputExt, targetExt, originalFileName, qualityPreset, onProgress, onSuccess, onError)
-
             } catch (e: CancellationException) {
                 withContext(Dispatchers.Main) {
                     currentStatus.value = ConvertState.Idle
@@ -177,14 +231,16 @@ object MorphEngine {
                 { s -> ffmpegSession.complete(s.returnCode) },
                 { log -> Log.d(TAG, "[FFmpeg] ${log.message}") },
                 { stats ->
-                    if (totalDurationMs > 0) {
-                        val percentage = ((stats.time.toFloat() / totalDurationMs) * 95).toInt().coerceIn(5, 95)
-                        currentStatus.value = ConvertState.Converting(targetExt, percentage)
-                        onProgress("Telah diproses: $percentage%", percentage)
-                    } else {
-                        val seconds = stats.time / 1000
-                        currentStatus.value = ConvertState.Converting(targetExt, 50)
-                        onProgress("Telah diproses: ${seconds}s", 50)
+                    if (!ffmpegSession.isCompleted) {
+                        if (totalDurationMs > 0) {
+                            val percentage = ((stats.time.toFloat() / totalDurationMs) * 95).toInt().coerceIn(5, 95)
+                            currentStatus.value = ConvertState.Converting(targetExt, percentage)
+                            onProgress("Telah diproses: $percentage%", percentage)
+                        } else {
+                            val seconds = stats.time / 1000
+                            currentStatus.value = ConvertState.Converting(targetExt, 50)
+                            onProgress("Telah diproses: ${seconds}s", 50)
+                        }
                     }
                 }
             )

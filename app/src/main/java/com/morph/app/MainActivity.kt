@@ -27,7 +27,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -35,6 +35,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.morph.app.core.OutputManager
+import com.morph.app.core.SelectedFileItem
 import com.morph.app.ui.screens.BottomSheetConverter
 import com.morph.app.ui.screens.HomeScreen
 import com.morph.app.ui.screens.SettingsScreen
@@ -57,28 +58,29 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // File Picker for Standalone Launcher (PBI 7.1)
+    // File Picker for Standalone Launcher - Supports single or multiple files (PBI 8.3 & PBI 7.1)
     private var filePickerLauncher = registerForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            fileUriFromPicker = uri
-            showBottomSheetFromPicker = true
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
+            selectedFilesForConversion = uris.map { uri ->
+                val name = getFileNameFromUri(this, uri)
+                val mime = contentResolver.getType(uri) ?: getExplicitMimeType(name.substringAfterLast('.', ""))
+                val size = getFileSizeFromUri(this, uri)
+                SelectedFileItem(uri, name, mime, size)
+            }
+            showBottomSheet = true
         }
     }
 
-    private var fileUriFromPicker by mutableStateOf<Uri?>(null)
-    private var showBottomSheetFromPicker by mutableStateOf(false)
+    private var selectedFilesForConversion by mutableStateOf<List<SelectedFileItem>>(emptyList())
+    private var showBottomSheet by mutableStateOf(false)
 
     companion object {
         var isAppInForeground = false
     }
-    
-    private var sharedUri by mutableStateOf<Uri?>(null)
-    private var sharedFileName by mutableStateOf("Menunggu file...")
-    private var sharedMimeType by mutableStateOf("*/*")
+
     private var isStandaloneMode by mutableStateOf(true)
-    private var showShareSheet by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -92,7 +94,7 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent) {
         val isInitialStandalone = intent.action == Intent.ACTION_MAIN
-        
+
         if (!isInitialStandalone && intent.action == Intent.ACTION_SEND) {
             val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
@@ -100,16 +102,52 @@ class MainActivity : ComponentActivity() {
                 @Suppress("DEPRECATION")
                 intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
             }
-            
+
             if (uri != null) {
-                // Simpan ke variabel kelas, bukan variabel lokal
-                sharedUri = uri
-                sharedFileName = getFileNameFromUri(this, uri)
-                sharedMimeType = contentResolver.getType(uri) ?: "*/*"
-                
-                // Paksa buka layar transparan & munculkan BottomSheet
+                val name = getFileNameFromUri(this, uri)
+                val mime = intent.type ?: contentResolver.getType(uri) ?: "*/*"
+                val size = getFileSizeFromUri(this, uri)
+                selectedFilesForConversion = listOf(SelectedFileItem(uri, name, mime, size))
                 isStandaloneMode = false
-                showShareSheet = true
+                showBottomSheet = true
+            } else {
+                val text = intent.getStringExtra(Intent.EXTRA_TEXT)
+                if (!text.isNullOrBlank()) {
+                    Toast.makeText(this, "Morph adalah converter file offline. Format URL atau teks web tidak didukung.", Toast.LENGTH_LONG).show()
+                }
+                isStandaloneMode = true
+            }
+        } else if (!isInitialStandalone && intent.action == Intent.ACTION_SEND_MULTIPLE) {
+            val uris: ArrayList<Uri>? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+            }
+
+            val validUris = if (!uris.isNullOrEmpty()) {
+                uris.filterNotNull()
+            } else {
+                val clipData = intent.clipData
+                if (clipData != null) {
+                    (0 until clipData.itemCount).mapNotNull { clipData.getItemAt(it).uri }
+                } else {
+                    emptyList()
+                }
+            }
+
+            if (validUris.isNotEmpty()) {
+                selectedFilesForConversion = validUris.map { uri ->
+                    val name = getFileNameFromUri(this, uri)
+                    val mime = contentResolver.getType(uri) ?: "*/*"
+                    val size = getFileSizeFromUri(this, uri)
+                    SelectedFileItem(uri, name, mime, size)
+                }
+                isStandaloneMode = false
+                showBottomSheet = true
+            } else {
+                Toast.makeText(this, "Tidak ada file yang dapat diproses dari Share.", Toast.LENGTH_SHORT).show()
+                isStandaloneMode = true
             }
         } else {
             isStandaloneMode = true
@@ -250,18 +288,18 @@ class MainActivity : ComponentActivity() {
                                         )
 
                                         // BottomSheet Picker Trigger
-                                        val currentPickerUri = fileUriFromPicker
-                                        if (showBottomSheetFromPicker && currentPickerUri != null) {
-                                            val pickerFileName = getFileNameFromUri(context, currentPickerUri)
-                                            val pickerMimeType = context.contentResolver.getType(currentPickerUri) ?: "*/*"
-
+                                        if (showBottomSheet && selectedFilesForConversion.isNotEmpty()) {
                                             BottomSheetConverter(
-                                                fileUri = currentPickerUri,
-                                                fileName = pickerFileName,
-                                                mimeType = pickerMimeType,
+                                                selectedFiles = selectedFilesForConversion,
                                                 defaultQuality = prefs.qualityPreset,
-                                                onDismiss = { showBottomSheetFromPicker = false },
-                                                onConvertStarted = { showBottomSheetFromPicker = false }
+                                                onDismiss = {
+                                                    showBottomSheet = false
+                                                    selectedFilesForConversion = emptyList()
+                                                },
+                                                onConvertStarted = {
+                                                    showBottomSheet = false
+                                                    selectedFilesForConversion = emptyList()
+                                                }
                                             )
                                         }
                                     }
@@ -288,20 +326,20 @@ class MainActivity : ComponentActivity() {
                         }
                     } else {
                         // --- LAYAR SHARE OVERLAY (Transparan) ---
-                        if (sharedUri != null && showShareSheet) {
+                        if (showBottomSheet && selectedFilesForConversion.isNotEmpty()) {
                             LaunchedEffect(Unit) { askNotificationPermission() }
 
                             BottomSheetConverter(
-                                fileUri = sharedUri!!, // Gunakan sharedUri dari kelas
-                                fileName = sharedFileName,
-                                mimeType = sharedMimeType,
+                                selectedFiles = selectedFilesForConversion,
                                 defaultQuality = prefs.qualityPreset,
                                 onDismiss = {
-                                    showShareSheet = false
+                                    showBottomSheet = false
+                                    selectedFilesForConversion = emptyList()
                                     finish() // Tutup overlay transparan
                                 },
                                 onConvertStarted = {
-                                    showShareSheet = false
+                                    showBottomSheet = false
+                                    selectedFilesForConversion = emptyList()
                                     Toast.makeText(this@MainActivity, "Konversi dimulai di latar belakang...", Toast.LENGTH_SHORT).show()
                                     // PBI 8.2.3: Perilaku Tutup Otomatis
                                     if (prefs.closeAfterShare) {
@@ -341,6 +379,20 @@ fun getFileNameFromUri(context: Context, uri: Uri): String {
         }
     } catch (_: Exception) {}
     return name ?: uri.lastPathSegment?.substringAfterLast('/') ?: "File"
+}
+
+fun getFileSizeFromUri(context: Context, uri: Uri): Long {
+    var size = 0L
+    try {
+        val cursor = context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)
+        cursor?.use { c ->
+            if (c.moveToFirst()) {
+                val sizeIdx = c.getColumnIndex(OpenableColumns.SIZE)
+                if (sizeIdx != -1) size = c.getLong(sizeIdx)
+            }
+        }
+    } catch (_: Exception) {}
+    return size
 }
 
 fun checkNotifPermission(context: Context): Boolean {

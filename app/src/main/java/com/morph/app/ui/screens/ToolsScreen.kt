@@ -1,8 +1,8 @@
+
 package com.morph.app.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,14 +14,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.morph.app.ui.theme.MorphIndigo
-import com.morph.app.ui.theme.MorphPink
-import com.morph.app.ui.theme.MorphViolet
 
 @Composable
 fun ToolsScreen(
@@ -33,33 +30,37 @@ fun ToolsScreen(
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = 20.dp),
-        contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        contentPadding = PaddingValues(
+            top = 16.dp,
+            bottom = 100.dp
+        ),
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
+
+        // Header
         item {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBackClick) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Kembali",
-                        tint = MaterialTheme.colorScheme.onBackground
+                        contentDescription = "Kembali"
                     )
                 }
-                Spacer(modifier = Modifier.width(4.dp))
+
+                Spacer(modifier = Modifier.width(8.dp))
+
                 Column {
                     Text(
-                        text = "Pusat Alat & Utilitas",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onBackground
+                        text = "Tools",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
                     )
+
                     Text(
-                        text = "Modul konversi teknis & fitur ekspansi Morph",
+                        text = "Kenali fitur yang tersedia di Morph.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -67,172 +68,300 @@ fun ToolsScreen(
             }
         }
 
-        // TOOL 1: Lossless Stream Copy (PBI 11)
+        // Conversion Tools
         item {
-            ToolFeatureCard(
-                title = "Salin Stream (Lossless Copy)",
-                subtitle = "Ubah kontainer video (MKV ke MP4, AVI, MOV) secara instan tanpa proses encode ulang. Bitrate dan kualitas 100% terjaga.",
-                icon = Icons.Default.Bolt,
-                iconTint = MorphIndigo,
-                badgeText = "Sprint 3 Aktif",
-                badgeColor = Color(0xFF10B981),
-                onClick = onPickFileForTool
+            SectionHeading(
+                title = "Conversion Tools",
+                subtitle = "Alat konversi file bawaan Morph."
             )
         }
 
-        // TOOL 2: PDF Toolkit (PBI 2.5 & 13)
         item {
             ToolFeatureCard(
-                title = "PDF Smart Compressor & Renderer",
-                subtitle = "Pangkas ukuran berkas PDF dokumen berbobot besar dan ekstrak setiap halaman menjadi gambar PNG/JPG berkualitas tinggi.",
-                icon = Icons.Default.PictureAsPdf,
-                iconTint = MorphPink,
-                badgeText = "Sprint 3 Aktif",
-                badgeColor = Color(0xFF10B981),
-                onClick = onPickFileForTool
+                title = "Video Conversion",
+                description = "Mengubah container video dengan proses cepat tanpa encoding ulang. Ukuran hasil dapat sedikit berbeda.",
+                supportedFormats = "MKV · MP4 · MOV  →  MP4 · MOV · MKV",
+                icon = Icons.Default.VideoFile
             )
         }
 
-        // TOOL 3: Audio Extractor
         item {
             ToolFeatureCard(
-                title = "Ekstraktor Audio Cepat",
-                subtitle = "Ambil jalur audio dari klip video dan simpan sebagai file MP3, M4A, atau WAV murni.",
-                icon = Icons.Default.Audiotrack,
-                iconTint = MorphViolet,
-                badgeText = "Sprint 3 Aktif",
-                badgeColor = Color(0xFF10B981),
-                onClick = onPickFileForTool
+                title = "PDF Toolkit",
+                description = "Kompres dokumen PDF atau ubah setiap halaman menjadi gambar yang dapat dibuka dan dibagikan.",
+                supportedFormats = "PDF · JPG · PNG · WEBP  →  PDF · PNG · JPG",
+                icon = Icons.Default.PictureAsPdf
             )
         }
 
-        // TOOL 4: SVG Converter (PBI Sprint 3)
         item {
             ToolFeatureCard(
-                title = "SVG ke PNG/JPG",
-                subtitle = "Render file vektor SVG menjadi gambar bitmap PNG atau JPG untuk dibagikan atau digunakan di berbagai aplikasi.",
-                icon = Icons.Default.AutoAwesome,
-                iconTint = Color(0xFF8B5CF6),
-                badgeText = "Sprint 3 Aktif",
-                badgeColor = Color(0xFF10B981),
-                onClick = onPickFileForTool
+                title = "Audio Extraction",
+                description = "Ekstrak jalur audio dari video dan simpan dalam berbagai format audio.",
+                supportedFormats = "MP4 · MKV · MOV · WEBM  →  MP3 · M4A · WAV · FLAC · OGG · OPUS",
+                icon = Icons.Default.Audiotrack
             )
         }
 
-        // TOOL 5: EPUB Converter (PBI Sprint 3)
         item {
             ToolFeatureCard(
-                title = "EPUB ke TXT",
-                subtitle = "Ekstrak seluruh isi teks dari buku digital EPUB menjadi file teks biasa yang bisa dibaca di aplikasi apapun.",
-                icon = Icons.Default.Book,
-                iconTint = Color(0xFFF97316),
-                badgeText = "Sprint 3 Aktif",
-                badgeColor = Color(0xFF10B981),
-                onClick = onPickFileForTool
+                title = "SVG Conversion",
+                description = "Ubah grafik vektor SVG menjadi gambar raster yang dapat dibuka di galeri atau dibagikan.",
+                supportedFormats = "SVG  →  PNG · JPG · WEBP",
+                icon = Icons.Default.AutoAwesome
             )
         }
 
-        // TOOL 6: Batch Queue Converter (PBI 8.3 Teaser)
         item {
             ToolFeatureCard(
-                title = "Antrean Konversi Massal (Batch)",
-                subtitle = "Pilih puluhan file sekaligus dan biarkan Morph mengonversinya secara teratur di latar belakang dengan antrean otomatis.",
-                icon = Icons.Default.Layers,
-                iconTint = Color(0xFFF59E0B),
-                badgeText = "Segera di Sprint 4",
-                badgeColor = Color(0xFFF59E0B),
-                onClick = {}
+                title = "EPUB Text Extraction",
+                description = "Ekstrak isi dan bab buku digital menjadi satu file teks yang lebih ringan dan mudah dibaca.",
+                supportedFormats = "EPUB  →  TXT",
+                icon = Icons.Default.Book
             )
         }
 
-        // TOOL 7: Web-to-Morph (PBI 9 Teaser)
         item {
             ToolFeatureCard(
-                title = "Web-to-Morph (URL Catcher)",
-                subtitle = "Tempel tautan video/audio web dan unduh langsung ke format pilihan Anda di penyimpanan lokal.",
-                icon = Icons.Default.Language,
-                iconTint = Color(0xFF06B6D4),
-                badgeText = "Segera di Sprint 4",
-                badgeColor = Color(0xFF06B6D4),
-                onClick = {}
+                title = "Image Conversion",
+                description = "Ubah format gambar dengan penanganan transparansi dan pilihan output yang beragam.",
+                supportedFormats = "PNG · JPG · WEBP · BMP  →  PNG · JPG · WEBP · BMP · PDF",
+                icon = Icons.Default.Image
+            )
+        }
+
+        // Sharing Features
+        item {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                SectionHeading(
+                    title = "More Ways to Use Morph",
+                    subtitle = "Gunakan Morph langsung dari aplikasi lain."
+                )
+            }
+        }
+        
+        item {
+            InfoFeatureCard(
+                title = "Share to Morph",
+                description = "Convert file langsung dari aplikasi lain ke Morph melalui menu Share Android.",
+                detail = "Pilih satu atau beberapa file dari Gallery, File Manager, atau aplikasi lain yang mendukung berbagi file. Morph akan menerima file tersebut dan menyiapkan proses konversi tanpa perlu mencarinya kembali secara manual.",
+                icon = Icons.Default.Share
+            )
+        }
+
+        item {
+            InfoFeatureCard(
+                title = "Web to Morph",
+                description = "Temukan Gambar dari web lalu bagikan langsung ke Morph tanpa perlu membuka aplikasi secara terpisah.",
+                detail = "Contohnya, PDF dari Google Drive atau gambar dari Google Images. Gunakan menu Bagikan dan pilih Morph untuk memulai konversi.",
+                icon = Icons.Default.Language
+            )
+        }
+
+        item {
+            InfoFeatureCard(
+                title = "Batch Processing",
+                description = "Pilih beberapa file sekaligus dan proses semuanya dalam satu antrean konversi.",
+                detail = "Morph akan mengatur file dan memprosesnya secara berurutan, sehingga kamu tidak perlu memulai konversi satu per satu.",
+                icon = Icons.Default.DynamicFeed
             )
         }
     }
 }
 
 @Composable
+private fun SectionHeading(
+    title: String,
+    subtitle: String
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
 private fun ToolFeatureCard(
     title: String,
-    subtitle: String,
-    icon: ImageVector,
-    iconTint: Color,
-    badgeText: String,
-    badgeColor: Color,
-    onClick: () -> Unit
+    description: String,
+    supportedFormats: String,
+    icon: ImageVector
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
-        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(
+                alpha = 0.30f
+            )
         ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+        )
     ) {
-        Column(modifier = Modifier.padding(18.dp)) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(iconTint.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = iconTint,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
+                FeatureIcon(icon)
 
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = badgeColor.copy(alpha = 0.15f)
-                ) {
-                    Text(
-                        text = badgeText,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = badgeColor,
-                        fontSize = 10.sp
-                    )
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 19.sp
+            )
+
+            FormatLabel(supportedFormats)
+        }
+    }
+}
+
+@Composable
+private fun InfoFeatureCard(
+    title: String,
+    description: String,
+    detail: String,
+    icon: ImageVector,
+    status: String? = null
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(
+                alpha = 0.30f
+            )
+        ),
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FeatureIcon(icon)
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Text(
+                    text = title,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                if (status != null) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Text(
+                            text = status,
+                            modifier = Modifier.padding(
+                                horizontal = 8.dp,
+                                vertical = 5.dp
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
-
             Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 19.sp
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
-
             Text(
-                text = subtitle,
+                text = detail,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = 18.sp
             )
         }
+    }
+}
+
+@Composable
+private fun FeatureIcon(
+    icon: ImageVector
+) {
+    Box(
+        modifier = Modifier
+            .size(42.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                MaterialTheme.colorScheme.primaryContainer.copy(
+                    alpha = 0.75f
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(22.dp)
+        )
+    }
+}
+
+@Composable
+private fun FormatLabel(
+    formats: String
+) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
+    ) {
+        Text(
+            text = formats,
+            modifier = Modifier.padding(
+                horizontal = 10.dp,
+                vertical = 7.dp
+            ),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            lineHeight = 16.sp
+        )
     }
 }

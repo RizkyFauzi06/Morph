@@ -267,7 +267,7 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Langsung kembali ke aplikasi asal (Galeri/WA) setelah memilih format.",
+                                text = "Langsung kembali ke aplikasi asal setelah memilih format dengan fitur share.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -301,7 +301,7 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Lokasi: Downloads/Morph (Scoped Storage)",
+                        text = "Lokasi: Downloads/Morph",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.SemiBold
@@ -348,7 +348,7 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.width(14.dp))
                     Column {
                         Text(
-                            text = "Morph v0.9.3 (Professional Edition)",
+                            text = "Morph v0.9.5",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface

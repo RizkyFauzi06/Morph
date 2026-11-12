@@ -26,8 +26,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morph.app.MorphEngine
+import com.morph.app.core.ConversionQueueManager
 import com.morph.app.core.FileCategory
 import com.morph.app.core.FileCategoryManager
+import com.morph.app.core.JobStatus
 import com.morph.app.ui.components.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -55,19 +57,27 @@ fun HomeScreen(
     )
 
     val engineState by MorphEngine.currentStatus.collectAsState()
+    val queueState by ConversionQueueManager.queueState.collectAsState()
+
+    val activeJob = remember(queueState) { queueState.firstOrNull { it.status == JobStatus.PROCESSING } }
+    val failedJobs = remember(queueState) { queueState.filter { it.status == JobStatus.FAILED } }
+    val completedCount = remember(queueState) { queueState.count { it.status == JobStatus.COMPLETED } }
+    val totalQueueCount = remember(queueState) { queueState.size }
 
     // Auto-refresh when conversion completes
-    LaunchedEffect(engineState) {
-        if (engineState is MorphEngine.ConvertState.Success) {
+    LaunchedEffect(engineState, completedCount) {
+        if (engineState is MorphEngine.ConvertState.Success || completedCount > 0) {
             onRefresh()
-            delay(1500)
-            MorphEngine.currentStatus.value = MorphEngine.ConvertState.Idle
+            if (engineState is MorphEngine.ConvertState.Success) {
+                delay(1500)
+                MorphEngine.currentStatus.value = MorphEngine.ConvertState.Idle
+            }
         }
     }
 
     // Category Filter State
     var selectedCategory by remember { mutableStateOf("Semua") }
-    val categories = listOf("Semua", "Video", "Audio", "Gambar", "Dokumen", "Arsip", "Lainnya")
+    val categories = listOf("Semua", "Video", "Audio", "Gambar", "Dokumen", "Lainnya")
 
     val filteredFiles = remember(morphFiles, selectedCategory) {
         if (selectedCategory == "Semua") {
@@ -136,20 +146,42 @@ fun HomeScreen(
                 }
             }
 
-            // --- 2. LIVE CONVERSION PROGRESS ---
-            if (engineState is MorphEngine.ConvertState.Converting) {
-                val converting = engineState as MorphEngine.ConvertState.Converting
+            // --- 2. LIVE CONVERSION PROGRESS (QUEUE & ACTIVE JOB) ---
+            if (activeJob != null) {
+                val currentJobNumber = queueState.indexOfFirst { it.id == activeJob.id } + 1
+                val queueInfo = if (totalQueueCount > 1) {
+                    "Mengonversi ($currentJobNumber/$totalQueueCount)"
+                } else {
+                    "Mengonversi ke ${activeJob.targetFormat.uppercase()}"
+                }
+
                 item {
                     ConversionBanner(
-                        format = converting.format,
-                        progress = converting.progress,
-                        onCancel = { MorphEngine.cancelCurrentConversion() }
+                        format = activeJob.targetFormat,
+                        progress = activeJob.progress,
+                        fileName = activeJob.originalFileName,
+                        queueInfo = queueInfo,
+                        stepMessage = activeJob.progressMessage,
+                        onCancel = { ConversionQueueManager.cancelAllJobs() }
                     )
                 }
             }
 
             // --- 3. ERROR & RETRY BANNER ---
-            if (engineState is MorphEngine.ConvertState.Error) {
+            if (failedJobs.isNotEmpty()) {
+                failedJobs.forEach { failedJob ->
+                    item(key = "failed_${failedJob.id}") {
+                        ErrorCard(
+                            message = "${failedJob.originalFileName}: ${failedJob.errorMessage ?: "Gagal dikonversi"}",
+                            onDismiss = { ConversionQueueManager.dismissJob(failedJob.id) },
+                            onRetry = {
+                                ConversionQueueManager.dismissJob(failedJob.id)
+                                onRetryConversion(failedJob.inputUri, failedJob.targetFormat)
+                            }
+                        )
+                    }
+                }
+            } else if (engineState is MorphEngine.ConvertState.Error) {
                 val error = engineState as MorphEngine.ConvertState.Error
                 item {
                     ErrorCard(

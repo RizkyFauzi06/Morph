@@ -47,7 +47,10 @@ fun ConversionBanner(
     format: String,
     progress: Int,
     onCancel: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    fileName: String? = null,
+    queueInfo: String? = null,
+    stepMessage: String? = null
 ) {
     val safeProgress = progress.coerceIn(0, 100)
 
@@ -82,6 +85,7 @@ fun ConversionBanner(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
+                    modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -96,16 +100,20 @@ fun ConversionBanner(
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         Text(
-                            text = "Mengonversi ke ${format.uppercase()}",
+                            text = queueInfo ?: "Mengonversi ke ${format.uppercase()}",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
 
                         Text(
-                            text = "Proses konversi sedang berjalan",
+                            text = if (fileName != null) "$fileName → ${format.uppercase()}" else "Proses konversi sedang berjalan",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -160,9 +168,12 @@ fun ConversionBanner(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Berjalan di latar belakang",
+                    text = stepMessage ?: "Berjalan di latar belakang",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
                 )
 
                 Text(
