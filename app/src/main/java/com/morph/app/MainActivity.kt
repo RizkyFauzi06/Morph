@@ -39,10 +39,13 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.morph.app.core.OutputManager
 import com.morph.app.core.SelectedFileItem
+import com.morph.app.ui.components.MorphHomeTopBar
 import com.morph.app.ui.screens.BottomSheetConverter
 import com.morph.app.ui.screens.HomeScreen
+import com.morph.app.ui.screens.ProgressScreen
 import com.morph.app.ui.screens.SettingsScreen
 import com.morph.app.ui.screens.ToolsScreen
+import com.morph.app.ui.screens.WelcomeScreen
 import com.morph.app.ui.theme.MorphTheme
 import java.io.File
 
@@ -166,6 +169,8 @@ class MainActivity : ComponentActivity() {
 
             // Dual-State Navigation: Standalone vs Share Mode
             var currentTab by remember { mutableStateOf(MorphTab.Home) }
+            var isOnboarding by remember { mutableStateOf(!prefs.onboardingDone) }
+            var showProgressScreen by remember { mutableStateOf(false) }
 
             // Double-back-to-exit (PBI: Back Navigation)
             var backPressedOnce by remember { mutableStateOf(false) }
@@ -233,7 +238,23 @@ class MainActivity : ComponentActivity() {
                     color = backgroundColor
                 ) {
                     if (isStandaloneMode) {
-                        Scaffold(
+                        if (isOnboarding) {
+                            WelcomeScreen(
+                                onGetStarted = {
+                                    prefs.onboardingDone = true
+                                    isOnboarding = false
+                                }
+                            )
+                        } else if (showProgressScreen) {
+                            ProgressScreen(
+                                onMinimize = { showProgressScreen = false },
+                                onFinish = {
+                                    showProgressScreen = false
+                                    refreshFiles()
+                                }
+                            )
+                        } else {
+                            Scaffold(
                             topBar = {
                                 // Top bar hanya di Home — Tools dan Settings punya header sendiri
                                 if (currentTab == MorphTab.Home) {
@@ -329,7 +350,8 @@ class MainActivity : ComponentActivity() {
                                                 } else {
                                                     context.startService(serviceIntent)
                                                 }
-                                            }
+                                            },
+                                            onBannerClick = { showProgressScreen = true }
                                         )
 
                                         // BottomSheet Picker Trigger
@@ -344,6 +366,7 @@ class MainActivity : ComponentActivity() {
                                                 onConvertStarted = {
                                                     showBottomSheet = false
                                                     selectedFilesForConversion = emptyList()
+                                                    showProgressScreen = true
                                                 }
                                             )
                                         }
@@ -369,7 +392,8 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         }
-                    } else {
+                    }
+                } else {
                         // --- LAYAR SHARE OVERLAY (Transparan) ---
                         if (showBottomSheet && selectedFilesForConversion.isNotEmpty()) {
                             LaunchedEffect(Unit) { askNotificationPermission() }

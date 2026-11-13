@@ -119,7 +119,8 @@ fun ConversionBanner(
     modifier: Modifier = Modifier,
     fileName: String? = null,
     queueInfo: String? = null,
-    stepMessage: String? = null
+    stepMessage: String? = null,
+    onClick: (() -> Unit)? = null
 ) {
     val safeProgress = progress.coerceIn(0, 100)
 
@@ -130,7 +131,7 @@ fun ConversionBanner(
     )
 
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = if (onClick != null) modifier.fillMaxWidth().clickable { onClick() } else modifier.fillMaxWidth(),
         shape = RoundedCornerShape(CardRadius),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(

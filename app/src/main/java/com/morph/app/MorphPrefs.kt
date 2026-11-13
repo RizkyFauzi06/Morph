@@ -25,4 +25,8 @@ class MorphPrefs(context: Context) {
     var qualityPreset: Int // 0: Tinggi, 1: Sedang, 2: Rendah, 3: Instan (Lossless)
         get() = prefs.getInt("quality", 0)
         set(value) = prefs.edit().putInt("quality", value).apply()
+
+    var onboardingDone: Boolean
+        get() = prefs.getBoolean("onboarding_done", false)
+        set(value) = prefs.edit().putBoolean("onboarding_done", value).apply()
 }

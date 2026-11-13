@@ -66,6 +66,7 @@ fun HomeScreen(
     onShareFile: (File) -> Unit,
     onDeleteFile: (File) -> Unit,
     onRetryConversion: (android.net.Uri, String) -> Unit,
+    onBannerClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -145,7 +146,8 @@ fun HomeScreen(
                         fileName = activeJob.originalFileName,
                         queueInfo = queueInfo,
                         stepMessage = activeJob.progressMessage,
-                        onCancel = { ConversionQueueManager.cancelAllJobs() }
+                        onCancel = { ConversionQueueManager.cancelAllJobs() },
+                        onClick = onBannerClick
                     )
                 }
             }
