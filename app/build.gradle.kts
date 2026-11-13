@@ -1,6 +1,13 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
+}
+
+val localProps = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
 }
 
 android {
@@ -18,6 +25,22 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = file(localProps.getProperty("RELEASE_STORE_FILE") ?: "")
+            storePassword = localProps.getProperty("RELEASE_STORE_PASSWORD") ?: ""
+            keyAlias = localProps.getProperty("RELEASE_KEY_ALIAS") ?: ""
+            keyPassword = localProps.getProperty("RELEASE_KEY_PASSWORD") ?: ""
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
+        }
     }
 }
 
