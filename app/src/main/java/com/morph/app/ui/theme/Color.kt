@@ -2,38 +2,65 @@ package com.morph.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// --- MORPH MATERIAL 3 COLOR PALETTE ---
+// ============================================================
+// MORPH DESIGN SYSTEM — COLOR TOKENS v1.0
+// Sesuai MORPH_UI_UX_SPEC.md Section 2.2
+// ============================================================
 
-// Primaries (Electric Indigo & Violet)
-val MorphIndigo = Color(0xFF6366F1)
-val MorphIndigoLight = Color(0xFF818CF8)
-val MorphIndigoDark = Color(0xFF4F46E5)
-val MorphViolet = Color(0xFF8B5CF6)
-val MorphVioletLight = Color(0xFFA78BFA)
-val MorphPink = Color(0xFFEC4899)
-val MorphPinkLight = Color(0xFFF472B6)
+// --- Primary & Brand ---
+val MorphPrimary        = Color(0xFF7952E8)   // CTA, selected item, FAB, active navigation
+val MorphPrimaryDark    = Color(0xFF633BD0)   // Pressed state / emphasis
+val MorphPrimaryLight   = Color(0xFFA78BFA)   // Dark theme primary
+val MorphPrimaryContainer = Color(0xFFEEE8FF) // Selected chip, soft highlight (light)
+val MorphPrimaryContainerDark = Color(0xFF35275A) // Selected chip (dark)
 
-// Functional & Semantic Accents
-val MorphSuccess = Color(0xFF10B981)
-val MorphWarning = Color(0xFFF59E0B)
-val MorphError = Color(0xFFEF4444)
-val MorphErrorContainerDark = Color(0xFF450A0A)
-val MorphErrorContainerLight = Color(0xFFFEE2E2)
+// --- Secondary & Accent ---
+val MorphSecondary      = Color(0xFFB58AFF)   // Aksen ungu muda
+val MorphAccentPink     = Color(0xFFEC83D3)   // Aksen visual sekunder
 
-// Dark Theme Surfaces (Deep Obsidian & Slate)
-val MorphDarkBg = Color(0xFF090D16)
-val MorphDarkSurface = Color(0xFF111827)
-val MorphDarkSurfaceVariant = Color(0xFF1F2937)
-val MorphDarkSurfaceCard = Color(0xFF182234)
-val MorphDarkBorder = Color(0xFF374151)
-val MorphDarkOnSurface = Color(0xFFF3F4F6)
-val MorphDarkOnSurfaceVariant = Color(0xFF9CA3AF)
+// --- Instant Bolt ---
+val MorphInstantBolt    = Color(0xFFF5B51B)   // Ikon petir Instant — SELALU KUNING
 
-// Light Theme Surfaces (Clean Snow & Pearl)
-val MorphLightBg = Color(0xFFF8FAFC)
-val MorphLightSurface = Color(0xFFFFFFFF)
-val MorphLightSurfaceVariant = Color(0xFFF1F5F9)
-val MorphLightSurfaceCard = Color(0xFFFFFFFF)
-val MorphLightBorder = Color(0xFFE2E8F0)
-val MorphLightOnSurface = Color(0xFF0F172A)
-val MorphLightOnSurfaceVariant = Color(0xFF64748B)
+// --- Semantic ---
+val MorphSuccess        = Color(0xFF249B69)   // Berhasil
+val MorphWarning        = Color(0xFFD99A27)   // Peringatan
+val MorphError          = Color(0xFFD94B55)   // Error / cancel
+
+// --- Light Theme Surfaces ---
+val MorphLightBackground      = Color(0xFFFAFAFC)
+val MorphLightSurface         = Color(0xFFFFFFFF)
+val MorphLightSurfaceVariant  = Color(0xFFF3F1F7)
+val MorphLightTextPrimary     = Color(0xFF20202A)
+val MorphLightTextSecondary   = Color(0xFF858493)
+val MorphLightOutline         = Color(0xFFE8E5EF)
+
+// --- Dark Theme Surfaces ---
+val MorphDarkBackground       = Color(0xFF111116)
+val MorphDarkSurface          = Color(0xFF1B1A22)
+val MorphDarkSurfaceVariant   = Color(0xFF25232E)
+val MorphDarkTextPrimary      = Color(0xFFF4F1FA)
+val MorphDarkTextSecondary    = Color(0xFFAAA5B5)
+val MorphDarkOutline          = Color(0xFF393544)
+
+// --- Error containers ---
+val MorphErrorContainerLight  = Color(0xFFFDE8EA)
+val MorphErrorContainerDark   = Color(0xFF3D1518)
+
+// --- Legacy aliases (untuk komponen lama yang masih referensikan nama ini) ---
+val MorphIndigo     = MorphPrimary
+val MorphPink       = MorphAccentPink
+val MorphViolet     = MorphSecondary
+val MorphIndigoLight = MorphPrimaryLight
+val MorphIndigoDark  = MorphPrimaryDark
+val MorphVioletLight = MorphSecondary
+val MorphPinkLight   = Color(0xFFF4ACDD)
+val MorphLightBorder = MorphLightOutline
+val MorphDarkBorder  = MorphDarkOutline
+val MorphLightOnSurface = MorphLightTextPrimary
+val MorphLightOnSurfaceVariant = MorphLightTextSecondary
+val MorphDarkOnSurface = MorphDarkTextPrimary
+val MorphDarkOnSurfaceVariant = MorphDarkTextSecondary
+val MorphLightBg = MorphLightBackground
+val MorphDarkBg = MorphDarkBackground
+val MorphDarkSurfaceCard = Color(0xFF1F1D28)
+val MorphLightSurfaceCard = MorphLightSurface

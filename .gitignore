@@ -53,3 +53,7 @@ app/src/test/
 .continue-here*.md
 PROJECT_HANDOFF*.md
 Morph_Conversion_Engine_Checkup.md
+
+# Ignore UI/UX Handoff docs and local font assets
+docs/Morph_UI_UX_Handoff/
+app/src/main/res/font/

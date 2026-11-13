@@ -24,6 +24,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morph.app.ui.theme.MorphIndigo
+import com.morph.app.ui.theme.MorphPrimary
+import com.morph.app.ui.theme.MorphAccentPink
+import com.morph.app.ui.theme.MorphSecondary
 import com.morph.app.ui.theme.MorphPink
 import com.morph.app.ui.theme.MorphViolet
 import java.io.File
@@ -37,6 +40,71 @@ private val CardRadius = 16.dp
 private val ControlRadius = 12.dp
 private val ButtonRadius = 14.dp
 private val StandardBorder = 1.dp
+
+// ============================================================
+// HOME TOP BAR
+// Sesuai MORPH_UI_UX_SPEC.md Section 7.1
+// ============================================================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MorphHomeTopBar(
+    modifier: Modifier = Modifier
+) {
+    TopAppBar(
+        modifier = modifier,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                MorphLogo(size = 36.dp)
+                Text(
+                    text = "Morph",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.background,
+            scrolledContainerColor = MaterialTheme.colorScheme.surface
+        )
+    )
+}
+
+// ============================================================
+// SCREEN TITLE HEADER (Tools, Settings)
+// ============================================================
+
+@Composable
+fun MorphScreenHeader(
+    title: String,
+    subtitle: String? = null,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        if (subtitle != null) {
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
 
 // --------------------------------------------------
 // LIVE CONVERSION PROGRESS BANNER

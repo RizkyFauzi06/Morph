@@ -22,6 +22,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Build
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -231,28 +234,70 @@ class MainActivity : ComponentActivity() {
                 ) {
                     if (isStandaloneMode) {
                         Scaffold(
+                            topBar = {
+                                // Top bar hanya di Home — Tools dan Settings punya header sendiri
+                                if (currentTab == MorphTab.Home) {
+                                    MorphHomeTopBar()
+                                }
+                            },
                             bottomBar = {
                                 NavigationBar(
                                     containerColor = MaterialTheme.colorScheme.surface,
-                                    tonalElevation = 6.dp
+                                    tonalElevation = 0.dp
                                 ) {
                                     NavigationBarItem(
                                         selected = currentTab == MorphTab.Home,
                                         onClick = { currentTab = MorphTab.Home },
-                                        icon = { Icon(Icons.Default.Home, contentDescription = "Beranda") },
-                                        label = { Text("Beranda", fontWeight = if (currentTab == MorphTab.Home) FontWeight.Bold else FontWeight.Normal) }
+                                        icon = {
+                                            Icon(
+                                                if (currentTab == MorphTab.Home) Icons.Default.Home
+                                                else Icons.Outlined.Home,
+                                                contentDescription = "Beranda"
+                                            )
+                                        },
+                                        label = {
+                                            Text(
+                                                "Beranda",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = if (currentTab == MorphTab.Home) FontWeight.SemiBold else FontWeight.Normal
+                                            )
+                                        }
                                     )
                                     NavigationBarItem(
                                         selected = currentTab == MorphTab.Tools,
                                         onClick = { currentTab = MorphTab.Tools },
-                                        icon = { Icon(Icons.Default.Build, contentDescription = "Alat") },
-                                        label = { Text("Alat", fontWeight = if (currentTab == MorphTab.Tools) FontWeight.Bold else FontWeight.Normal) }
+                                        icon = {
+                                            Icon(
+                                                if (currentTab == MorphTab.Tools) Icons.Default.Build
+                                                else Icons.Outlined.Build,
+                                                contentDescription = "Tools"
+                                            )
+                                        },
+                                        label = {
+                                            Text(
+                                                "Tools",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = if (currentTab == MorphTab.Tools) FontWeight.SemiBold else FontWeight.Normal
+                                            )
+                                        }
                                     )
                                     NavigationBarItem(
                                         selected = currentTab == MorphTab.Settings,
                                         onClick = { currentTab = MorphTab.Settings },
-                                        icon = { Icon(Icons.Default.Settings, contentDescription = "Pengaturan") },
-                                        label = { Text("Setelan", fontWeight = if (currentTab == MorphTab.Settings) FontWeight.Bold else FontWeight.Normal) }
+                                        icon = {
+                                            Icon(
+                                                if (currentTab == MorphTab.Settings) Icons.Default.Settings
+                                                else Icons.Outlined.Settings,
+                                                contentDescription = "Pengaturan"
+                                            )
+                                        },
+                                        label = {
+                                            Text(
+                                                "Pengaturan",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = if (currentTab == MorphTab.Settings) FontWeight.SemiBold else FontWeight.Normal
+                                            )
+                                        }
                                     )
                                 }
                             }

@@ -7,67 +7,111 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
-private val DarkColorScheme = darkColorScheme(
-    primary = MorphIndigoLight,
-    onPrimary = Color(0xFF0F172A),
-    primaryContainer = Color(0xFF312E81),
-    onPrimaryContainer = Color(0xFFE0E7FF),
-    secondary = MorphVioletLight,
-    onSecondary = Color(0xFF1E1B4B),
-    secondaryContainer = Color(0xFF4C1D95),
-    onSecondaryContainer = Color(0xFFEDE9FE),
-    tertiary = MorphPinkLight,
-    background = MorphDarkBg,
-    onBackground = MorphDarkOnSurface,
-    surface = MorphDarkSurface,
-    onSurface = MorphDarkOnSurface,
-    surfaceVariant = MorphDarkSurfaceVariant,
-    onSurfaceVariant = MorphDarkOnSurfaceVariant,
-    outline = MorphDarkBorder,
-    error = MorphError,
-    errorContainer = MorphErrorContainerDark,
-    onError = Color.White,
-    onErrorContainer = Color(0xFFFCA5A5)
-)
+// ============================================================
+// MORPH DESIGN SYSTEM — THEME v1.0
+// Sesuai MORPH_UI_UX_SPEC.md Section 2.2 & 2.3
+// ============================================================
 
 private val LightColorScheme = lightColorScheme(
-    primary = MorphIndigoDark,
+    primary = MorphPrimary,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFEEF2FF),
-    onPrimaryContainer = Color(0xFF312E81),
-    secondary = MorphViolet,
+    primaryContainer = MorphPrimaryContainer,
+    onPrimaryContainer = MorphPrimaryDark,
+
+    secondary = MorphSecondary,
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFF5F3FF),
-    onSecondaryContainer = Color(0xFF4C1D95),
-    tertiary = MorphPink,
-    background = MorphLightBg,
-    onBackground = MorphLightOnSurface,
+    secondaryContainer = Color(0xFFF0EAFF),
+    onSecondaryContainer = Color(0xFF4A2D8A),
+
+    tertiary = MorphAccentPink,
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFFDE8F7),
+    onTertiaryContainer = Color(0xFF8A1A6E),
+
+    background = MorphLightBackground,
+    onBackground = MorphLightTextPrimary,
+
     surface = MorphLightSurface,
-    onSurface = MorphLightOnSurface,
+    onSurface = MorphLightTextPrimary,
+
     surfaceVariant = MorphLightSurfaceVariant,
-    onSurfaceVariant = MorphLightOnSurfaceVariant,
-    outline = MorphLightBorder,
+    onSurfaceVariant = MorphLightTextSecondary,
+
+    outline = MorphLightOutline,
+    outlineVariant = MorphLightOutline.copy(alpha = 0.6f),
+
     error = MorphError,
-    errorContainer = MorphErrorContainerLight,
     onError = Color.White,
-    onErrorContainer = Color(0xFF991B1B)
+    errorContainer = MorphErrorContainerLight,
+    onErrorContainer = Color(0xFF8B1B24),
+
+    // Surface tonal elevation (Material3)
+    surfaceTint = MorphPrimary,
 )
 
+private val DarkColorScheme = darkColorScheme(
+    primary = MorphPrimaryLight,       // A78BFA di dark
+    onPrimary = Color(0xFF1A0A3D),
+    primaryContainer = MorphPrimaryContainerDark,
+    onPrimaryContainer = Color(0xFFD6C9FF),
+
+    secondary = MorphSecondary,
+    onSecondary = Color(0xFF1E0A40),
+    secondaryContainer = Color(0xFF3D1D6B),
+    onSecondaryContainer = Color(0xFFE5D4FF),
+
+    tertiary = Color(0xFFF4ACDD),      // pink lebih terang untuk dark
+    onTertiary = Color(0xFF3D0A28),
+    tertiaryContainer = Color(0xFF5C1240),
+    onTertiaryContainer = Color(0xFFFAD6EF),
+
+    background = MorphDarkBackground,
+    onBackground = MorphDarkTextPrimary,
+
+    surface = MorphDarkSurface,
+    onSurface = MorphDarkTextPrimary,
+
+    surfaceVariant = MorphDarkSurfaceVariant,
+    onSurfaceVariant = MorphDarkTextSecondary,
+
+    outline = MorphDarkOutline,
+    outlineVariant = MorphDarkOutline.copy(alpha = 0.7f),
+
+    error = Color(0xFFEF7F87),
+    onError = Color(0xFF3D0A0E),
+    errorContainer = MorphErrorContainerDark,
+    onErrorContainer = Color(0xFFFAB8BC),
+
+    surfaceTint = MorphPrimaryLight,
+)
+
+// ============================================================
+// SHAPE TOKENS
+// Sesuai MORPH_UI_UX_SPEC.md Section 4.2
+// ============================================================
 val MorphShapes = Shapes(
-    small = RoundedCornerShape(8.dp),
-    medium = RoundedCornerShape(14.dp),
-    large = RoundedCornerShape(20.dp),
-    extraLarge = RoundedCornerShape(28.dp)
+    // Small: chip
+    small = RoundedCornerShape(14.dp),
+    // Medium: file card, button
+    medium = RoundedCornerShape(16.dp),
+    // Large: feature card
+    large = RoundedCornerShape(18.dp),
+    // ExtraLarge: bottom sheet, dialog
+    extraLarge = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
 )
 
+// ============================================================
+// MORPH THEME COMPOSABLE
+// themeOption: 0 = System, 1 = Light, 2 = Dark
+// ============================================================
 @Composable
 fun MorphTheme(
-    themeOption: Int = 0, // 0: System, 1: Light, 2: Dark
+    themeOption: Int = 0,
     content: @Composable () -> Unit
 ) {
     val isDark = when (themeOption) {
-        1 -> false
-        2 -> true
+        1    -> false
+        2    -> true
         else -> isSystemInDarkTheme()
     }
 
@@ -76,6 +120,7 @@ fun MorphTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         shapes = MorphShapes,
+        typography = MorphTypography,
         content = content
     )
 }
