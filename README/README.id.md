@@ -1,9 +1,6 @@
 <div align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/morph_logo_dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="assets/morph_logo.svg">
-    <img alt="Morph Logo" src="assets/morph_logo.svg" width="112" height="112">
-  </picture>
+
+  <img src="assets/Code_Generated_Image.png" alt="Morph Logo" width="112" />
 
   <h1>Morph</h1>
   <p><strong>Konverter File Offline untuk Android</strong></p>
