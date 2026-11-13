@@ -21,6 +21,7 @@ import com.morph.app.ui.components.MorphLogo
 import com.morph.app.ui.components.MorphScreenHeader
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.Surface
+import com.morph.app.BuildConfig
 
 @Composable
 fun SettingsScreen(
@@ -252,7 +253,7 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Versi 1.1 · Offline File Converter",
+                        text = "Versi ${BuildConfig.VERSION_NAME} · Offline File Converter",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
