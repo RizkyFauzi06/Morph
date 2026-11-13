@@ -99,7 +99,7 @@ fun SettingsScreen(
                 // Urutan sesuai spec: Rendah, Sedang, Tinggi, Instan
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     listOf(
                         Pair("Rendah", 2),

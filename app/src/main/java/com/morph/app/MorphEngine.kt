@@ -705,6 +705,70 @@ object MorphEngine {
         }
     }
 
+    suspend fun mergeImagesToPdf(
+        context: Context,
+        inputUris: List<Uri>,
+        originalFileName: String,
+        qualityPreset: Int = 0,
+        onProgress: (String, Int) -> Unit
+    ): String = withContext(Dispatchers.IO) {
+        val tempOutput = OutputManager.createTempFile(context, "img_merge_pdf", "pdf")
+        val pdfDocument = PdfDocument()
+
+        try {
+            val total = inputUris.size
+            for ((index, uri) in inputUris.withIndex()) {
+                currentCoroutineContext().ensureActive()
+                val percent = ((index.toFloat() / total) * 85).toInt() + 5
+                updateProgress("pdf", "Menyusun lembar ${index + 1} dari $total...", percent, onProgress)
+
+                val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    val source = android.graphics.ImageDecoder.createSource(context.contentResolver, uri)
+                    android.graphics.ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
+                        decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+                    }
+                } else {
+                    @Suppress("DEPRECATION")
+                    android.provider.MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+                }
+
+                val pageInfo = PdfDocument.PageInfo.Builder(bitmap.width, bitmap.height, index + 1).create()
+                val page = pdfDocument.startPage(pageInfo)
+                page.canvas.drawBitmap(bitmap, 0f, 0f, null)
+                pdfDocument.finishPage(page)
+                bitmap.recycle()
+            }
+
+            updateProgress("pdf", "Menyimpan dokumen PDF...", 95, onProgress)
+
+            FileOutputStream(tempOutput).use { fos ->
+                pdfDocument.writeTo(fos)
+            }
+            pdfDocument.close()
+
+            val finalPath = OutputManager.finalizeOutput(context, tempOutput, originalFileName, "pdf")
+            OutputManager.cleanTempFiles(tempOutput)
+
+            if (finalPath != null) {
+                withContext(Dispatchers.Main) {
+                    currentStatus.value = ConvertState.Success
+                }
+                finalPath
+            } else {
+                throw IOException("Gagal menyimpan dokumen PDF gabungan")
+            }
+        } catch (e: Exception) {
+            try {
+                pdfDocument.close()
+            } catch (_: Exception) {}
+            OutputManager.cleanTempFiles(tempOutput)
+            withContext(Dispatchers.Main) {
+                currentStatus.value = ConvertState.Error("Gagal menggabungkan gambar ke PDF: ${e.message}", inputUris.firstOrNull(), "pdf")
+            }
+            throw e
+        }
+    }
+
     // --- 5. NATIVE IMAGE CONVERTER ---
     private suspend fun convertImageNatively(
         context: Context,

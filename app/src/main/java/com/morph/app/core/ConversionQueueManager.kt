@@ -26,7 +26,8 @@ data class ConversionJob(
     val progress: Int = 0,
     val progressMessage: String = "Menunggu antrean...",
     val outputFilePath: String? = null,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val extraInputUris: List<Uri> = emptyList()
 )
 
 data class ConversionJobRequest(
@@ -34,7 +35,8 @@ data class ConversionJobRequest(
     val originalFileName: String,
     val mimeType: String,
     val targetFormat: String,
-    val qualityPreset: Int
+    val qualityPreset: Int,
+    val extraInputUris: List<Uri> = emptyList()
 )
 
 data class SelectedFileItem(
@@ -68,7 +70,8 @@ object ConversionQueueManager {
         originalFileName: String,
         mimeType: String,
         targetFormat: String,
-        qualityPreset: Int
+        qualityPreset: Int,
+        extraInputUris: List<Uri> = emptyList()
     ): String {
         // Bersihkan riwayat antrean sesi sebelumnya jika antrean sedang menganggur
         if (!hasActiveOrWaitingJobs()) {
@@ -80,7 +83,8 @@ object ConversionQueueManager {
             originalFileName = originalFileName,
             mimeType = mimeType,
             targetFormat = targetFormat,
-            qualityPreset = qualityPreset
+            qualityPreset = qualityPreset,
+            extraInputUris = extraInputUris
         )
         _queueState.update { currentList -> currentList + newJob }
         return newJob.id
@@ -98,7 +102,8 @@ object ConversionQueueManager {
                 originalFileName = req.originalFileName,
                 mimeType = req.mimeType,
                 targetFormat = req.targetFormat,
-                qualityPreset = req.qualityPreset
+                qualityPreset = req.qualityPreset,
+                extraInputUris = req.extraInputUris
             )
         }
         _queueState.update { currentList -> currentList + newJobs }

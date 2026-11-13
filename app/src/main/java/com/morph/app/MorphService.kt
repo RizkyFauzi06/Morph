@@ -116,20 +116,36 @@ class MorphService : Service() {
                 updateNotificationForJob(job, 0, "Memulai konversi...")
 
                 try {
-                    val finalPath = MorphEngine.executeConversion(
-                        context = this@MorphService,
-                        inputUri = job.inputUri,
-                        outputExtension = job.targetFormat,
-                        originalFileName = job.originalFileName,
-                        qualityPreset = job.qualityPreset,
-                        onProgress = { stepMsg, percent ->
-                            ConversionQueueManager.updateJobProgress(job.id, percent, stepMsg)
-                            // Smart Notification: hanya update notifikasi di background saat aplikasi aktif
-                            if (!MainActivity.isAppInForeground && !isCancelled) {
-                                updateNotificationForJob(job, percent, stepMsg)
+                    val allUris = listOf(job.inputUri) + job.extraInputUris
+                    val finalPath = if (allUris.size > 1 && job.targetFormat.equals("pdf", ignoreCase = true)) {
+                        MorphEngine.mergeImagesToPdf(
+                            context = this@MorphService,
+                            inputUris = allUris,
+                            originalFileName = job.originalFileName,
+                            qualityPreset = job.qualityPreset,
+                            onProgress = { stepMsg, percent ->
+                                ConversionQueueManager.updateJobProgress(job.id, percent, stepMsg)
+                                if (!MainActivity.isAppInForeground && !isCancelled) {
+                                    updateNotificationForJob(job, percent, stepMsg)
+                                }
                             }
-                        }
-                    )
+                        )
+                    } else {
+                        MorphEngine.executeConversion(
+                            context = this@MorphService,
+                            inputUri = job.inputUri,
+                            outputExtension = job.targetFormat,
+                            originalFileName = job.originalFileName,
+                            qualityPreset = job.qualityPreset,
+                            onProgress = { stepMsg, percent ->
+                                ConversionQueueManager.updateJobProgress(job.id, percent, stepMsg)
+                                // Smart Notification: hanya update notifikasi di background saat aplikasi aktif
+                                if (!MainActivity.isAppInForeground && !isCancelled) {
+                                    updateNotificationForJob(job, percent, stepMsg)
+                                }
+                            }
+                        )
+                    }
 
                     ConversionQueueManager.updateJobStatus(job.id, JobStatus.COMPLETED, filePath = finalPath)
                 } catch (e: CancellationException) {

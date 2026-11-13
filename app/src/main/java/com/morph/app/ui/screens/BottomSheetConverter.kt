@@ -368,20 +368,44 @@ fun BottomSheetConverter(
 
             Button(
                 onClick = {
-                    val requests = selectedFiles.map { file ->
-                        val srcExt = file.fileName.substringAfterLast('.', "").trim().lowercase()
-                        val targetFormat = targetFormatPerGroup[srcExt] ?: "mp4"
+                    val requests = mutableListOf<ConversionJobRequest>()
+
+                    groupedFiles.forEach { (srcExt, filesInGroup) ->
+                        val targetFormat = targetFormatPerGroup[srcExt] ?: "pdf"
                         val groupQuality = qualityPerGroup[srcExt] ?: defaultQuality
-                        val isLossless = ConversionCapabilityManager.isLosslessCompatible(srcExt, targetFormat, file.mimeType)
+                        val isLossless = ConversionCapabilityManager.isLosslessCompatible(srcExt, targetFormat, filesInGroup.first().mimeType)
                         val effectiveQuality = if (groupQuality == 3 && !isLossless) 0 else groupQuality
 
-                        ConversionJobRequest(
-                            inputUri = file.uri,
-                            originalFileName = file.fileName,
-                            mimeType = file.mimeType,
-                            targetFormat = targetFormat,
-                            qualityPreset = effectiveQuality
-                        )
+                        val isImageToPdf = srcExt in listOf("png", "jpg", "jpeg", "webp") && targetFormat.equals("pdf", ignoreCase = true)
+                        val shouldMerge = isImageToPdf && filesInGroup.size > 1 && (pdfMergeOptionPerGroup[srcExt] ?: true)
+
+                        if (shouldMerge) {
+                            val first = filesInGroup.first()
+                            val extraUris = filesInGroup.drop(1).map { it.uri }
+                            val baseName = first.fileName.substringBeforeLast('.', "morph_merged")
+                            requests.add(
+                                ConversionJobRequest(
+                                    inputUri = first.uri,
+                                    originalFileName = "$baseName.pdf",
+                                    mimeType = "application/pdf",
+                                    targetFormat = "pdf",
+                                    qualityPreset = effectiveQuality,
+                                    extraInputUris = extraUris
+                                )
+                            )
+                        } else {
+                            filesInGroup.forEach { file ->
+                                requests.add(
+                                    ConversionJobRequest(
+                                        inputUri = file.uri,
+                                        originalFileName = file.fileName,
+                                        mimeType = file.mimeType,
+                                        targetFormat = targetFormat,
+                                        qualityPreset = effectiveQuality
+                                    )
+                                )
+                            }
+                        }
                     }
 
                     ConversionQueueManager.addJobs(requests)
@@ -407,8 +431,19 @@ fun BottomSheetConverter(
                     contentColor = MaterialTheme.colorScheme.onPrimary
                 )
             ) {
+                val isMergeActive = groupedFiles.any { (srcExt, files) ->
+                    srcExt in listOf("png", "jpg", "jpeg", "webp") &&
+                    (targetFormatPerGroup[srcExt] ?: "").equals("pdf", ignoreCase = true) &&
+                    files.size > 1 &&
+                    (pdfMergeOptionPerGroup[srcExt] ?: true)
+                }
+                val label = when {
+                    !isBatchMode -> "Konversi"
+                    isMergeActive -> "Gabung & Konversi (${selectedFiles.size} File)"
+                    else -> "Konversi (${selectedFiles.size} File)"
+                }
                 Text(
-                    text = if (isBatchMode) "Konversi (${selectedFiles.size} File)" else "Konversi",
+                    text = label,
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp
                 )
