@@ -161,7 +161,7 @@
 <p>Morph tersedia dalam bentuk paket instalasi Android (<code>.apk</code>) yang siap langsung dipasang tanpa perlu melakukan kompilasi kode sumber:</p>
 
 <ol>
-  <li>Buka halaman <a href="../../releases"><strong>Releases</strong></a> pada repositori ini.</li>
+  <li>Buka halaman <a href="https://github.com/RizkyFauzi06/Morph/releases"><strong>Releases</strong></a> pada repositori ini.</li>
   <li>Unduh berkas <code>Morph-v1.1.apk</code> (atau versi terbaru yang tersedia) pada bagian <strong>Assets</strong>.</li>
   <li>Buka berkas APK yang telah diunduh di perangkat Android Anda. Jika diminta, izinkan instalasi aplikasi dari sumber ini pada pengaturan peramban atau pengelola file Anda.</li>
   <li>Selesaikan proses instalasi dan buka <strong>Morph</strong>.</li>
