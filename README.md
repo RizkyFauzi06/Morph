@@ -6,7 +6,7 @@
   <p><strong>Offline File Converter for Android</strong></p>
 
   <p>
-    <strong>English</strong> &nbsp;|&nbsp; <a href="/Morph/README/README.id.md">Bahasa Indonesia</a>
+    <strong>English</strong> &nbsp;|&nbsp; <a href="README/README.id.md">Bahasa Indonesia</a>
   </p>
 
   <p>
