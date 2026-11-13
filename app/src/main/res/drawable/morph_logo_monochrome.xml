@@ -1,44 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="100dp"
     android:height="100dp"
-    android:viewportWidth="100"
-    android:viewportHeight="100">
-
-    <!-- Monochrome Morph Logo — white fill for notifications -->
-
-    <!-- LEFT ribbon -->
-    <path
-        android:pathData="
-            M 20,80
-            C 20,80 16,80 14,76
-            C 12,72 12,68 12,68
-            L 36,20
-            C 36,20 38,16 42,14
-            C 46,12 50,12 50,12
-            C 50,12 54,12 56,16
-            C 58,20 56,24 56,24
-            L 32,72
-            C 32,72 30,76 26,78
-            C 23,80 20,80 20,80 Z"
-        android:fillColor="#FFFFFFFF"
-        android:fillType="nonZero"/>
-
-    <!-- RIGHT ribbon -->
-    <path
-        android:pathData="
-            M 80,80
-            C 80,80 77,80 74,78
-            C 70,76 68,72 68,72
-            L 44,24
-            C 44,24 42,20 44,16
-            C 46,12 50,12 50,12
-            C 50,12 54,12 58,14
-            C 62,16 64,20 64,20
-            L 88,68
-            C 88,68 88,72 86,76
-            C 84,80 80,80 80,80 Z"
-        android:fillColor="#FFFFFFFF"
-        android:fillType="nonZero"/>
-
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+        <path
+            android:name="accent_ribbon"
+            android:pathData="M 50,76 L 76,29 L 96,76"
+            android:fillColor="#00000000"
+            android:strokeWidth="18"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:strokeColor="#FFFFFFFF" />
+        <path
+            android:name="primary_ribbon"
+            android:pathData="M 16,76 L 42,29 L 68,76"
+            android:fillColor="#00000000"
+            android:strokeWidth="18"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:strokeColor="#FFFFFFFF" />
 </vector>

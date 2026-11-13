@@ -1,25 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="96dp"
-    android:height="96dp"
-    android:viewportWidth="110"
-    android:viewportHeight="110">
-
-    <!-- Background full viewport -->
-    <path
-        android:pathData="M0,0h110v110h-110z"
-        android:fillColor="#6366F1" />
-
-    <!-- Gradient accent -->
-    <path
-        android:pathData="M55,0h27c9.94,0 18,8.06 18,18v27c0,9.94 -8.06,18 -18,18z"
-        android:fillColor="#EC4899" />
-
-    <!-- LOGO M: tetap gunakan path aslimu -->
-    <path
-        android:pathData="M31,74 L31,38 L54,60 L77,38 L77,74"
-        android:strokeWidth="8"
-        android:strokeColor="#FFFFFF"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
-
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="100dp"
+    android:height="100dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+        <path
+            android:name="accent_ribbon"
+            android:pathData="M 50,76 L 76,29 L 96,76"
+            android:fillColor="#00000000"
+            android:strokeWidth="18"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="50" android:startY="54"
+                    android:endX="96" android:endY="54">
+                <item android:color="#C45BC3" android:offset="0.0" />
+                <item android:color="#EC83D3" android:offset="0.55" />
+                <item android:color="#F3A0E0" android:offset="1.0" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <path
+            android:name="primary_ribbon"
+            android:pathData="M 16,76 L 42,29 L 68,76"
+            android:fillColor="#00000000"
+            android:strokeWidth="18"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="16" android:startY="54"
+                    android:endX="68" android:endY="54">
+                <item android:color="#B58AFF" android:offset="0.0" />
+                <item android:color="#7952E8" android:offset="0.5" />
+                <item android:color="#B58AFF" android:offset="1.0" />
+                </gradient>
+            </aapt:attr>
+        </path>
 </vector>

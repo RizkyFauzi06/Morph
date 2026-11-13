@@ -1,49 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="100dp"
     android:height="100dp"
-    android:viewportWidth="100"
-    android:viewportHeight="100">
-
-    <!--
-        Morph Logo — Ribbon M
-        Two overlapping rounded-capsule ribbons forming the letter M.
-        Left ribbon: Primary Purple (#7952E8)
-        Right ribbon: Accent Pink   (#EC83D3)
-    -->
-
-    <!-- LEFT ribbon (Purple) -->
-    <path
-        android:pathData="
-            M 20,80
-            C 20,80 16,80 14,76
-            C 12,72 12,68 12,68
-            L 36,20
-            C 36,20 38,16 42,14
-            C 46,12 50,12 50,12
-            C 50,12 54,12 56,16
-            C 58,20 56,24 56,24
-            L 32,72
-            C 32,72 30,76 26,78
-            C 23,80 20,80 20,80 Z"
-        android:fillColor="#FF7952E8"
-        android:fillType="nonZero"/>
-
-    <!-- RIGHT ribbon (Pink) -->
-    <path
-        android:pathData="
-            M 80,80
-            C 80,80 77,80 74,78
-            C 70,76 68,72 68,72
-            L 44,24
-            C 44,24 42,20 44,16
-            C 46,12 50,12 50,12
-            C 50,12 54,12 58,14
-            C 62,16 64,20 64,20
-            L 88,68
-            C 88,68 88,72 86,76
-            C 84,80 80,80 80,80 Z"
-        android:fillColor="#FFEC83D3"
-        android:fillType="nonZero"/>
-
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+        <path
+            android:name="accent_ribbon"
+            android:pathData="M 50,76 L 76,29 L 96,76"
+            android:fillColor="#00000000"
+            android:strokeWidth="18"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="50" android:startY="54"
+                    android:endX="96" android:endY="54">
+                <item android:color="#C45BC3" android:offset="0.0" />
+                <item android:color="#EC83D3" android:offset="0.55" />
+                <item android:color="#F3A0E0" android:offset="1.0" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <path
+            android:name="primary_ribbon"
+            android:pathData="M 16,76 L 42,29 L 68,76"
+            android:fillColor="#00000000"
+            android:strokeWidth="18"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="16" android:startY="54"
+                    android:endX="68" android:endY="54">
+                <item android:color="#B58AFF" android:offset="0.0" />
+                <item android:color="#7952E8" android:offset="0.5" />
+                <item android:color="#B58AFF" android:offset="1.0" />
+                </gradient>
+            </aapt:attr>
+        </path>
 </vector>
