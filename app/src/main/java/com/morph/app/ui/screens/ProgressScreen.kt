@@ -35,6 +35,7 @@ import com.morph.app.ui.components.MorphLogo
 fun ProgressScreen(
     onMinimize: () -> Unit,
     onFinish: () -> Unit,
+    onViewResult: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val queueState by ConversionQueueManager.queueState.collectAsState()
@@ -245,7 +246,7 @@ fun ProgressScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Button(
-                        onClick = onFinish,
+                        onClick = onViewResult,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp),

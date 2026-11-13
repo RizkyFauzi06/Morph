@@ -39,6 +39,11 @@ import com.morph.app.ui.components.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.ripple
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
 
 // ============================================================
 // HOME SCREEN — STATE MODEL
@@ -350,92 +355,93 @@ fun MorphEmptyFileState(
     onPickFileClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Pulse animation untuk outer ring
     val infiniteTransition = rememberInfiniteTransition(label = "emptyStatePulse")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = 1.06f,
+        targetValue = 1.04f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1800, easing = EaseInOut),
+            animation = tween(1800, easing = EaseInOut),
             repeatMode = RepeatMode.Reverse
         ),
         label = "pulseScale"
     )
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        // Circular action button — 124dp sesuai spec 112-136dp
+    Box(modifier = modifier.fillMaxSize()) {
+        // Folder illustration
         Box(
-            modifier = Modifier
-                .size(124.dp)
-                .scale(pulseScale)
-                .clip(CircleShape)
-                .background(
-                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                )
-                .clickable { onPickFileClick() },
+            modifier = Modifier.align(Alignment.Center).size(180.dp),
             contentAlignment = Alignment.Center
         ) {
-            // Inner circle
             Box(
                 modifier = Modifier
-                    .size(96.dp)
+                    .size(160.dp)
+                    .scale(pulseScale)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
+                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = ripple(bounded = true, radius = 80.dp)
+                    ) { onPickFileClick() },
                 contentAlignment = Alignment.Center
             ) {
-                // Folder icon
-                Icon(
-                    imageVector = Icons.Default.Folder,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(42.dp)
-                )
+                Box(modifier = Modifier.size(120.dp), contentAlignment = Alignment.Center) {
+                    // Main folder circle
+                    Box(
+                        modifier = Modifier.fillMaxSize().background(
+                            MaterialTheme.colorScheme.primaryContainer,
+                            CircleShape
+                        ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Folder,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(80.dp)
+                        )
+                    }
 
-                // Plus badge — pojok kanan bawah
-                Box(
-                    modifier = Modifier
-                        .size(26.dp)
-                        .align(Alignment.BottomEnd)
-                        .offset(x = 4.dp, y = 4.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(16.dp)
-                    )
+                    // Plus badge
+                    Box(
+                        modifier = Modifier.size(40.dp).align(Alignment.BottomEnd)
+                            .offset(x = 2.dp, y = 2.dp)
+                            .background(MaterialTheme.colorScheme.primary, CircleShape)
+                            .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        // Text below illustration
+        Column(
+            modifier = Modifier.align(Alignment.Center).offset(y = 120.dp)
+                .fillMaxWidth().padding(horizontal = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "Pilih File",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
 
-        Text(
-            text = "Pilih File",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center
-        )
+            Spacer(modifier = Modifier.height(8.dp))
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Pilih file dari perangkat untuk mulai mengonversi.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            lineHeight = MaterialTheme.typography.bodyMedium.lineHeight
-        )
+            Text(
+                text = "Pilih file dari perangkat untuk mulai mengonversi.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+        }
     }
 }
 

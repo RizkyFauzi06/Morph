@@ -37,8 +37,8 @@ private val LightColorScheme = lightColorScheme(
     surfaceVariant = MorphLightSurfaceVariant,
     onSurfaceVariant = MorphLightTextSecondary,
 
-    outline = MorphLightOutline,
-    outlineVariant = MorphLightOutline.copy(alpha = 0.6f),
+    outline = MorphSecondary.copy(alpha = 0.15f), // Garis tepi ungu sangat tipis dan bersih
+    outlineVariant = MorphSecondary.copy(alpha = 0.08f),
 
     error = MorphError,
     onError = Color.White,
@@ -74,8 +74,8 @@ private val DarkColorScheme = darkColorScheme(
     surfaceVariant = MorphDarkSurfaceVariant,
     onSurfaceVariant = MorphDarkTextSecondary,
 
-    outline = MorphDarkOutline,
-    outlineVariant = MorphDarkOutline.copy(alpha = 0.7f),
+    outline = MorphAccentPink.copy(alpha = 0.15f),
+    outlineVariant = MorphAccentPink.copy(alpha = 0.8f),
 
     error = Color(0xFFEF7F87),
     onError = Color(0xFF3D0A0E),

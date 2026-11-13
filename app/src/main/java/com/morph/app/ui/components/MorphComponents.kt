@@ -35,6 +35,7 @@ import java.text.DecimalFormat
 import kotlin.math.log10
 import kotlin.math.pow
 import com.morph.app.core.FileCategoryManager
+import androidx.compose.foundation.isSystemInDarkTheme
 
 // Shared visual constants
 private val CardRadius = 16.dp
@@ -441,8 +442,8 @@ fun FileHistoryItemCard(
     val ext = file.extension.uppercase()
 
     // Format-specific accent colors
-    val badgeColor = FileCategoryManager.getExtensionBadgeColor(file.extension)
-
+    val badgeColors = FileCategoryManager.getExtensionColors(file.extension,isSystemInDarkTheme())
+    
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -472,14 +473,14 @@ fun FileHistoryItemCard(
                 modifier = Modifier
                     .size(44.dp)
                     .clip(RoundedCornerShape(ControlRadius))
-                    .background(badgeColor.copy(alpha = 0.12f)),
+                    .background(badgeColors.background),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = ext.take(4),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
-                    color = badgeColor,
+                    color = badgeColors.icon,
                     maxLines = 1
                 )
             }

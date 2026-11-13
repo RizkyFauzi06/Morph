@@ -6,6 +6,8 @@ import android.net.Uri
 import android.os.Build
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -28,6 +31,11 @@ import com.morph.app.core.ConversionQueueManager
 import com.morph.app.core.SelectedFileItem
 import com.morph.app.ui.components.formatFileSize
 import com.morph.app.ui.theme.MorphInstantBolt
+import com.morph.app.core.FileCategoryManager
+import com.morph.app.ui.theme.MorphDarkBackground
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Description
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -45,6 +53,7 @@ fun BottomSheetConverter(
     val isBatchMode = selectedFiles.size > 1
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val context = LocalContext.current
+    val isDarkTheme = MaterialTheme.colorScheme.background == MorphDarkBackground
 
     val totalSize = remember(selectedFiles) { selectedFiles.sumOf { it.sizeBytes } }
 
@@ -89,49 +98,78 @@ fun BottomSheetConverter(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        containerColor = MaterialTheme.colorScheme.surface
+        containerColor = MaterialTheme.colorScheme.surface,
+        dragHandle = { BottomSheetDefaults.DragHandle() }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(top = 4.dp, bottom = 36.dp)
+                .padding(horizontal = 18.dp)
+                .padding(top = 4.dp, bottom = 24.dp)
                 .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Header
-            Text(
-                text = "Konversi File",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
             val subtitleText = if (isBatchMode) {
                 val sizeText = if (totalSize > 0) " • ${formatFileSize(totalSize)}" else ""
-                "${selectedFiles.size} file terpilih dalam ${groupedFiles.size} kelompok format$sizeText"
+                "${selectedFiles.size} file terpilih • ${groupedFiles.size} format$sizeText"
             } else {
                 val single = selectedFiles.first()
                 val sizeText = if (single.sizeBytes > 0) " • ${formatFileSize(single.sizeBytes)}" else ""
                 "${single.fileName}$sizeText"
             }
 
-            Text(
-                text = subtitleText,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    modifier = Modifier.size(42.dp),
+                    shape = RoundedCornerShape(13.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text("⇄", color = MaterialTheme.colorScheme.primary, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        "Konversi File",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        subtitleText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Surface(
+                    modifier = Modifier.size(34.dp).clickable { onDismiss() },
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text("×", fontSize = 23.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Text(
+                "Format Tujuan",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
 
             // Konfigurasi per kelompok format
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 groupedFiles.forEach { (srcExt, filesInGroup) ->
                     val sampleFile = filesInGroup.first()
@@ -142,70 +180,68 @@ fun BottomSheetConverter(
                     val isCurrentTargetLossless = remember(srcExt, currentTarget) {
                         ConversionCapabilityManager.isLosslessCompatible(srcExt, currentTarget, sampleFile.mimeType)
                     }
+                    val isImageSource = srcExt in listOf("png", "jpg", "jpeg", "webp", "bmp", "gif")
+                    val categoryLabel = if (isImageSource) "Gambar" else "Dokumen"
+                    val categoryIcon = if (isImageSource) Icons.Default.Image else Icons.Default.Description
 
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(18.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-                        ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                     ) {
                         Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
+                            modifier = Modifier.fillMaxWidth().padding(14.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            // Header grup sumber
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = MaterialTheme.colorScheme.primary
-                                    ) {
-                                        Text(
-                                            text = srcExt.uppercase(),
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onPrimary
+                           val categoryColors = FileCategoryManager.getCategoryColors(
+                                category = FileCategoryManager.getCategory(srcExt),
+                                isDarkTheme = isDarkTheme
+                            )
+                            // Category header
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    modifier = Modifier.size(38.dp),
+                                    shape = RoundedCornerShape(11.dp),
+                                    color = categoryColors.background
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = categoryIcon,
+                                            contentDescription = categoryLabel,
+                                            modifier = Modifier.size(22.dp),
+                                            tint = categoryColors.icon
                                         )
                                     }
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                }
+                                Spacer(Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                    Text(categoryLabel, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                                     Text(
-                                        text = "${filesInGroup.size} file",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface
+                                        "${srcExt.uppercase()} • ${filesInGroup.size} file${if (filesInGroup.size > 1) " terpilih" else ""}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-
-                                if (currentTarget.isNotEmpty()) {
+                                Surface(
+                                    shape = RoundedCornerShape(50),
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+                                ) {
                                     Text(
-                                        text = "Target: ${currentTarget.uppercase()}",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.SemiBold,
+                                        currentTarget.uppercase().ifBlank { "PILIH" },
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                 }
                             }
 
-                            // Format tujuan — Horizontal Chips
-                            Text(
-                                text = "Format Tujuan",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-
+                            // Target format chips
                             FlowRow(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(7.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 availableTargets.forEach { targetOption ->
@@ -216,30 +252,22 @@ fun BottomSheetConverter(
                                         selected = isSelected,
                                         onClick = { targetFormatPerGroup[srcExt] = targetOption },
                                         label = {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                            ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                                 Text(
-                                                    text = targetOption.uppercase(),
+                                                    targetOption.uppercase(),
                                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                                    fontSize = 12.sp
+                                                    fontSize = 11.sp
                                                 )
-                                                if (supportsInstant) {
-                                                    Text(
-                                                        text = "⚡",
-                                                        color = MorphInstantBolt,
-                                                        fontSize = 12.sp
-                                                    )
-                                                }
+                                                if (supportsInstant) Text("⚡", color = MorphInstantBolt, fontSize = 11.sp)
                                             }
                                         },
-                                        shape = RoundedCornerShape(10.dp),
+                                        shape = RoundedCornerShape(50),
                                         colors = FilterChipDefaults.filterChipColors(
+                                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
                                             selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                                             selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
                                         ),
-                                        border = if (isSelected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null
+                                        border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
                                     )
                                 }
                             }
@@ -248,54 +276,28 @@ fun BottomSheetConverter(
                             val isImageToPdf = srcExt in listOf("png", "jpg", "jpeg", "webp") && currentTarget.equals("pdf", ignoreCase = true)
                             if (isImageToPdf && filesInGroup.size > 1) {
                                 val isMerge = pdfMergeOptionPerGroup[srcExt] ?: true
-                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Text(
-                                        text = "Opsi PDF",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(13.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                ) {
                                     Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        modifier = Modifier.fillMaxWidth().padding(start = 11.dp, end = 8.dp, top = 7.dp, bottom = 7.dp),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        FilterChip(
-                                            selected = isMerge,
-                                            onClick = { pdfMergeOptionPerGroup[srcExt] = true },
-                                            label = {
-                                                Text(
-                                                    text = "Gabung 1 PDF",
-                                                    fontWeight = if (isMerge) FontWeight.Bold else FontWeight.Normal
-                                                )
-                                            },
-                                            shape = RoundedCornerShape(10.dp),
-                                            modifier = Modifier.weight(1f),
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                            )
-                                        )
-                                        FilterChip(
-                                            selected = !isMerge,
-                                            onClick = { pdfMergeOptionPerGroup[srcExt] = false },
-                                            label = {
-                                                Text(
-                                                    text = "Pisah PDF",
-                                                    fontWeight = if (!isMerge) FontWeight.Bold else FontWeight.Normal
-                                                )
-                                            },
-                                            shape = RoundedCornerShape(10.dp),
-                                            modifier = Modifier.weight(1f),
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                            )
+                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                            Text("Gabung menjadi satu PDF", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                                            Text("Jika ada banyak file PNG.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Switch(
+                                            checked = isMerge,
+                                            onCheckedChange = { pdfMergeOptionPerGroup[srcExt] = it }
                                         )
                                     }
                                 }
                             }
 
-                            // Kualitas Konversi per grup
+                            // Kualitas konversi
                             val currentQuality = qualityPerGroup[srcExt] ?: defaultQuality
                             val qualityOptions = if (isCurrentTargetLossless) {
                                 listOf(Pair("Rendah", 2), Pair("Sedang", 1), Pair("Tinggi", 0), Pair("Instan", 3))
@@ -303,14 +305,16 @@ fun BottomSheetConverter(
                                 listOf(Pair("Rendah", 2), Pair("Sedang", 1), Pair("Tinggi", 0))
                             }
 
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(
-                                    text = "Kualitas Konversi",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-
+                            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    Text(
+                                        "Kualitas",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text("ⓘ", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                                }
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -318,55 +322,84 @@ fun BottomSheetConverter(
                                     qualityOptions.forEach { (label, qIdx) ->
                                         val isSelected = currentQuality == qIdx
                                         Surface(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .clickable { qualityPerGroup[srcExt] = qIdx },
-                                            shape = RoundedCornerShape(10.dp),
-                                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                                            border = if (isSelected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                            modifier = Modifier.weight(1f).height(38.dp).clickable { qualityPerGroup[srcExt] = qIdx },
+                                            shape = RoundedCornerShape(50),
+                                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                            border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                                         ) {
                                             Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(vertical = 8.dp),
+                                                modifier = Modifier.fillMaxSize().padding(horizontal = 3.dp),
                                                 horizontalArrangement = Arrangement.Center,
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                if (qIdx == 3) {
-                                                    Text(text = "⚡ ", color = MorphInstantBolt, fontSize = 12.sp)
-                                                }
+                                                if (qIdx == 3) Text("⚡", color = MorphInstantBolt, fontSize = 11.sp)
                                                 Text(
-                                                    text = label,
+                                                    label,
                                                     style = MaterialTheme.typography.labelSmall,
                                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 1
                                                 )
                                             }
                                         }
                                     }
                                 }
+                            }
 
-                                if (!isCurrentTargetLossless && currentQuality == 3) {
-                                    Text(
-                                        text = "Instant tidak tersedia untuk format ini. Morph menggunakan kualitas tertinggi.",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
+                            // Info Lossless/Instant
+                            if (isCurrentTargetLossless) {
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = Color(0xFFFFF3E8)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 11.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text("⚡", color = MorphInstantBolt, fontSize = 15.sp)
+                                        Text(
+                                            "Lossless (Instan) didukung untuk ${srcExt.uppercase()} → ${currentTarget.uppercase()}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFF8A572A)
+                                        )
+                                    }
                                 }
+                            }
+
+                            if (!isCurrentTargetLossless && currentQuality == 3) {
+                                Text(
+                                    "Instant tidak tersedia untuk format ini. Morph menggunakan kualitas tertinggi.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
                             }
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
-
             // Validasi & CTA
             val allGroupsConfigured = groupedFiles.keys.all { key ->
                 !targetFormatPerGroup[key].isNullOrBlank()
             }
 
-            Button(
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.82f),
+                                MaterialTheme.colorScheme.primary
+                            )
+                        )
+                    )
+            ) {
+                Button(
                 onClick = {
                     val requests = mutableListOf<ConversionJobRequest>()
 
@@ -422,13 +455,18 @@ fun BottomSheetConverter(
                     onConvertStarted()
                 },
                 enabled = allGroupsConfigured,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
+                modifier = Modifier.fillMaxWidth().height(56.dp),
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
+                    containerColor = Color.Transparent,
+                    contentColor = Color.White,
+                    disabledContainerColor = Color.Transparent,
+                    disabledContentColor = Color.White.copy(alpha = 0.55f)
+                ),
+                elevation = ButtonDefaults.buttonElevation(
+                    defaultElevation = 0.dp,
+                    pressedElevation = 0.dp,
+                    disabledElevation = 0.dp
                 )
             ) {
                 val isMergeActive = groupedFiles.any { (srcExt, files) ->
@@ -442,11 +480,11 @@ fun BottomSheetConverter(
                     isMergeActive -> "Gabung & Konversi (${selectedFiles.size} File)"
                     else -> "Konversi (${selectedFiles.size} File)"
                 }
-                Text(
-                    text = label,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("▶", fontSize = 15.sp)
+                    Text(text = label, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                }
+            }
             }
         }
     }

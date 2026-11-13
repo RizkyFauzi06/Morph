@@ -251,6 +251,16 @@ class MainActivity : ComponentActivity() {
                                 onFinish = {
                                     showProgressScreen = false
                                     refreshFiles()
+                                }, onViewResult = { // <--- TAMBAHKAN BLOK INI
+                                    showProgressScreen = false
+                                    refreshFiles()
+                                    // Ambil file yang baru saja selesai dikonversi
+                                    val latestFile = getMorphFiles().firstOrNull()
+                                    if (latestFile != null) {
+                                        openFileDirectly(context, latestFile) // Memanggil chooser bawaan aplikasimu
+                                    } else {
+                                        Toast.makeText(context, "File tidak ditemukan", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             )
                         } else {

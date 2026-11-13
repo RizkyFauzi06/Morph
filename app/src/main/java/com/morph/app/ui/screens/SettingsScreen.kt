@@ -19,6 +19,8 @@ import androidx.compose.ui.unit.sp
 import com.morph.app.MorphPrefs
 import com.morph.app.ui.components.MorphLogo
 import com.morph.app.ui.components.MorphScreenHeader
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material3.Surface
 
 @Composable
 fun SettingsScreen(
@@ -61,14 +63,14 @@ fun SettingsScreen(
                         Triple("Terang", 1, "☀️"),
                         Triple("Gelap", 2, "🌙"),
                         Triple("Sistem", 0, "📱")
-                    ).forEach { (title, idx, _) ->
+                    ).forEach { (title, idx, emoji) ->
                         val isSelected = currentTheme == idx
                         FilterChip(
                             selected = isSelected,
                             onClick = { onThemeChange(idx) },
                             label = {
                                 Text(
-                                    text = title,
+                                    text = "$emoji $title",
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
                                 )
@@ -97,9 +99,9 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // Urutan sesuai spec: Rendah, Sedang, Tinggi, Instan
-                Row(
+               Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp) // Kecilkan sedikit jaraknya
                 ) {
                     listOf(
                         Pair("Rendah", 2),
@@ -108,26 +110,25 @@ fun SettingsScreen(
                         Pair("Instan", 3)
                     ).forEach { (title, idx) ->
                         val isSelected = qualityPreset == idx
-                        FilterChip(
-                            selected = isSelected,
+                        Surface(
+                            modifier = Modifier.weight(1f), // Tetap pakai weight agar terbagi rata 4
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
                             onClick = {
                                 qualityPreset = idx
                                 prefs.qualityPreset = idx
-                            },
-                            label = {
-                                Text(
-                                    text = title,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                                )
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(1f),
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                            }
+                        ) {
+                            Text(
+                                text = title,
+                                modifier = Modifier.padding(vertical = 8.dp), // Hanya padding atas-bawah
+                                textAlign = TextAlign.Center, // Teks otomatis ke tengah
+                                style = MaterialTheme.typography.labelMedium, // Pakai ukuran yang sedikit lebih kecil
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                maxLines = 1
                             )
-                        )
+                        }
                     }
                 }
 
@@ -136,8 +137,8 @@ fun SettingsScreen(
                 val desc = when (qualityPreset) {
                     0 -> "Tinggi: bitrate 100% dipertahankan tanpa kompresi tambahan."
                     1 -> "Sedang: kompresi seimbang, ukuran berkurang ~50%."
-                    2 -> "Rendah: kompresi agresif untuk hemat ruang dan kuota."
-                    3 -> "Instan: stream copy cepat tanpa re-encode (kualitas asli, format kompatibel)."
+                    2 -> "Rendah: kompresi agresif untuk hemat ruang."
+                    3 -> "Instan: stream copy cepat tanpa re-encode (kualitas asli, hanya untuk format yang kompatibel)."
                     else -> ""
                 }
                 if (desc.isNotEmpty()) {
