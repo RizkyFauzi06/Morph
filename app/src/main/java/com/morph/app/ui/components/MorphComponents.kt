@@ -1,10 +1,10 @@
 
 package com.morph.app.ui.components
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -568,6 +569,8 @@ fun FileHistoryItemCard(
 
 // --------------------------------------------------
 // EMPTY HISTORY STATE
+// Sesuai MORPH_UI_UX_SPEC.md Section 7.3
+// Circular 124dp action element with pulse animation
 // --------------------------------------------------
 
 @Composable
@@ -575,6 +578,18 @@ fun EmptyHistoryState(
     onPickFileClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Pulse animation untuk outer ring
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.04f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800, easing = EaseInOut),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse_scale"
+    )
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -582,78 +597,80 @@ fun EmptyHistoryState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // Illustration / focal point
+        // Circular action element — 124dp sesuai spec §7.3
         Box(
             modifier = Modifier
-                .size(76.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(
-                    MaterialTheme.colorScheme.primaryContainer.copy(
-                        alpha = 0.65f
-                    )
-                ),
+                .size(124.dp)
+                .scale(scale)
+                .clip(CircleShape)
+                .clickable { onPickFileClick() },
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = Icons.Default.FolderOpen,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(34.dp)
+            // Outer ring — border circle with subtle stroke
+            Box(
+                modifier = Modifier
+                    .size(124.dp)
+                    .clip(CircleShape)
+                    .border(
+                        BorderStroke(1.5.dp, MaterialTheme.colorScheme.primaryContainer),
+                        CircleShape
+                    )
             )
+
+            // Inner filled circle
+            Box(
+                modifier = Modifier
+                    .size(100.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)),
+                contentAlignment = Alignment.Center
+            ) {
+                // Folder icon
+                Icon(
+                    imageVector = Icons.Default.FolderOpen,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(40.dp)
+                )
+
+                // Plus badge — pojok kanan bawah folder icon
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .align(Alignment.BottomEnd)
+                        .offset(x = 2.dp, y = 2.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
+            }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Belum Ada File Terkonversi",
+            text = "Pilih File Anda",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
         Text(
-            text = "Pilih file dari HP atau bagikan langsung dari galeri untuk memulai konversi pertamamu.",
-            style = MaterialTheme.typography.bodySmall,
+            text = "Ketuk untuk memilih file\natau gunakan menu Share",
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            lineHeight = MaterialTheme.typography.bodySmall.lineHeight
+            textAlign = TextAlign.Center
         )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Button(
-            onClick = onPickFileClick,
-            shape = RoundedCornerShape(ButtonRadius),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ),
-            contentPadding = PaddingValues(
-                horizontal = 20.dp,
-                vertical = 12.dp
-            ),
-            elevation = ButtonDefaults.buttonElevation(
-                defaultElevation = 0.dp,
-                pressedElevation = 1.dp
-            )
-        ) {
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            Text(
-                text = "Pilih File Sekarang",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
     }
 }
 
