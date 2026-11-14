@@ -11,7 +11,7 @@
 
   <p>
     <a href="https://github.com/RizkyFauzi06/Morph/releases"><img src="https://img.shields.io/badge/Download-APK-7952E8?style=flat-square&logo=android&logoColor=white" alt="Download APK" /></a>
-    <img src="https://img.shields.io/badge/Android-8.0%2B%20(API%2026%2B)-249B69?style=flat-square" alt="Android 8.0+" />
+    <img src="https://img.shields.io/badge/Android-8.0%2B%20(API%2026%2B)-249B69?style=flat-square&logo=android&logoColor=white" alt="Android 8.0+" />
     <img src="https://img.shields.io/badge/Kotlin-100%25-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Kotlin" />
     <img src="https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white" alt="Jetpack Compose" />
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-555555?style=flat-square" alt="License GPL-3.0" /></a>
@@ -21,6 +21,7 @@
     <a href="#features">Features</a> &nbsp;&bull;&nbsp;
     <a href="#supported-formats">Supported Formats</a> &nbsp;&bull;&nbsp;
     <a href="#installation">Installation</a> &nbsp;&bull;&nbsp;
+    <a href="#how-to-use">How to Use</a> &nbsp;&bull;&nbsp;
     <a href="#privacy--permissions">Privacy &amp; Permissions</a> &nbsp;&bull;&nbsp;
     <a href="#tech-stack--license">Tech Stack &amp; License</a>
   </p>
@@ -42,14 +43,14 @@
       <p>Every conversion, audio extraction, and document operation runs 100% locally on your device, ensuring your files never leave your phone. Minimal internet access is used solely to check for new GitHub releases (optional).</p>
     </td>
     <td width="50%" valign="top">
-      <h3>Smart Batch Conversion</h3>
-      <p>Select multiple files of different types in one session. Morph automatically groups files by source format so you can assign independent target formats and quality presets per group.</p>
+      <h3>Grouped Batch Processing</h3>
+      <p>Select multiple files of different types in one session. Morph automatically groups files by source extension so you can assign independent target formats and quality presets per group.</p>
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <h3>System-Wide Share Integration</h3>
-      <p>Convert files directly from your Gallery, File Manager, or messaging apps using Android's native <strong>Share</strong> menu. Supporting both single and multiple file sharing.</p>
+      <h3>Share to Convert</h3>
+      <p>Trigger conversions directly from your Gallery, File Manager, or messaging apps via Android's native <strong>Share</strong> sheet. Supports both single and multiple file sharing.</p>
     </td>
     <td width="50%" valign="top">
       <h3>Background Queue &amp; Notifications</h3>
@@ -58,7 +59,7 @@
   </tr>
 </table>
 
-<h2>Interface & Workflow Preview</h2>
+<h2>Interface &amp; Workflow Preview</h2>
 
 <div align="center">
   <table>
@@ -66,7 +67,7 @@
       <td width="50%" align="center" valign="top">
         <img src="assets/Homescreen.jpg" alt="Morph Homescreen" width="260" />
         <br /><br />
-        <strong>Homescreen & File History</strong>
+        <strong>Homescreen &amp; File History</strong>
         <br />
         <sub>Quick file picker, category filters (Documents, Images, Video, Audio), and local conversion history management.</sub>
       </td>
@@ -174,7 +175,7 @@
 </p>
 <ol>
   <li>Go to the <a href="https://github.com/RizkyFauzi06/Morph/releases"><strong>Releases</strong></a> section of this repository.</li>
- <li>Download the latest <code>Morph-v*.apk</code> from <a href="https://github.com/RizkyFauzi06/Morph/releases/latest">GitHub Releases</a>.</li>
+  <li>Download the latest <code>Morph-v*.apk</code> from <a href="https://github.com/RizkyFauzi06/Morph/releases/latest">GitHub Releases</a>.</li>
   <li>Open the downloaded APK on your Android device (Android 8.0 or newer) and allow installation from your browser or file manager if prompted.</li>
 </ol>
 
@@ -184,7 +185,7 @@
 </p>
 
 ```bash
-git clone https://github.com/RizkyFauzi06/Morph.git
+git clone [https://github.com/RizkyFauzi06/Morph.git](https://github.com/RizkyFauzi06/Morph.git)
 cd Morph
 
 # Compile Debug APK
@@ -197,31 +198,31 @@ cd Morph
 
 <h2 id="how-to-use">How to Use</h2>
 
-<h3>1. Convert Directly Inside Morph</h3>
+<h3>1. Convert Directly via Homescreen</h3>
 <ol>
-  <li>Open <strong>Morph</strong> and tap <strong>Select File</strong> on the <strong>Home</strong> screen.</li>
-  <li>Pick one or multiple files from your device (videos, audio, images, SVGs, PDFs, or EPUBs).</li>
+  <li>Open <strong>Morph</strong> and tap <strong>Select File</strong> on the <strong>Homescreen</strong>.</li>
+  <li>Pick one or multiple files from your device (videos, audio, images, web formats like WebP/WebM/SVG, PDFs, or EPUBs).</li>
   <li>Choose your <strong>Target Format</strong> and <strong>Quality Preset</strong> (<strong>High</strong>, <strong>Medium</strong>, <strong>Low</strong>, or <strong>Instant</strong> lossless stream copy for compatible media).</li>
   <li><em>(Optional)</em> Toggle <strong>Merge into a single PDF</strong> when selecting multiple images.</li>
-  <li>Tap <strong>Convert</strong>. Tasks run reliably in the background, and all converted files are saved to <code>Downloads/Morph</code>.</li>
+  <li>Tap <strong>Convert</strong>. Tasks run reliably via <strong>Background Queue &amp; Notifications</strong>, and all converted files are saved to <code>Downloads/Morph</code>.</li>
 </ol>
 
-<h3>2. Share from Other Apps (Share-to-Morph)</h3>
+<h3>2. Share from Other Apps (Share to Convert)</h3>
 <ol>
   <li>Select one or more files in your <strong>Gallery</strong>, <strong>File Manager</strong>, or any app that supports file sharing.</li>
   <li>Tap Android's <strong>Share</strong> button and choose <strong>Morph</strong>.</li>
   <li>Select your target format in the pop-up sheet and tap <strong>Convert</strong> without leaving your current app.</li>
 </ol>
 
-<h3>3. Manage Your Outputs</h3>
+<h3>3. Manage Your File History</h3>
 <ul>
-  <li>Filter converted files by category on the <strong>Home</strong> screen, or tap any item to open, share, or delete it.</li>
+  <li>Filter converted files by category on the <strong>Homescreen</strong>, or tap any item in your <strong>File History</strong> to open, share, or delete it.</li>
   <li>Enable <strong>Auto-Close (Share)</strong> or <strong>Keep Original Filename</strong> in <strong>Settings</strong> to customize your workflow.</li>
 </ul>
 
 <h2 id="privacy--permissions">Privacy &amp; Permissions</h2>
 
-<p><strong>100% Local Conversion Engine:</strong> All file conversions, media transcoding, and document parsing run entirely on your device. Morph has no backend servers, no analytics, and never uploads your files.</p>
+<p><strong>Offline Engine &amp; Private:</strong> All file conversions, media transcoding, and document parsing run 100% locally on your device. Morph has no backend servers, no analytics, and never uploads your files.</p>
 
 <table>
   <thead>
@@ -263,12 +264,11 @@ cd Morph
     <ul>
       <li><strong>FFmpegKit Full (8.1.7)</strong> — Audio/video processing (License: <strong>GPL-3.0 / LGPL-3.0</strong>).</li>
       <li><strong>AndroidSVG (1.4)</strong> by Paul LeBeau — SVG vector graphics rendering (License: <strong>Apache License 2.0</strong>).</li>
-      <li><strong>Android Native SDK</strong> — <code>PdfRenderer</code>, <code>PdfDocument</code>, &amp; <code>java.util.zip</code> for PDF and EPUB/ZIP archive processing.</li>
+      <li><strong>Android Native SDK</strong> — <code>PdfRenderer</code>, <code>PdfDocument</code>, &amp; <code>java.util.zip</code> for PDF rendering and EPUB parsing.</li>
     </ul>
   </li>
   <li><strong>Morph Project License:</strong> Distributed under the <a href="LICENSE"><strong>GNU General Public License v3.0 (GPL-3.0)</strong></a>.</li>
 </ul>
-
 
 <hr />
 
