@@ -28,6 +28,7 @@ import com.morph.app.core.AppStrings
 import com.morph.app.core.EnglishStrings
 import com.morph.app.core.IndonesianStrings
 import com.morph.app.ui.components.MorphScreenHeader
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(
@@ -65,6 +66,11 @@ fun SettingsScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+    
+    //update
+    val coroutineScope = rememberCoroutineScope()
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+    var autoCheckUpdates by remember { mutableStateOf(prefs.autoCheckUpdates) }
 
     LazyColumn(
         modifier = modifier
@@ -302,6 +308,7 @@ fun SettingsScreen(
                         )
                     }
                     
+                    // battery
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
                     Row(
                         modifier = Modifier
@@ -324,6 +331,37 @@ fun SettingsScreen(
                                 color = if (isBatteryOk) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                             )
                         }
+                    }
+                    
+                    // update
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                                Text(
+                                    text = strings.autoCheckUpdatesTitle,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = strings.autoCheckUpdatesDesc,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = autoCheckUpdates,
+                                onCheckedChange = {
+                                autoCheckUpdates = it
+                                prefs.autoCheckUpdates = it
+                            }
+                        )
                     }
                 }
             }
@@ -366,7 +404,6 @@ fun SettingsScreen(
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
                     )
-
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -405,6 +442,62 @@ fun SettingsScreen(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    
+                    //update
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(enabled = !isCheckingUpdate) {
+                                    isCheckingUpdate = true
+                                    coroutineScope.launch {
+                                        val res = com.morph.app.core.UpdateChecker.checkForUpdates(context)
+                                        isCheckingUpdate = false
+                                        when (res) {
+                                            is com.morph.app.core.UpdateCheckResult.UpdateAvailable -> {
+                                                val intent = android.content.Intent(
+                                                    android.content.Intent.ACTION_VIEW,
+                                                    android.net.Uri.parse(res.release.htmlUrl)
+                                                )
+                                                context.startActivity(intent)
+                                            }
+                                            is com.morph.app.core.UpdateCheckResult.UpToDate -> {
+                                                Toast.makeText(context, strings.upToDateToast, Toast.LENGTH_SHORT).show()
+                                            }
+                                            is com.morph.app.core.UpdateCheckResult.Error -> {
+                                                Toast.makeText(context, strings.checkUpdatesFailedToast, Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
+                                }
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = strings.checkUpdatesTitle,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = if (isCheckingUpdate) strings.checkingUpdatesSubtitle else strings.checkUpdatesSubtitle,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (isCheckingUpdate) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    
                 }
             }
         }

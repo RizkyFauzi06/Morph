@@ -37,4 +37,12 @@ class MorphPrefs(context: Context) {
     var dismissBatteryWarning: Boolean
         get() = prefs.getBoolean("dismiss_battery_warning", false)
         set(value) = prefs.edit().putBoolean("dismiss_battery_warning", value).apply()
+        
+        var autoCheckUpdates: Boolean
+        get() = prefs.getBoolean("auto_check_updates", true)
+        set(value) = prefs.edit().putBoolean("auto_check_updates", value).apply()
+
+    var dismissedUpdateTag: String
+        get() = prefs.getString("dismissed_update_tag", "") ?: ""
+        set(value) = prefs.edit().putString("dismissed_update_tag", value).apply()
 }

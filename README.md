@@ -197,6 +197,8 @@ cd Morph
 
 <h2 id="privacy--permissions">Privacy &amp; Permissions</h2>
 
+<p><strong>100% Local Conversion Engine:</strong> All file conversions, media transcoding, and document parsing run entirely on your device. Morph has no backend servers, no analytics, and never uploads your files.</p>
+
 <table>
   <thead>
     <tr>
@@ -206,6 +208,11 @@ cd Morph
     </tr>
   </thead>
   <tbody>
+    <tr>
+      <td><code>INTERNET</code></td>
+      <td>Used <strong>exclusively</strong> to check for new app releases via the GitHub API (can be disabled in Settings). Never used during file conversion.</td>
+      <td align="center">Optional</td>
+    </tr>
     <tr>
       <td><code>POST_NOTIFICATIONS</code></td>
       <td>Displays real-time conversion queue progress and completion alerts on Android 13+.</td>
@@ -220,11 +227,6 @@ cd Morph
       <td><code>Unrestricted Battery Usage</code> <em>(System Setting)</em></td>
       <td>Prevents Android's battery saver from terminating long video or audio conversions in the background (configured manually via App Info).</td>
       <td align="center">Recommended</td>
-    </tr>
-    <tr>
-      <td><code>INTERNET</code></td>
-      <td><strong>Completely omitted.</strong> Morph cannot connect to the internet or transmit user data.</td>
-      <td align="center">Not Used</td>
     </tr>
   </tbody>
 </table>

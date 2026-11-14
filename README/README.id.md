@@ -179,6 +179,8 @@ cd Morph
 
 <h2 id="privasi--izin">Privasi &amp; Izin</h2>
 
+<p><strong>Mesin Konversi 100% Lokal:</strong> Seluruh proses konversi file, pemrosesan media, dan pembacaan dokumen berjalan sepenuhnya di perangkat Anda. Morph tidak memiliki server backend, tidak mengumpulkan analitik, dan tidak pernah mengunggah file Anda ke internet.</p>
+
 <table>
   <thead>
     <tr>
@@ -188,6 +190,11 @@ cd Morph
     </tr>
   </thead>
   <tbody>
+    <tr>
+      <td><code>INTERNET</code></td>
+      <td>Digunakan <strong>khusus</strong> untuk memeriksa ketersediaan versi baru melalui GitHub API (dapat dimatikan di Setelan). Tidak pernah digunakan saat proses konversi file.</td>
+      <td align="center">Opsional</td>
+    </tr>
     <tr>
       <td><code>POST_NOTIFICATIONS</code></td>
       <td>Menampilkan progres antrean konversi secara waktu nyata dan notifikasi selesai pada Android 13+.</td>
@@ -202,11 +209,6 @@ cd Morph
       <td><code>Penggunaan Baterai Tidak Dibatasi</code> <em>(Setelan Sistem)</em></td>
       <td>Mencegah penghemat baterai Android menghentikan paksa konversi video atau audio berdurasi panjang di latar belakang (diatur manual melalui Info Aplikasi).</td>
       <td align="center">Direkomendasikan</td>
-    </tr>
-    <tr>
-      <td><code>INTERNET</code></td>
-      <td><strong>Dihilangkan sepenuhnya.</strong> Morph tidak dapat terhubung ke internet maupun mengirimkan data pengguna.</td>
-      <td align="center">Tidak Digunakan</td>
     </tr>
   </tbody>
 </table>

@@ -276,6 +276,22 @@ interface Strings {
     val epubErrNoChapterText: String
     val epubBookTitlePrefix: String
     val epubBookAuthorPrefix: String
+    
+    
+    // App Update Checker
+    fun updateAvailableTitle(tag: String): String
+    val updateAvailableDesc: String
+    val btnDownload: String
+    val updateDialogTitle: String
+    val updateDefaultReleaseNotes: String
+    val btnDownloadApk: String
+    val autoCheckUpdatesTitle: String
+    val autoCheckUpdatesDesc: String
+    val checkUpdatesTitle: String
+    val checkingUpdatesSubtitle: String
+    val checkUpdatesSubtitle: String
+    val upToDateToast: String
+    val checkUpdatesFailedToast: String
 }
 
 object IndonesianStrings : Strings {
@@ -537,6 +553,20 @@ object IndonesianStrings : Strings {
     override val epubErrNoChapterText = "Tidak ditemukan teks bab yang dapat dibaca dalam urutan Spine EPUB."
     override val epubBookTitlePrefix = "JUDUL: "
     override val epubBookAuthorPrefix = "PENULIS: "
+    
+    override fun updateAvailableTitle(tag: String) = "Pembaruan Tersedia ($tag)"
+    override val updateAvailableDesc = "Versi terbaru Morph sudah tersedia di GitHub Releases."
+    override val btnDownload = "Unduh"
+    override val updateDialogTitle = "Versi Baru Tersedia"
+    override val updateDefaultReleaseNotes = "Perbaikan bug dan peningkatan performa."
+    override val btnDownloadApk = "Unduh APK"
+    override val autoCheckUpdatesTitle = "Cek Pembaruan Otomatis"
+    override val autoCheckUpdatesDesc = "Periksa rilis baru di GitHub saat aplikasi dibuka. Semua konversi file tetap 100% offline."
+    override val checkUpdatesTitle = "Periksa Pembaruan"
+    override val checkingUpdatesSubtitle = "Memeriksa rilis di GitHub..."
+    override val checkUpdatesSubtitle = "Cek rilis terbaru di GitHub"
+    override val upToDateToast = "Anda sudah menggunakan versi terbaru."
+    override val checkUpdatesFailedToast = "Gagal memeriksa pembaruan (periksa koneksi)."
 }
 
 object EnglishStrings : Strings {
@@ -798,6 +828,20 @@ object EnglishStrings : Strings {
     override val epubErrNoChapterText = "No readable chapter text found in EPUB Spine."
     override val epubBookTitlePrefix = "TITLE: "
     override val epubBookAuthorPrefix = "AUTHOR: "
+    
+    override fun updateAvailableTitle(tag: String) = "Update Available ($tag)"
+    override val updateAvailableDesc = "A newer version of Morph is ready on GitHub Releases."
+    override val btnDownload = "Download"
+    override val updateDialogTitle = "New Version Available"
+    override val updateDefaultReleaseNotes = "Bug fixes and performance improvements."
+    override val btnDownloadApk = "Download APK"
+    override val autoCheckUpdatesTitle = "Auto-Check Updates"
+    override val autoCheckUpdatesDesc = "Check GitHub Releases when opening Morph. All file conversions remain 100% offline."
+    override val checkUpdatesTitle = "Check for Updates"
+    override val checkingUpdatesSubtitle = "Checking GitHub Releases..."
+    override val checkUpdatesSubtitle = "Check latest release on GitHub"
+    override val upToDateToast = "You are using the latest version."
+    override val checkUpdatesFailedToast = "Unable to check updates (check your connection)."
 }
 
 val LocalAppStrings = staticCompositionLocalOf<Strings> { IndonesianStrings }

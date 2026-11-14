@@ -160,6 +160,20 @@ fun HomeScreen(
         filteredFiles.isEmpty() -> HomeHistoryState.FilteredEmpty
         else -> HomeHistoryState.HistoryAvailable(filteredFiles)
     }
+    
+    //Update Notification 
+    var availableRelease by remember { mutableStateOf<com.morph.app.core.ReleaseInfo?>(null) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) {
+            if (prefs.autoCheckUpdates) {
+                val result = com.morph.app.core.UpdateChecker.checkForUpdates(context)
+                if (result is com.morph.app.core.UpdateCheckResult.UpdateAvailable &&
+                    result.release.tagName != prefs.dismissedUpdateTag
+                ) {
+                    availableRelease = result.release
+                }
+            }
+        }
 
     Box(
         modifier = modifier
@@ -231,7 +245,7 @@ fun HomeScreen(
                     NotificationPermissionBanner(onRequestPermission = onRequestPermission)
                 }
             }
-            
+            // Battery
             if (!batteryUnrestricted && !batteryBannerDismissed) {
                 item {
                     Card(
@@ -295,6 +309,77 @@ fun HomeScreen(
                     }
                 }
             }
+            
+            //Update
+            availableRelease?.let { release ->
+                item(key = "app_update_banner") {
+                    Card(
+                        onClick = { showUpdateDialog = true },
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f)
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.SystemUpdate,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = strings.updateAvailableTitle(release.tagName),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                    Text(
+                                        text = strings.updateAvailableDesc,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                                    )
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TextButton(
+                                    onClick = {
+                                        prefs.dismissedUpdateTag = release.tagName
+                                        availableRelease = null
+                                    }
+                                ) {
+                                    Text(strings.btnLater, fontSize = 12.sp)
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Button(
+                                    onClick = { showUpdateDialog = true },
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text(
+                                        text = strings.btnDownload,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
 
             // --- 4. CATEGORY FILTER CHIPS ---
             // Hanya tampil saat ada history (populated atau filtered empty)
@@ -408,6 +493,24 @@ fun HomeScreen(
             modifier = Modifier.align(Alignment.TopCenter),
             contentColor = MaterialTheme.colorScheme.primary
         )
+    
+        //update
+        if (showUpdateDialog && availableRelease != null) {
+            AppUpdateDialog(
+                release = availableRelease!!,
+                strings = strings,
+                onDismiss = { showUpdateDialog = false },
+                onDownloadClick = {
+                    showUpdateDialog = false
+                    val intent = android.content.Intent(
+                        android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse(availableRelease!!.htmlUrl)
+                    )
+                    context.startActivity(intent)
+                }
+            )
+        }  
+        
     }
 }
 
@@ -766,6 +869,66 @@ fun BatteryOptimizationGuideDialog(
                 shape = RoundedCornerShape(10.dp)
             ) {
                 Text(strings.btnOpenAppInfo, fontWeight = FontWeight.Bold)
+            }
+        }
+    )
+}
+
+@Composable
+fun AppUpdateDialog(
+    release: com.morph.app.core.ReleaseInfo,
+    strings: com.morph.app.core.Strings,
+    onDismiss: () -> Unit,
+    onDownloadClick: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(20.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        title = {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = strings.updateDialogTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "${release.tagName} · ${release.title}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 280.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = release.releaseNotes.ifBlank { strings.updateDefaultReleaseNotes },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(strings.btnLater)
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDownloadClick,
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text(
+                    text = strings.btnDownloadApk,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     )

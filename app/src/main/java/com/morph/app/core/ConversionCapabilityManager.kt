@@ -1,5 +1,10 @@
 package com.morph.app.core
 
+/*
+ * Copyright (C) 2026 Rizki Fauzi
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 enum class CapabilityStatus {
     SUPPORTED,
     CONDITIONAL,
