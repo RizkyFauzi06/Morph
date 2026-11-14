@@ -11,17 +11,18 @@ object ConversionValidator {
     }
 
     fun validateFile(file: File, expectedExtension: String): ValidationResult {
+        val strings = AppStrings.get()
         if (!file.exists()) {
-            return ValidationResult.Invalid("Berkas output tidak ditemukan di sistem penyimpanan.")
+            return ValidationResult.Invalid(strings.validatorFileNotFound)
         }
 
         if (!file.isFile) {
-            return ValidationResult.Invalid("Path output bukan merupakan berkas reguler.")
+            return ValidationResult.Invalid(strings.validatorNotRegularFile)
         }
 
         val size = file.length()
         if (size <= 0) {
-            return ValidationResult.Invalid("Berkas output kosong (ukuran 0 byte).")
+            return ValidationResult.Invalid(strings.validatorOutputEmpty)
         }
 
         val ext = expectedExtension.trim().removePrefix(".").lowercase()
@@ -31,7 +32,7 @@ object ConversionValidator {
             val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(file.absolutePath, options)
             if (options.outWidth <= 0 || options.outHeight <= 0) {
-                return ValidationResult.Invalid("Format gambar output rusak atau tidak dapat diuraikan.")
+                return ValidationResult.Invalid(strings.validatorCorruptImage)
             }
         }
 
@@ -39,10 +40,10 @@ object ConversionValidator {
         if (ext == "txt") {
             try {
                 if (file.readText(Charsets.UTF_8).isBlank()) {
-                    return ValidationResult.Invalid("Berkas teks hasil konversi kosong.")
+                    return ValidationResult.Invalid(strings.validatorEmptyTxt)
                 }
             } catch (e: Exception) {
-                return ValidationResult.Invalid("Berkas teks tidak dapat dibaca: ${e.message}")
+                return ValidationResult.Invalid(strings.validatorUnreadableTxt(e.message ?: ""))
             }
         }
 

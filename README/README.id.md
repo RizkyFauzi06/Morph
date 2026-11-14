@@ -177,33 +177,36 @@ cd Morph
   <p>Hasil kompilasi APK akan berada di direktori <code>app/build/outputs/apk/debug/</code>.</p>
 </details>
 
-<h2 id="privasi--izin">Privasi &amp; Izin Aplikasi</h2>
-
-<p>Morph dirancang dengan prinsip meminimalkan izin sistem dan tidak mengumpulkan data analitik apa pun:</p>
+<h2 id="privasi--izin">Privasi &amp; Izin</h2>
 
 <table>
   <thead>
     <tr>
-      <th align="left">Izin Sistem</th>
-      <th align="left">Status</th>
-      <th align="left">Fungsi</th>
+      <th align="left">Izin / Pengaturan Android</th>
+      <th align="left">Tujuan</th>
+      <th align="center">Status</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td><code>POST_NOTIFICATIONS</code></td>
-      <td>Opsional</td>
-      <td>Menampilkan bilah progres konversi dan pemberitahuan saat proses selesai di latar belakang (Android 13+).</td>
+      <td>Menampilkan progres antrean konversi secara waktu nyata dan notifikasi selesai pada Android 13+.</td>
+      <td align="center">Opsional</td>
     </tr>
     <tr>
-      <td><code>FOREGROUND_SERVICE</code></td>
-      <td>Wajib</td>
-      <td>Menjaga antrean konversi media berukuran besar agar tidak dihentikan paksa oleh sistem Android.</td>
+      <td><code>FOREGROUND_SERVICE</code> &amp; <code>FOREGROUND_SERVICE_DATA_SYNC</code></td>
+      <td>Menjaga proses konversi lokal tetap berjalan lancar saat Anda berpindah aplikasi atau mengunci layar.</td>
+      <td align="center">Wajib</td>
+    </tr>
+    <tr>
+      <td><code>Penggunaan Baterai Tidak Dibatasi</code> <em>(Setelan Sistem)</em></td>
+      <td>Mencegah penghemat baterai Android menghentikan paksa konversi video atau audio berdurasi panjang di latar belakang (diatur manual melalui Info Aplikasi).</td>
+      <td align="center">Direkomendasikan</td>
     </tr>
     <tr>
       <td><code>INTERNET</code></td>
-      <td><strong>Tidak Digunakan</strong></td>
-      <td>Izin internet sepenuhnya ditiadakan dari manifes aplikasi.</td>
+      <td><strong>Dihilangkan sepenuhnya.</strong> Morph tidak dapat terhubung ke internet maupun mengirimkan data pengguna.</td>
+      <td align="center">Tidak Digunakan</td>
     </tr>
   </tbody>
 </table>

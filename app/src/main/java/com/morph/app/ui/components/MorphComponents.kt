@@ -35,6 +35,7 @@ import java.text.DecimalFormat
 import kotlin.math.log10
 import kotlin.math.pow
 import com.morph.app.core.FileCategoryManager
+import com.morph.app.core.AppStrings
 import androidx.compose.foundation.isSystemInDarkTheme
 
 // Shared visual constants
@@ -124,6 +125,7 @@ fun ConversionBanner(
     onClick: (() -> Unit)? = null
 ) {
     val safeProgress = progress.coerceIn(0, 100)
+    val strings = AppStrings.current
 
     val animatedProgress by animateFloatAsState(
         targetValue = safeProgress / 100f,
@@ -171,7 +173,7 @@ fun ConversionBanner(
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         Text(
-                            text = queueInfo ?: "Mengonversi ke ${format.uppercase()}",
+                            text = queueInfo ?: strings.convertingTo(format),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -180,7 +182,7 @@ fun ConversionBanner(
                         )
 
                         Text(
-                            text = if (fileName != null) "$fileName → ${format.uppercase()}" else "Proses konversi sedang berjalan",
+                            text = if (fileName != null) "$fileName → ${format.uppercase()}" else strings.conversionInProgress,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -195,7 +197,7 @@ fun ConversionBanner(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "Batalkan Konversi",
+                        contentDescription = strings.cancelConversion,
                         tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(19.dp)
                     )
@@ -239,7 +241,7 @@ fun ConversionBanner(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = stepMessage ?: "Berjalan di latar belakang",
+                    text = stepMessage ?: strings.runningInBackground,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -269,6 +271,8 @@ fun ErrorCard(
     onRetry: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val strings = AppStrings.current
+
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(CardRadius),
@@ -308,7 +312,7 @@ fun ErrorCard(
                 }
 
                 Text(
-                    text = "Konversi Gagal",
+                    text = strings.conversionFailed,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onErrorContainer
@@ -336,7 +340,7 @@ fun ErrorCard(
                     onClick = onDismiss
                 ) {
                     Text(
-                        text = "Tutup",
+                        text = strings.btnClose,
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onErrorContainer
                     )
@@ -365,7 +369,7 @@ fun ErrorCard(
                         Spacer(modifier = Modifier.width(6.dp))
 
                         Text(
-                            text = "Coba Lagi",
+                            text = strings.btnRetry,
                             style = MaterialTheme.typography.labelLarge
                         )
                     }
@@ -387,6 +391,7 @@ fun FileHistoryItemCard(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val strings = AppStrings.current
     var menuExpanded by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
@@ -402,14 +407,14 @@ fun FileHistoryItemCard(
             textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             title = {
                 Text(
-                    text = "Hapus File",
+                    text = strings.deleteFileDialogTitle,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold
                 )
             },
             text = {
                 Text(
-                    text = "Apakah Anda yakin ingin menghapus ${file.name} secara permanen?",
+                    text = strings.deleteFileDialogMessage(file.name),
                     style = MaterialTheme.typography.bodyMedium
                 )
             },
@@ -421,7 +426,7 @@ fun FileHistoryItemCard(
                     }
                 ) {
                     Text(
-                        text = "Hapus",
+                        text = strings.btnDelete,
                         color = MaterialTheme.colorScheme.error,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -433,7 +438,7 @@ fun FileHistoryItemCard(
                         showDeleteConfirm = false
                     }
                 ) {
-                    Text("Batal")
+                    Text(strings.btnCancel)
                 }
             }
         )
@@ -517,7 +522,7 @@ fun FileHistoryItemCard(
                 ) {
                     Icon(
                         imageVector = Icons.Default.MoreVert,
-                        contentDescription = "Menu Aksi",
+                        contentDescription = strings.menuAction,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -530,7 +535,7 @@ fun FileHistoryItemCard(
                 ) {
                     DropdownMenuItem(
                         text = {
-                            Text("Bagikan")
+                            Text(strings.actionShare)
                         },
                         leadingIcon = {
                             Icon(
@@ -547,7 +552,7 @@ fun FileHistoryItemCard(
                     DropdownMenuItem(
                         text = {
                             Text(
-                                text = "Hapus",
+                                text = strings.btnDelete,
                                 color = MaterialTheme.colorScheme.error
                             )
                         },
@@ -591,6 +596,8 @@ fun EmptyHistoryState(
         ),
         label = "pulse_scale"
     )
+
+    val strings = AppStrings.current
 
     Column(
         modifier = modifier
@@ -658,7 +665,7 @@ fun EmptyHistoryState(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Pilih File Anda",
+            text = strings.selectYourFile,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
@@ -668,7 +675,7 @@ fun EmptyHistoryState(
         Spacer(modifier = Modifier.height(4.dp))
 
         Text(
-            text = "Ketuk untuk memilih file\natau gunakan menu Share",
+            text = strings.tapToSelectOrShare,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center

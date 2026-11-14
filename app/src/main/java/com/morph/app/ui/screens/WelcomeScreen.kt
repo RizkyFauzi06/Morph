@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.morph.app.core.AppStrings
 import com.morph.app.ui.components.MorphLogo
 
 @Composable
@@ -28,6 +29,7 @@ fun WelcomeScreen(
     onGetStarted: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val strings = AppStrings.current
     val infiniteTransition = rememberInfiniteTransition(label = "welcomeFloat")
     val floatOffset by infiniteTransition.animateFloat(
         initialValue = -5f,
@@ -62,7 +64,7 @@ fun WelcomeScreen(
                     )
                 ) {
                     Text(
-                        text = "Mulai Mengonversi",
+                        text = strings.btnGetStarted,
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp
                     )
@@ -117,7 +119,7 @@ fun WelcomeScreen(
                     )
 
                     Text(
-                        text = "Cepat · Mudah · Fleksibel",
+                        text = strings.welcomeTagline,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -141,18 +143,18 @@ fun WelcomeScreen(
                 ) {
                     FeatureHighlightRow(
                         icon = Icons.Default.OfflineBolt,
-                        title = "100% Offline",
-                        desc = "Semua proses berlangsung di perangkat tanpa internet atau cloud."
+                        title = strings.welcomeFeatureOfflineTitle,
+                        desc = strings.welcomeFeatureOfflineDesc
                     )
                     FeatureHighlightRow(
                         icon = Icons.Default.Sync,
-                        title = "Konversi Cepat",
-                        desc = "Mendukung stream copy instan untuk format yang kompatibel."
+                        title = strings.welcomeFeatureFastTitle,
+                        desc = strings.welcomeFeatureFastDesc
                     )
                     FeatureHighlightRow(
                         icon = Icons.Default.Lock,
-                        title = "Privasi Terjaga",
-                        desc = "File Anda tidak pernah meninggalkan ponsel Anda."
+                        title = strings.welcomeFeaturePrivacyTitle,
+                        desc = strings.welcomeFeaturePrivacyDesc
                     )
                 }
             }

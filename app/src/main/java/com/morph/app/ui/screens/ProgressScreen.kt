@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.morph.app.core.AppStrings
 import com.morph.app.core.ConversionQueueManager
 import com.morph.app.core.JobStatus
 import com.morph.app.ui.components.MorphLogo
@@ -38,6 +39,7 @@ fun ProgressScreen(
     onViewResult: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val strings = AppStrings.current
     val queueState by ConversionQueueManager.queueState.collectAsState()
 
     val totalCount = queueState.size
@@ -59,8 +61,8 @@ fun ProgressScreen(
     if (showCancelDialog) {
         AlertDialog(
             onDismissRequest = { showCancelDialog = false },
-            title = { Text("Batalkan Konversi?") },
-            text = { Text("Proses konversi yang sedang berjalan akan dihentikan.") },
+            title = { Text(strings.cancelDialogTitle) },
+            text = { Text(strings.cancelDialogDesc) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -69,12 +71,12 @@ fun ProgressScreen(
                         onFinish()
                     }
                 ) {
-                    Text("Batalkan", color = MaterialTheme.colorScheme.error)
+                    Text(strings.btnConfirmCancel, color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showCancelDialog = false }) {
-                    Text("Lanjutkan")
+                    Text(strings.btnContinue)
                 }
             }
         )
@@ -85,7 +87,7 @@ fun ProgressScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = if (isFinished) "Selesai" else "Progres Konversi",
+                        text = if (isFinished) strings.titleFinished else strings.titleConversionProgress,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -94,7 +96,7 @@ fun ProgressScreen(
                     IconButton(onClick = onMinimize) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Minimalkan"
+                            contentDescription = strings.btnMinimize
                         )
                     }
                 },
@@ -139,7 +141,7 @@ fun ProgressScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        text = "Mengonversi File...",
+                        text = strings.convertingFileProgress,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -166,7 +168,7 @@ fun ProgressScreen(
 
                     if (totalCount > 1) {
                         Text(
-                            text = "$completedCount dari $totalCount file selesai",
+                            text = strings.progressBatchFilesCompleted(completedCount, totalCount),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -199,7 +201,7 @@ fun ProgressScreen(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Batalkan Konversi")
+                    Text(strings.cancelConversion)
                 }
 
             } else if (isAllSuccess) {
@@ -215,7 +217,7 @@ fun ProgressScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Check,
-                        contentDescription = "Sukses",
+                        contentDescription = strings.titleFinished,
                         tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(52.dp)
                     )
@@ -224,7 +226,7 @@ fun ProgressScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Text(
-                    text = "Konversi Berhasil!",
+                    text = strings.conversionSuccess,
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -233,7 +235,7 @@ fun ProgressScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = if (totalCount == 1) "File Anda telah berhasil dikonversi." else "$completedCount file berhasil dikonversi.",
+                    text = if (totalCount == 1) strings.singleFileSuccessDesc else strings.batchFilesSuccessDesc(completedCount),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -255,7 +257,7 @@ fun ProgressScreen(
                             containerColor = MaterialTheme.colorScheme.primary
                         )
                     ) {
-                        Text("Lihat Hasil", fontWeight = FontWeight.Bold)
+                        Text(strings.btnViewResult, fontWeight = FontWeight.Bold)
                     }
 
                     OutlinedButton(
@@ -265,7 +267,7 @@ fun ProgressScreen(
                             .height(50.dp),
                         shape = RoundedCornerShape(16.dp)
                     ) {
-                        Text("Kembali ke Beranda")
+                        Text(strings.btnBackToHome)
                     }
                 }
 
@@ -291,7 +293,7 @@ fun ProgressScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Text(
-                    text = if (completedCount > 0) "Konversi Selesai Sebagian" else "Konversi Gagal",
+                    text = if (completedCount > 0) strings.conversionPartialSuccess else strings.conversionFailed,
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -300,9 +302,9 @@ fun ProgressScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 val summaryText = if (completedCount > 0) {
-                    "$completedCount berhasil, $failedCount gagal diproses."
+                    strings.summaryPartial(completedCount, failedCount)
                 } else {
-                    queueState.firstOrNull { it.status == JobStatus.FAILED }?.errorMessage ?: "Terjadi kesalahan saat memproses file."
+                    queueState.firstOrNull { it.status == JobStatus.FAILED }?.errorMessage ?: strings.defaultErrorMsg
                 }
 
                 Text(
@@ -321,7 +323,7 @@ fun ProgressScreen(
                         .height(52.dp),
                     shape = RoundedCornerShape(16.dp)
                 ) {
-                    Text("Kembali ke Beranda", fontWeight = FontWeight.Bold)
+                    Text(strings.btnBackToHome, fontWeight = FontWeight.Bold)
                 }
             }
 

@@ -200,7 +200,7 @@ cd Morph
 <table>
   <thead>
     <tr>
-      <th align="left">Android Permission</th>
+      <th align="left">Android Permission / Setting</th>
       <th align="left">Purpose</th>
       <th align="center">Status</th>
     </tr>
@@ -215,6 +215,11 @@ cd Morph
       <td><code>FOREGROUND_SERVICE</code> &amp; <code>FOREGROUND_SERVICE_DATA_SYNC</code></td>
       <td>Keeps active local conversions running smoothly when you switch apps or lock your screen.</td>
       <td align="center">Required</td>
+    </tr>
+    <tr>
+      <td><code>Unrestricted Battery Usage</code> <em>(System Setting)</em></td>
+      <td>Prevents Android's battery saver from terminating long video or audio conversions in the background (configured manually via App Info).</td>
+      <td align="center">Recommended</td>
     </tr>
     <tr>
       <td><code>INTERNET</code></td>

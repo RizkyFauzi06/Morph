@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morph.app.MorphService
+import com.morph.app.core.AppStrings
 import com.morph.app.core.ConversionCapabilityManager
 import com.morph.app.core.ConversionJobRequest
 import com.morph.app.core.ConversionQueueManager
@@ -53,6 +54,7 @@ fun BottomSheetConverter(
     val isBatchMode = selectedFiles.size > 1
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val context = LocalContext.current
+    val strings = AppStrings.current
     val isDarkTheme = MaterialTheme.colorScheme.background == MorphDarkBackground
 
     val totalSize = remember(selectedFiles) { selectedFiles.sumOf { it.sizeBytes } }
@@ -111,11 +113,11 @@ fun BottomSheetConverter(
         ) {
             val subtitleText = if (isBatchMode) {
                 val sizeText = if (totalSize > 0) " • ${formatFileSize(totalSize)}" else ""
-                "${selectedFiles.size} file terpilih • ${groupedFiles.size} format$sizeText"
+                strings.bottomSheetBatchSubtitle(selectedFiles.size, groupedFiles.size, sizeText)
             } else {
                 val single = selectedFiles.first()
                 val sizeText = if (single.sizeBytes > 0) " • ${formatFileSize(single.sizeBytes)}" else ""
-                "${single.fileName}$sizeText"
+                strings.bottomSheetSingleSubtitle(single.fileName, sizeText)
             }
 
             // Header
@@ -135,7 +137,7 @@ fun BottomSheetConverter(
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        "Konversi File",
+                        strings.bottomSheetTitle,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -160,7 +162,7 @@ fun BottomSheetConverter(
             }
 
             Text(
-                "Format Tujuan",
+                strings.targetFormatHeader,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -181,7 +183,7 @@ fun BottomSheetConverter(
                         ConversionCapabilityManager.isLosslessCompatible(srcExt, currentTarget, sampleFile.mimeType)
                     }
                     val isImageSource = srcExt in listOf("png", "jpg", "jpeg", "webp", "bmp", "gif")
-                    val categoryLabel = if (isImageSource) "Gambar" else "Dokumen"
+                    val categoryLabel = if (isImageSource) strings.categoryImage else strings.categoryDocument
                     val categoryIcon = if (isImageSource) Icons.Default.Image else Icons.Default.Description
 
                     Card(
@@ -219,7 +221,7 @@ fun BottomSheetConverter(
                                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                                     Text(categoryLabel, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                                     Text(
-                                        "${srcExt.uppercase()} • ${filesInGroup.size} file${if (filesInGroup.size > 1) " terpilih" else ""}",
+                                        "${srcExt.uppercase()} • ${filesInGroup.size} file${if (filesInGroup.size > 1) strings.filesCountSuffix else ""}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -229,7 +231,7 @@ fun BottomSheetConverter(
                                     color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
                                 ) {
                                     Text(
-                                        currentTarget.uppercase().ifBlank { "PILIH" },
+                                        currentTarget.uppercase().ifBlank { strings.chooseFormat },
                                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
@@ -286,8 +288,8 @@ fun BottomSheetConverter(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                                            Text("Gabung menjadi satu PDF", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                                            Text("Jika ada banyak file PNG.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(strings.mergeToPdfTitle, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                                            Text(strings.mergeToPdfDesc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
                                         Switch(
                                             checked = isMerge,
@@ -300,15 +302,15 @@ fun BottomSheetConverter(
                             // Kualitas konversi
                             val currentQuality = qualityPerGroup[srcExt] ?: defaultQuality
                             val qualityOptions = if (isCurrentTargetLossless) {
-                                listOf(Pair("Rendah", 2), Pair("Sedang", 1), Pair("Tinggi", 0), Pair("Instan", 3))
+                                listOf(Pair(strings.qualityLow, 2), Pair(strings.qualityMedium, 1), Pair(strings.qualityHigh, 0), Pair(strings.qualityInstant, 3))
                             } else {
-                                listOf(Pair("Rendah", 2), Pair("Sedang", 1), Pair("Tinggi", 0))
+                                listOf(Pair(strings.qualityLow, 2), Pair(strings.qualityMedium, 1), Pair(strings.qualityHigh, 0))
                             }
 
                             Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                                     Text(
-                                        "Kualitas",
+                                        strings.qualityTitle,
                                         style = MaterialTheme.typography.labelLarge,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurface
@@ -360,7 +362,7 @@ fun BottomSheetConverter(
                                     ) {
                                         Text("⚡", color = MorphInstantBolt, fontSize = 15.sp)
                                         Text(
-                                            "Lossless (Instan) didukung untuk ${srcExt.uppercase()} → ${currentTarget.uppercase()}",
+                                            strings.instantLosslessSupported(srcExt, currentTarget),
                                             style = MaterialTheme.typography.labelSmall,
                                             color = Color(0xFF8A572A)
                                         )
@@ -370,7 +372,7 @@ fun BottomSheetConverter(
 
                             if (!isCurrentTargetLossless && currentQuality == 3) {
                                 Text(
-                                    "Instant tidak tersedia untuk format ini. Morph menggunakan kualitas tertinggi.",
+                                    strings.instantNotAvailable,
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.primary
                                 )
@@ -476,9 +478,9 @@ fun BottomSheetConverter(
                     (pdfMergeOptionPerGroup[srcExt] ?: true)
                 }
                 val label = when {
-                    !isBatchMode -> "Konversi"
-                    isMergeActive -> "Gabung & Konversi (${selectedFiles.size} File)"
-                    else -> "Konversi (${selectedFiles.size} File)"
+                    !isBatchMode -> strings.btnConvert
+                    isMergeActive -> strings.btnMergeAndConvert(selectedFiles.size)
+                    else -> strings.btnConvertBatch(selectedFiles.size)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("▶", fontSize = 15.sp)

@@ -107,6 +107,7 @@ val MorphShapes = Shapes(
 @Composable
 fun MorphTheme(
     themeOption: Int = 0,
+    language: String = "id",
     content: @Composable () -> Unit
 ) {
     val isDark = when (themeOption) {
@@ -116,11 +117,16 @@ fun MorphTheme(
     }
 
     val colorScheme = if (isDark) DarkColorScheme else LightColorScheme
+    val strings = com.morph.app.core.AppStrings.get(language)
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        shapes = MorphShapes,
-        typography = MorphTypography,
-        content = content
-    )
+    androidx.compose.runtime.CompositionLocalProvider(
+        com.morph.app.core.LocalAppStrings provides strings
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            shapes = MorphShapes,
+            typography = MorphTypography,
+            content = content
+        )
+    }
 }

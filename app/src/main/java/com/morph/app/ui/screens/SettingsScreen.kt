@@ -24,6 +24,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.morph.app.BuildConfig
 import com.morph.app.MorphPrefs
+import com.morph.app.core.AppStrings
+import com.morph.app.core.EnglishStrings
+import com.morph.app.core.IndonesianStrings
 import com.morph.app.ui.components.MorphScreenHeader
 
 @Composable
@@ -37,6 +40,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val prefs = remember { MorphPrefs(context) }
+    val strings = AppStrings.current
 
     var selectedLanguage by remember(currentLanguage) {
         mutableStateOf(currentLanguage ?: prefs.appLanguage)
@@ -72,22 +76,22 @@ fun SettingsScreen(
         // Header — tanpa back button (bottom nav sudah ada)
         item {
             MorphScreenHeader(
-                title = "Pengaturan",
-                subtitle = "Konfigurasi tampilan dan perilaku Morph."
+                title = strings.settingsTitle,
+                subtitle = strings.settingsSubtitle
             )
         }
 
         // --- 1. TEMA APLIKASI ---
         item {
-            SettingsSectionCard(title = "Tema Aplikasi", icon = Icons.Default.Palette) {
+            SettingsSectionCard(title = strings.themeSectionTitle, icon = Icons.Default.Palette) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     listOf(
-                        Triple("Terang", 1, "☀️"),
-                        Triple("Gelap", 2, "🌙"),
-                        Triple("Sistem", 0, "📱")
+                        Triple(strings.themeLight, 1, "☀️"),
+                        Triple(strings.themeDark, 2, "🌙"),
+                        Triple(strings.themeSystem, 0, "📱")
                     ).forEach { (title, idx, emoji) ->
                         val isSelected = currentTheme == idx
                         FilterChip(
@@ -114,14 +118,14 @@ fun SettingsScreen(
 
         // --- 2. BAHASA / LANGUAGE ---
         item {
-            SettingsSectionCard(title = "Bahasa / Language", icon = Icons.Default.Language) {
+            SettingsSectionCard(title = strings.languageSectionTitle, icon = Icons.Default.Language) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     listOf(
-                        Triple("Bahasa Indonesia", "id", "🇮🇩"),
-                        Triple("English", "en", "🇬🇧")
+                        Triple(strings.langIndonesian, "id", "🇮🇩"),
+                        Triple(strings.langEnglish, "en", "🇬🇧")
                     ).forEach { (label, code, flag) ->
                         val isSelected = selectedLanguage == code
                         FilterChip(
@@ -129,11 +133,12 @@ fun SettingsScreen(
                             onClick = {
                                 selectedLanguage = code
                                 prefs.appLanguage = code
+                                AppStrings.setLanguage(code)
                                 onLanguageChange?.invoke(code)
                                 val msg = if (code == "en") {
-                                    "Language set to English"
+                                    EnglishStrings.languageSetToast
                                 } else {
-                                    "Bahasa diatur ke Bahasa Indonesia"
+                                    IndonesianStrings.languageSetToast
                                 }
                                 Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                             },
@@ -159,9 +164,9 @@ fun SettingsScreen(
 
         // --- 3. KUALITAS KONVERSI DEFAULT ---
         item {
-            SettingsSectionCard(title = "Kualitas Konversi Default", icon = Icons.Default.Tune) {
+            SettingsSectionCard(title = strings.qualitySectionTitle, icon = Icons.Default.Tune) {
                 Text(
-                    text = "Preset bawaan yang digunakan saat membuka panel konversi. Dapat diubah per sesi.",
+                    text = strings.qualitySectionDesc,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -173,10 +178,10 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     listOf(
-                        Pair("Rendah", 2),
-                        Pair("Sedang", 1),
-                        Pair("Tinggi", 0),
-                        Pair("Instan", 3)
+                        Pair(strings.qualityLow, 2),
+                        Pair(strings.qualityMedium, 1),
+                        Pair(strings.qualityHigh, 0),
+                        Pair(strings.qualityInstant, 3)
                     ).forEach { (title, idx) ->
                         val isSelected = qualityPreset == idx
                         Surface(
@@ -204,10 +209,10 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 val desc = when (qualityPreset) {
-                    0 -> "Tinggi: bitrate 100% dipertahankan tanpa kompresi tambahan."
-                    1 -> "Sedang: kompresi seimbang, ukuran berkurang ~50%."
-                    2 -> "Rendah: kompresi agresif untuk hemat ruang."
-                    3 -> "Instan: stream copy cepat tanpa re-encode (kualitas asli, hanya untuk format yang kompatibel)."
+                    0 -> strings.qualityDescHigh
+                    1 -> strings.qualityDescMedium
+                    2 -> strings.qualityDescLow
+                    3 -> strings.qualityDescInstant
                     else -> ""
                 }
                 if (desc.isNotEmpty()) {
@@ -243,13 +248,13 @@ fun SettingsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                             Text(
-                                text = "Pertahankan Nama Asli",
+                                text = strings.keepNameTitle,
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Pertahankan nama dasar file asli. Morph tidak menambahkan imbuhan nama baru, kecuali diperlukan untuk menghindari nama yang bertabrakan.",
+                                text = strings.keepNameDesc,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -277,13 +282,13 @@ fun SettingsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                             Text(
-                                text = "Tutup Otomatis (Share)",
+                                text = strings.closeShareTitle,
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Tutup bottom sheet setelah format konversi dipilih tanpa mengarahkan pengguna ke aplikasi Morph.",
+                                text = strings.closeShareDesc,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -298,8 +303,6 @@ fun SettingsScreen(
                     }
                     
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-                    val isBatteryOk = remember { com.morph.app.checkBatteryOptimizationDisabled(context) }
-                    var showBatteryDialogInSettings by remember { mutableStateOf(false) }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -310,13 +313,13 @@ fun SettingsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                             Text(
-                                text = "Optimasi Baterai Latar Belakang",
+                                text = strings.batteryOptTitle,
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = if (isBatteryOk) "Status: Tidak dibatasi (Optimal)" else "Status: Dibatasi · Ketuk untuk melihat cara mengatur",
+                                text = if (isBatteryOk) strings.batteryOptStatusOk else strings.batteryOptStatusRestricted,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = if (isBatteryOk) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                             )
@@ -343,18 +346,18 @@ fun SettingsScreen(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = "Tentang Morph",
+                            text = strings.aboutSectionTitle,
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Versi ${BuildConfig.VERSION_NAME} · Offline File Converter",
+                            text = strings.aboutVersion(BuildConfig.VERSION_NAME),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = "Dirancang oleh Rizki Fauzi",
+                            text = strings.aboutAuthor,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -384,13 +387,13 @@ fun SettingsScreen(
                             )
                             Column {
                                 Text(
-                                    text = "Lisensi Open Source",
+                                    text = strings.licensesSectionTitle,
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "GPL-3.0, Apache 2.0 & pustaka pihak ketiga",
+                                    text = strings.licensesSectionSubtitle,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -428,13 +431,15 @@ fun SettingsScreen(
 
 @Composable
 private fun OpenSourceLicensesDialog(onDismiss: () -> Unit) {
+    val strings = AppStrings.current
+
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(20.dp),
         containerColor = MaterialTheme.colorScheme.surface,
         title = {
             Text(
-                text = "Lisensi Open Source",
+                text = strings.licensesSectionTitle,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -449,7 +454,7 @@ private fun OpenSourceLicensesDialog(onDismiss: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Morph didistribusikan di bawah GNU General Public License v3.0 (GPL-3.0) dan menggunakan pustaka open-source berikut:",
+                    text = strings.licensesDialogIntro,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -482,7 +487,7 @@ private fun OpenSourceLicensesDialog(onDismiss: () -> Unit) {
         confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text(
-                    text = "Tutup",
+                    text = strings.btnClose,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary
                 )

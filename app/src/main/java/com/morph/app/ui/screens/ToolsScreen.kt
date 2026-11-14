@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.morph.app.core.AppStrings
 import com.morph.app.ui.components.MorphScreenHeader
 
 @Composable
@@ -28,6 +29,8 @@ fun ToolsScreen(
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val strings = AppStrings.current
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -42,23 +45,23 @@ fun ToolsScreen(
         // Header — sesuai spec: "Tools" + deskripsi singkat
         item {
             MorphScreenHeader(
-                title = "Tools",
-                subtitle = "Kenali fitur dan kemampuan Morph."
+                title = strings.toolsTitle,
+                subtitle = strings.toolsSubtitle
             )
         }
 
         // Conversion Tools Section
         item {
             SectionHeading(
-                title = "Alat Konversi",
-                subtitle = "Konversi file bawaan Morph."
+                title = strings.toolsConversionTitle,
+                subtitle = strings.toolsConversionSubtitle
             )
         }
 
         item {
             ToolFeatureCard(
-                title = "Video Conversion",
-                description = "Mengubah container video dengan proses cepat tanpa encoding ulang. Ukuran hasil dapat sedikit berbeda.",
+                title = strings.toolVideoTitle,
+                description = strings.toolVideoDesc,
                 supportedFormats = "MKV · MP4 · MOV  →  MP4 · MOV · MKV",
                 icon = Icons.Default.VideoFile
             )
@@ -66,8 +69,8 @@ fun ToolsScreen(
 
         item {
             ToolFeatureCard(
-                title = "PDF Toolkit",
-                description = "Kompres dokumen PDF atau ubah setiap halaman menjadi gambar yang dapat dibuka dan dibagikan.",
+                title = strings.toolPdfTitle,
+                description = strings.toolPdfDesc,
                 supportedFormats = "PDF · JPG · PNG · WEBP  →  PDF · PNG · JPG",
                 icon = Icons.Default.PictureAsPdf
             )
@@ -75,8 +78,8 @@ fun ToolsScreen(
 
         item {
             ToolFeatureCard(
-                title = "Audio Extraction",
-                description = "Ekstrak jalur audio dari video dan simpan dalam berbagai format audio.",
+                title = strings.toolAudioTitle,
+                description = strings.toolAudioDesc,
                 supportedFormats = "MP4 · MKV · MOV · WEBM  →  MP3 · M4A · WAV · FLAC · OGG · OPUS",
                 icon = Icons.Default.Audiotrack
             )
@@ -84,8 +87,8 @@ fun ToolsScreen(
 
         item {
             ToolFeatureCard(
-                title = "SVG Conversion",
-                description = "Ubah grafik vektor SVG menjadi gambar raster yang dapat dibuka di galeri atau dibagikan.",
+                title = strings.toolSvgTitle,
+                description = strings.toolSvgDesc,
                 supportedFormats = "SVG  →  PNG · JPG · WEBP",
                 icon = Icons.Default.AutoAwesome
             )
@@ -93,8 +96,8 @@ fun ToolsScreen(
 
         item {
             ToolFeatureCard(
-                title = "EPUB Text Extraction",
-                description = "Ekstrak isi dan bab buku digital menjadi satu file teks yang lebih ringan dan mudah dibaca.",
+                title = strings.toolEpubTitle,
+                description = strings.toolEpubDesc,
                 supportedFormats = "EPUB  →  TXT",
                 icon = Icons.Default.Book
             )
@@ -102,8 +105,8 @@ fun ToolsScreen(
 
         item {
             ToolFeatureCard(
-                title = "Image Conversion",
-                description = "Ubah format gambar dengan penanganan transparansi dan pilihan output yang beragam.",
+                title = strings.toolImageTitle,
+                description = strings.toolImageDesc,
                 supportedFormats = "PNG · JPG · WEBP · BMP  →  PNG · JPG · WEBP · BMP · PDF",
                 icon = Icons.Default.Image
             )
@@ -112,43 +115,43 @@ fun ToolsScreen(
         // Share & Usage Section
         item {
             SectionHeading(
-                title = "Cara Lain Menggunakan Morph",
-                subtitle = "Gunakan Morph langsung dari aplikasi lain."
+                title = strings.toolsOtherWaysTitle,
+                subtitle = strings.toolsOtherWaysSubtitle
             )
         }
 
         item {
             InfoFeatureCard(
-                title = "Share to Morph",
-                description = "Kirim file langsung dari aplikasi lain ke Morph melalui menu Share Android.",
-                detail = "Pilih satu atau beberapa file dari Gallery, File Manager, atau aplikasi lain yang mendukung berbagi file. Morph menerima file tersebut dan menyiapkan pilihan konversi tanpa perlu mencarinya kembali secara manual.",
+                title = strings.toolShareTitle,
+                description = strings.toolShareDesc,
+                detail = strings.toolShareDetail,
                 icon = Icons.Default.Share
             )
         }
 
         item {
             InfoFeatureCard(
-                title = "Batch Conversion",
-                description = "Pilih beberapa file sekaligus dan proses semuanya dalam satu sesi konversi.",
-                detail = "Morph dapat mengelompokkan file berdasarkan format sumber sehingga setiap kelompok dapat memiliki format tujuan dan pengaturan yang sesuai.",
+                title = strings.toolBatchTitle,
+                description = strings.toolBatchDesc,
+                detail = strings.toolBatchDetail,
                 icon = Icons.Default.DynamicFeed
             )
         }
 
         item {
             InfoFeatureCard(
-                title = "Offline Conversion",
-                description = "Konversi file secara lokal di perangkat.",
-                detail = "Untuk format yang didukung, proses konversi dilakukan tanpa perlu mengunggah file ke layanan cloud.",
+                title = strings.toolOfflineTitle,
+                description = strings.toolOfflineDesc,
+                detail = strings.toolOfflineDetail,
                 icon = Icons.Default.WifiOff
             )
         }
 
         item {
             InfoFeatureCard(
-                title = "Format Support",
-                description = "Lihat format sumber dan tujuan yang tersedia.",
-                detail = "Video: MP4, MKV, MOV, WEBM, AVI\nAudio: MP3, WAV, FLAC, AAC, M4A, OGG, OPUS\nGambar: PNG, JPG, WEBP, BMP, SVG\nDokumen: PDF, TXT, EPUB",
+                title = strings.toolFormatTitle,
+                description = strings.toolFormatDesc,
+                detail = strings.toolFormatDetail,
                 icon = Icons.Default.Extension
             )
         }
@@ -267,7 +270,7 @@ private fun InfoFeatureCard(
                 )
                 Icon(
                     imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = if (expanded) "Tutup" else "Buka",
+                    contentDescription = if (expanded) AppStrings.current.toolCollapse else AppStrings.current.toolExpand,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }

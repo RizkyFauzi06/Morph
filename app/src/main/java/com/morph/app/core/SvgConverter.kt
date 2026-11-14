@@ -21,14 +21,15 @@ object SvgConverter {
         qualityPreset: Int,
         onProgress: (step: String, percent: Int) -> Unit
     ): File {
+        val strings = AppStrings.get()
         val targetExt = targetExtension.trim().removePrefix(".").lowercase()
-        onProgress("Memuat file SVG...", 20)
+        onProgress(strings.engineLoadingSvg, 20)
 
         val svg = context.contentResolver.openInputStream(inputUri)?.use { input ->
             SVG.getFromInputStream(input)
-        } ?: throw IllegalStateException("Tidak dapat membaca data dari berkas SVG.")
+        } ?: throw IllegalStateException(strings.engineErrReadSvg)
 
-        onProgress("Menghitung dimensi vektor SVG...", 40)
+        onProgress(strings.engineCalculatingSvgDim, 40)
 
         // Robust dimension resolution: documentWidth/Height vs viewBox vs default
         var rawWidth = svg.documentWidth
@@ -59,7 +60,7 @@ object SvgConverter {
         val finalWidth = (rawWidth * scaleFactor).toInt().coerceIn(16, 8192)
         val finalHeight = (rawHeight * scaleFactor).toInt().coerceIn(16, 8192)
 
-        onProgress("Merender vektor SVG ke kanvas...", 65)
+        onProgress(strings.engineRenderingSvg, 65)
 
         val bitmap = Bitmap.createBitmap(finalWidth, finalHeight, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -77,7 +78,7 @@ object SvgConverter {
         val destRect = android.graphics.RectF(0f, 0f, finalWidth.toFloat(), finalHeight.toFloat())
         svg.renderToCanvas(canvas, destRect)
 
-        onProgress("Mengompresi gambar output...", 85)
+        onProgress(strings.engineCompressingSvgOut, 85)
 
         val tempOut = OutputManager.createTempFile(context, "svg_out", targetExt)
         val format = when (targetExt) {

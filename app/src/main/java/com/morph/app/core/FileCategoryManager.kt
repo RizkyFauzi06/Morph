@@ -13,7 +13,20 @@ enum class FileCategory(val displayName: String) {
     SPREADSHEET("Spreadsheet"),
     ARCHIVE("Arsip"),
     CODE("Kode"),
-    OTHER("Lainnya")
+    OTHER("Lainnya");
+
+    fun getLocalizedName(strings: Strings): String = when (this) {
+        IMAGE -> strings.categoryImage
+        VIDEO -> strings.categoryVideo
+        AUDIO -> strings.categoryAudio
+        PDF -> strings.categoryPdf
+        EBOOK -> strings.categoryEbook
+        DOCUMENT -> strings.categoryDocument
+        SPREADSHEET -> strings.categorySpreadsheet
+        ARCHIVE -> strings.categoryArchive
+        CODE -> strings.categoryCode
+        OTHER -> strings.categoryOther
+    }
 }
 
 data class FileCategoryColors(

@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.morph.app.core.AppStrings
 import com.morph.app.core.ConversionJob
 import com.morph.app.core.ConversionQueueManager
 import com.morph.app.core.JobStatus
@@ -45,6 +46,8 @@ class MorphService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        AppStrings.setLanguage(com.morph.app.MorphPrefs(this).appLanguage)
+
         when (intent?.action) {
             ACTION_CANCEL_CONVERSION -> {
                 isCancelled = true
@@ -88,9 +91,10 @@ class MorphService : Service() {
 
         // Mulai eksekusi antrean
         if (ConversionQueueManager.hasActiveOrWaitingJobs()) {
+            val strings = AppStrings.get()
             val initialNotif = buildNotification(
-                title = "Morph Berjalan",
-                content = "Menyiapkan antrean konversi...",
+                title = strings.serviceRunningTitle,
+                content = strings.servicePreparingQueue,
                 isProcessing = true,
                 progress = 0
             )
@@ -113,7 +117,7 @@ class MorphService : Service() {
                 val job = ConversionQueueManager.getNextWaitingJob() ?: break
 
                 ConversionQueueManager.updateJobStatus(job.id, JobStatus.PROCESSING)
-                updateNotificationForJob(job, 0, "Memulai konversi...")
+                updateNotificationForJob(job, 0, AppStrings.get().serviceStartingConversion)
 
                 try {
                     val allUris = listOf(job.inputUri) + job.extraInputUris
@@ -156,7 +160,7 @@ class MorphService : Service() {
                     ConversionQueueManager.updateJobStatus(
                         job.id,
                         JobStatus.FAILED,
-                        error = e.message ?: "Konversi gagal"
+                        error = e.message ?: AppStrings.get().queueFailed
                     )
                     // Sequential processing: Kegagalan 1 item TIDAK menghentikan item antrean berikutnya
                 }
@@ -172,10 +176,11 @@ class MorphService : Service() {
         val total = summary.totalCount
         val currentIdx = summary.currentJobIndex
 
+        val strings = AppStrings.get()
         val title = if (total > 1) {
-            "Mengonversi ($currentIdx/$total): ${job.originalFileName}"
+            strings.notifConvertingBatchTitle(currentIdx, total, job.originalFileName)
         } else {
-            "Mengonversi ${job.originalFileName} → ${job.targetFormat.uppercase()}"
+            strings.notifConvertingSingleTitle(job.originalFileName, job.targetFormat)
         }
 
         val content = "$message ($progress%)"
@@ -198,17 +203,18 @@ class MorphService : Service() {
 
         // Tampilkan notifikasi ringkasan akhir HANYA jika berada di background dan tidak dibatalkan total
         if (!MainActivity.isAppInForeground && !isCancelled && summary.totalCount > 0) {
+            val strings = AppStrings.get()
             val title = if (summary.failedCount == 0) {
-                "✅ Konversi Selesai"
+                strings.notifSuccessTitle
             } else {
-                "⚠️ Konversi Selesai Sebagian"
+                strings.notifPartialTitle
             }
 
             val body = if (summary.failedCount == 0) {
-                if (summary.completedCount == 1) "1 berkas berhasil dikonversi ke Downloads/Morph"
-                else "${summary.completedCount} berkas berhasil dikonversi ke Downloads/Morph"
+                if (summary.completedCount == 1) strings.notifSuccessBodySingle
+                else strings.notifSuccessBodyBatch(summary.completedCount)
             } else {
-                "${summary.completedCount} berhasil, ${summary.failedCount} gagal diproses."
+                strings.notifSummaryBody(summary.completedCount, summary.failedCount)
             }
 
             val finishNotif = buildNotification(title, body, false)
@@ -265,7 +271,7 @@ class MorphService : Service() {
             val cancelPendingIntent = PendingIntent.getService(
                 this, 1, cancelIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
-            builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Batal Semua", cancelPendingIntent)
+            builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, AppStrings.get().notifActionCancelAll, cancelPendingIntent)
         }
 
         return builder.build()

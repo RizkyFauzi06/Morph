@@ -29,7 +29,7 @@ data class ConversionJob(
     val qualityPreset: Int,
     val status: JobStatus = JobStatus.WAITING,
     val progress: Int = 0,
-    val progressMessage: String = "Menunggu antrean...",
+    val progressMessage: String = AppStrings.get().queueWaiting,
     val outputFilePath: String? = null,
     val errorMessage: String? = null,
     val extraInputUris: List<Uri> = emptyList()
@@ -125,11 +125,12 @@ object ConversionQueueManager {
                         JobStatus.WAITING -> 0
                         JobStatus.PROCESSING -> job.progress
                     }
+                    val strings = AppStrings.get()
                     val finalMsg = when (newStatus) {
-                        JobStatus.COMPLETED -> "Konversi Selesai"
-                        JobStatus.FAILED -> error ?: "Konversi Gagal"
-                        JobStatus.CANCELLED -> "Dibatalkan"
-                        JobStatus.WAITING -> "Menunggu antrean..."
+                        JobStatus.COMPLETED -> strings.queueCompleted
+                        JobStatus.FAILED -> error ?: strings.queueFailed
+                        JobStatus.CANCELLED -> strings.queueCancelled
+                        JobStatus.WAITING -> strings.queueWaiting
                         JobStatus.PROCESSING -> job.progressMessage
                     }
 
@@ -192,7 +193,7 @@ object ConversionQueueManager {
         _queueState.update { currentList ->
             currentList.map { job ->
                 if (job.status == JobStatus.WAITING || job.status == JobStatus.PROCESSING) {
-                    job.copy(status = JobStatus.CANCELLED, progressMessage = "Dibatalkan")
+                    job.copy(status = JobStatus.CANCELLED, progressMessage = AppStrings.get().queueCancelled)
                 } else {
                     job
                 }

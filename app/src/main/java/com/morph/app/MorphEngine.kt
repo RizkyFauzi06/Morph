@@ -159,13 +159,14 @@ object MorphEngine {
             } catch (e: CancellationException) {
                 withContext(Dispatchers.Main) {
                     currentStatus.value = ConvertState.Idle
-                    onError("Konversi dibatalkan.")
+                    onError(AppStrings.get().engineCancelled)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Conversion setup error", e)
                 withContext(Dispatchers.Main) {
-                    currentStatus.value = ConvertState.Error("Gagal setup konversi: ${e.message}", inputUri, targetExt)
-                    onError("Gagal setup konversi: ${e.message}")
+                    val errMsg = AppStrings.get().engineErrSetup(e.message ?: "")
+                    currentStatus.value = ConvertState.Error(errMsg, inputUri, targetExt)
+                    onError(errMsg)
                 }
             }
         }
@@ -183,21 +184,22 @@ object MorphEngine {
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
+        val strings = AppStrings.get()
         val tempInput = OutputManager.createTempFile(context, "in_media", inputExt)
         val tempOutput = OutputManager.createTempFile(context, "out_media", targetExt)
 
         try {
-            updateProgress(targetExt, "Menyiapkan file multimedia...", 5, onProgress)
+            updateProgress(targetExt, strings.enginePreparingMedia, 5, onProgress)
 
             // Copy input stream to temp cache file
             context.contentResolver.openInputStream(inputUri)?.use { input ->
                 FileOutputStream(tempInput).use { output ->
                     input.copyTo(output)
                 }
-            } ?: throw IOException("Tidak dapat membaca berkas input.")
+            } ?: throw IOException(strings.engineErrReadInput)
 
             if (!tempInput.exists() || tempInput.length() <= 0) {
-                throw IOException("Berkas input kosong atau tidak valid.")
+                throw IOException(strings.engineErrInputEmpty)
             }
 
             // Probe media information via FFprobe
@@ -240,11 +242,11 @@ object MorphEngine {
                         if (totalDurationMs > 0) {
                             val percentage = ((stats.time.toFloat() / totalDurationMs) * 95).toInt().coerceIn(5, 95)
                             currentStatus.value = ConvertState.Converting(targetExt, percentage)
-                            onProgress("Telah diproses: $percentage%", percentage)
+                            onProgress(strings.engineProcessedPercent(percentage), percentage)
                         } else {
-                            val seconds = stats.time / 1000
+                            val seconds = (stats.time / 1000).toLong()
                             currentStatus.value = ConvertState.Converting(targetExt, 50)
-                            onProgress("Telah diproses: ${seconds}s", 50)
+                            onProgress(strings.engineProcessedSeconds(seconds), 50)
                         }
                     }
                 }
@@ -253,15 +255,16 @@ object MorphEngine {
             val returnCode = ffmpegSession.await()
 
             if (ReturnCode.isSuccess(returnCode)) {
-                updateProgress(targetExt, "Menyelesaikan dan memvalidasi berkas...", 98, onProgress)
+                updateProgress(targetExt, strings.engineFinalizingValidating, 98, onProgress)
 
                 // Validate output file
                 when (val valResult = ConversionValidator.validateFile(tempOutput, targetExt)) {
                     is ConversionValidator.ValidationResult.Invalid -> {
                         OutputManager.cleanTempFiles(tempInput, tempOutput)
                         withContext(Dispatchers.Main) {
-                            currentStatus.value = ConvertState.Error("Hasil tidak valid: ${valResult.reason}", inputUri, targetExt)
-                            onError("Hasil tidak valid: ${valResult.reason}")
+                            val errMsg = strings.engineErrInvalidOutput(valResult.reason)
+                            currentStatus.value = ConvertState.Error(errMsg, inputUri, targetExt)
+                            onError(errMsg)
                         }
                     }
                     is ConversionValidator.ValidationResult.Valid -> {
@@ -270,11 +273,11 @@ object MorphEngine {
                         withContext(Dispatchers.Main) {
                             if (finalPath != null) {
                                 currentStatus.value = ConvertState.Success
-                                onProgress("Selesai 100%", 100)
+                                onProgress(strings.engineFinished100, 100)
                                 onSuccess(finalPath)
                             } else {
-                                currentStatus.value = ConvertState.Error("Gagal menyimpan hasil ke direktori Downloads/Morph", inputUri, targetExt)
-                                onError("Gagal menyimpan hasil ke direktori Downloads/Morph")
+                                currentStatus.value = ConvertState.Error(strings.engineErrSaveOutput, inputUri, targetExt)
+                                onError(strings.engineErrSaveOutput)
                             }
                         }
                     }
@@ -283,18 +286,18 @@ object MorphEngine {
                 OutputManager.cleanTempFiles(tempInput, tempOutput)
                 withContext(Dispatchers.Main) {
                     currentStatus.value = ConvertState.Idle
-                    onError("Konversi dibatalkan.")
+                    onError(strings.engineCancelled)
                 }
             } else {
                 val failLogs = session.allLogsAsString ?: ""
                 OutputManager.cleanTempFiles(tempInput, tempOutput)
                 val errorMessage = when {
                     qualityPreset == 3 ->
-                        "Stream Copy tidak kompatibel untuk codec stream berkas ini. Gunakan kualitas Tinggi atau Sedang."
+                        strings.engineErrStreamCopyIncompatible
                     failLogs.contains("does not support", ignoreCase = true) ->
-                        "Format tujuan tidak mendukung salah satu stream media dari berkas sumber."
+                        strings.engineErrFormatNotSupported
                     else ->
-                        "Gagal Konversi FFmpeg (Kode: ${returnCode.value})"
+                        strings.engineErrFFmpeg(returnCode.value)
                 }
                 withContext(Dispatchers.Main) {
                     currentStatus.value = ConvertState.Error(errorMessage, inputUri, targetExt)
@@ -471,15 +474,16 @@ object MorphEngine {
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
+        val strings = AppStrings.get()
         val tempPdf = OutputManager.createTempFile(context, "in_pdf", "pdf")
         val createdTempFiles = mutableListOf<File>()
 
         try {
-            updateProgress(targetExtension, "Membaca dokumen PDF...", 10, onProgress)
+            updateProgress(targetExtension, strings.engineReadingPdf, 10, onProgress)
 
             context.contentResolver.openInputStream(inputUri)?.use { input ->
                 FileOutputStream(tempPdf).use { output -> input.copyTo(output) }
-            } ?: throw IOException("Tidak dapat membaca dokumen PDF.")
+            } ?: throw IOException(strings.engineErrPdfRead)
 
             val pfd = ParcelFileDescriptor.open(tempPdf, ParcelFileDescriptor.MODE_READ_ONLY)
             val renderer = PdfRenderer(pfd)
@@ -488,7 +492,7 @@ object MorphEngine {
             if (pageCount == 0) {
                 renderer.close()
                 pfd.close()
-                throw IllegalStateException("Dokumen PDF tidak memiliki halaman.")
+                throw IllegalStateException(strings.engineErrPdfNoPages)
             }
 
             val scale = when (qualityPreset) {
@@ -513,7 +517,7 @@ object MorphEngine {
                 currentCoroutineContext().ensureActive()
 
                 val percent = (((i + 1).toFloat() / pageCount) * 85).toInt() + 10
-                updateProgress(targetExtension, "Merender halaman ${i + 1} dari $pageCount...", percent, onProgress)
+                updateProgress(targetExtension, strings.engineRenderingPage(i + 1, pageCount), percent, onProgress)
 
                 val page = renderer.openPage(i)
                 val width = (page.width * scale).toInt()
@@ -547,11 +551,11 @@ object MorphEngine {
             withContext(Dispatchers.Main) {
                 if (lastSavedPath != null) {
                     currentStatus.value = ConvertState.Success
-                    val msg = if (pageCount > 1) "$pageCount halaman berhasil diekstrak ke Downloads/Morph" else lastSavedPath
+                    val msg = if (pageCount > 1) strings.enginePagesExtractedSuccess(pageCount) else lastSavedPath
                     onSuccess(msg)
                 } else {
-                    currentStatus.value = ConvertState.Error("Gagal menyimpan hasil gambar PDF", inputUri, targetExtension)
-                    onError("Gagal menyimpan hasil gambar PDF")
+                    currentStatus.value = ConvertState.Error(strings.engineErrSavePdfImage, inputUri, targetExtension)
+                    onError(strings.engineErrSavePdfImage)
                 }
             }
         } catch (e: Exception) {
@@ -570,15 +574,16 @@ object MorphEngine {
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
+        val strings = AppStrings.get()
         val tempInput = OutputManager.createTempFile(context, "comp_in", "pdf")
         val tempOutput = OutputManager.createTempFile(context, "comp_out", "pdf")
 
         try {
-            updateProgress("pdf", "Menganalisis ukuran PDF...", 10, onProgress)
+            updateProgress("pdf", strings.engineAnalyzingPdf, 10, onProgress)
 
             context.contentResolver.openInputStream(inputUri)?.use { input ->
                 FileOutputStream(tempInput).use { output -> input.copyTo(output) }
-            } ?: throw IOException("Tidak dapat membaca dokumen PDF.")
+            } ?: throw IOException(strings.engineErrPdfRead)
 
             val pfd = ParcelFileDescriptor.open(tempInput, ParcelFileDescriptor.MODE_READ_ONLY)
             val renderer = PdfRenderer(pfd)
@@ -587,7 +592,7 @@ object MorphEngine {
             if (pageCount == 0) {
                 renderer.close()
                 pfd.close()
-                throw IllegalStateException("Dokumen PDF kosong.")
+                throw IllegalStateException(strings.engineErrPdfEmpty)
             }
 
             val (scale, jpegQuality) = when (qualityPreset) {
@@ -625,7 +630,7 @@ object MorphEngine {
                 compressedBitmap.recycle()
 
                 val percent = (((i + 1).toFloat() / pageCount) * 80).toInt() + 10
-                updateProgress("pdf", "Mengompres halaman ${i + 1} dari $pageCount...", percent, onProgress)
+                updateProgress("pdf", strings.engineCompressingPage(i + 1, pageCount), percent, onProgress)
             }
 
             renderer.close()
@@ -644,8 +649,8 @@ object MorphEngine {
                     currentStatus.value = ConvertState.Success
                     onSuccess(finalPath)
                 } else {
-                    currentStatus.value = ConvertState.Error("Gagal menyimpan hasil kompresi PDF", inputUri, "pdf")
-                    onError("Gagal menyimpan hasil kompresi PDF")
+                    currentStatus.value = ConvertState.Error(strings.engineErrSavePdfCompress, inputUri, "pdf")
+                    onError(strings.engineErrSavePdfCompress)
                 }
             }
         } catch (e: Exception) {
@@ -663,9 +668,10 @@ object MorphEngine {
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
+        val strings = AppStrings.get()
         val tempOutput = OutputManager.createTempFile(context, "img_pdf", "pdf")
         try {
-            updateProgress("pdf", "Memuat gambar...", 30, onProgress)
+            updateProgress("pdf", strings.engineLoadingImage, 30, onProgress)
 
             val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 val source = android.graphics.ImageDecoder.createSource(context.contentResolver, inputUri)
@@ -678,7 +684,7 @@ object MorphEngine {
                 android.provider.MediaStore.Images.Media.getBitmap(context.contentResolver, inputUri)
             }
 
-            updateProgress("pdf", "Menyusun lembar PDF...", 60, onProgress)
+            updateProgress("pdf", strings.engineBuildingPdfPages, 60, onProgress)
 
             val pdfDocument = PdfDocument()
             val pageInfo = PdfDocument.PageInfo.Builder(bitmap.width, bitmap.height, 1).create()
@@ -700,8 +706,8 @@ object MorphEngine {
                     currentStatus.value = ConvertState.Success
                     onSuccess(finalPath)
                 } else {
-                    currentStatus.value = ConvertState.Error("Gagal membuat PDF dari gambar", inputUri, "pdf")
-                    onError("Gagal membuat PDF dari gambar")
+                    currentStatus.value = ConvertState.Error(strings.engineErrImageToPdf, inputUri, "pdf")
+                    onError(strings.engineErrImageToPdf)
                 }
             }
         } catch (e: Exception) {
@@ -717,6 +723,7 @@ object MorphEngine {
         qualityPreset: Int = 0,
         onProgress: (String, Int) -> Unit
     ): String = withContext(Dispatchers.IO) {
+        val strings = AppStrings.get()
         val tempOutput = OutputManager.createTempFile(context, "img_merge_pdf", "pdf")
         val pdfDocument = PdfDocument()
 
@@ -725,7 +732,7 @@ object MorphEngine {
             for ((index, uri) in inputUris.withIndex()) {
                 currentCoroutineContext().ensureActive()
                 val percent = ((index.toFloat() / total) * 85).toInt() + 5
-                updateProgress("pdf", "Menyusun lembar ${index + 1} dari $total...", percent, onProgress)
+                updateProgress("pdf", strings.engineBuildingPdfPage(index + 1, total), percent, onProgress)
 
                 val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     val source = android.graphics.ImageDecoder.createSource(context.contentResolver, uri)
@@ -744,7 +751,7 @@ object MorphEngine {
                 bitmap.recycle()
             }
 
-            updateProgress("pdf", "Menyimpan dokumen PDF...", 95, onProgress)
+            updateProgress("pdf", strings.engineSavingPdfDoc, 95, onProgress)
 
             FileOutputStream(tempOutput).use { fos ->
                 pdfDocument.writeTo(fos)
@@ -760,7 +767,7 @@ object MorphEngine {
                 }
                 finalPath
             } else {
-                throw IOException("Gagal menyimpan dokumen PDF gabungan")
+                throw IOException(strings.engineErrSaveMergedPdf)
             }
         } catch (e: Exception) {
             try {
@@ -768,7 +775,8 @@ object MorphEngine {
             } catch (_: Exception) {}
             OutputManager.cleanTempFiles(tempOutput)
             withContext(Dispatchers.Main) {
-                currentStatus.value = ConvertState.Error("Gagal menggabungkan gambar ke PDF: ${e.message}", inputUris.firstOrNull(), "pdf")
+                val errMsg = strings.engineErrMergePdf(e.message ?: "")
+                currentStatus.value = ConvertState.Error(errMsg, inputUris.firstOrNull(), "pdf")
             }
             throw e
         }
@@ -785,11 +793,12 @@ object MorphEngine {
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
+        val strings = AppStrings.get()
         val targetExt = extension.trim().removePrefix(".").lowercase()
         val tempOutput = OutputManager.createTempFile(context, "img_out", targetExt)
 
         try {
-            updateProgress(targetExt, "Memproses gambar...", 40, onProgress)
+            updateProgress(targetExt, strings.engineProcessingImage, 40, onProgress)
 
             val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 val source = android.graphics.ImageDecoder.createSource(context.contentResolver, inputUri)
@@ -801,7 +810,7 @@ object MorphEngine {
                 android.provider.MediaStore.Images.Media.getBitmap(context.contentResolver, inputUri)
             }
 
-            updateProgress(targetExt, "Mengompresi gambar...", 70, onProgress)
+            updateProgress(targetExt, strings.engineCompressingImage, 70, onProgress)
 
             if (targetExt == "bmp") {
                 BmpWriter.writeBitmapAsBmp(bitmap, tempOutput)
@@ -851,8 +860,8 @@ object MorphEngine {
                     currentStatus.value = ConvertState.Success
                     onSuccess(finalPath)
                 } else {
-                    currentStatus.value = ConvertState.Error("Gagal menyimpan gambar hasil", inputUri, targetExt)
-                    onError("Gagal menyimpan gambar hasil")
+                    currentStatus.value = ConvertState.Error(strings.engineErrSaveImage, inputUri, targetExt)
+                    onError(strings.engineErrSaveImage)
                 }
             }
         } catch (e: Exception) {
@@ -892,8 +901,9 @@ object MorphEngine {
                     currentStatus.value = ConvertState.Success
                     onSuccess(finalPath)
                 } else {
-                    currentStatus.value = ConvertState.Error("Gagal menyimpan gambar SVG", inputUri, targetExtension)
-                    onError("Gagal menyimpan gambar SVG")
+                    val errMsg = AppStrings.get().engineErrSaveSvg
+                    currentStatus.value = ConvertState.Error(errMsg, inputUri, targetExtension)
+                    onError(errMsg)
                 }
             }
         } catch (e: Exception) {
@@ -911,21 +921,22 @@ object MorphEngine {
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
+        val strings = AppStrings.get()
         val tempEpub = OutputManager.createTempFile(context, "in_epub", "epub")
         val tempTxt = OutputManager.createTempFile(context, "out_txt", "txt")
 
         try {
-            updateProgress("txt", "Membaca berkas EPUB...", 10, onProgress)
+            updateProgress("txt", strings.engineReadingEpub, 10, onProgress)
 
             context.contentResolver.openInputStream(inputUri)?.use { input ->
                 FileOutputStream(tempEpub).use { output -> input.copyTo(output) }
-            } ?: throw IOException("Tidak dapat membaca berkas EPUB.")
+            } ?: throw IOException(strings.engineErrReadEpub)
 
             val extractedText = EpubParser.parseEpubToText(tempEpub) { step, percent ->
                 updateProgress("txt", step, percent, onProgress)
             }
 
-            updateProgress("txt", "Menyimpan teks hasil ekstraksi...", 95, onProgress)
+            updateProgress("txt", strings.engineSavingEpubTxt, 95, onProgress)
             tempTxt.writeText(extractedText, Charsets.UTF_8)
 
             val finalPath = OutputManager.finalizeOutput(context, tempTxt, originalFileName, "txt")
@@ -936,8 +947,8 @@ object MorphEngine {
                     currentStatus.value = ConvertState.Success
                     onSuccess(finalPath)
                 } else {
-                    currentStatus.value = ConvertState.Error("Gagal menyimpan file TXT", inputUri, "txt")
-                    onError("Gagal menyimpan file TXT")
+                    currentStatus.value = ConvertState.Error(strings.engineErrSaveTxt, inputUri, "txt")
+                    onError(strings.engineErrSaveTxt)
                 }
             }
         } catch (e: Exception) {

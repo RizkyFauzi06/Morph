@@ -37,8 +37,10 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.morph.app.core.AppStrings
 import com.morph.app.core.OutputManager
 import com.morph.app.core.SelectedFileItem
+import com.morph.app.core.Strings
 import com.morph.app.ui.components.MorphHomeTopBar
 import com.morph.app.ui.screens.BottomSheetConverter
 import com.morph.app.ui.screens.HomeScreen
@@ -67,7 +69,7 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
         if (!isGranted) {
-            Toast.makeText(this, "Izin notifikasi diperlukan agar konversi latar belakang berjalan optimal.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, AppStrings.get().notifPermissionRequiredToast, Toast.LENGTH_LONG).show()
         }
     }
     
@@ -98,6 +100,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppStrings.init(this)
         handleIntent(intent)
     }
 
@@ -127,7 +130,7 @@ class MainActivity : ComponentActivity() {
             } else {
                 val text = intent.getStringExtra(Intent.EXTRA_TEXT)
                 if (!text.isNullOrBlank()) {
-                    Toast.makeText(this, "Morph adalah converter file offline. Format URL atau teks web tidak didukung.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, AppStrings.get().webUrlNotSupportedToast, Toast.LENGTH_LONG).show()
                 }
                 isStandaloneMode = true
             }
@@ -160,7 +163,7 @@ class MainActivity : ComponentActivity() {
                 isStandaloneMode = false
                 showBottomSheet = true
             } else {
-                Toast.makeText(this, "Tidak ada file yang dapat diproses dari Share.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, AppStrings.get().noFilesFromShareToast, Toast.LENGTH_SHORT).show()
                 isStandaloneMode = true
             }
         } else {
@@ -172,9 +175,11 @@ class MainActivity : ComponentActivity() {
             val lifecycleOwner = LocalLifecycleOwner.current
             val prefs = remember { MorphPrefs(context) }
 
-            // Reactive Theme State (PBI 8.2.2)
+            // Reactive Theme & Language State
             var currentThemeOption by remember { mutableStateOf(prefs.themeOption) }
-            
+            var currentLanguage by remember { mutableStateOf(prefs.appLanguage) }
+            val strings = AppStrings.get(currentLanguage)
+
             //batterry setting
             var isBatteryUnrestricted by remember { mutableStateOf(checkBatteryOptimizationDisabled(context)) }
 
@@ -196,7 +201,7 @@ class MainActivity : ComponentActivity() {
                         (context as? ComponentActivity)?.finish()
                     } else {
                         backPressedOnce = true
-                        Toast.makeText(context, "Tekan sekali lagi untuk keluar", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, strings.pressBackAgainToExit, Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -242,7 +247,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            MorphTheme(themeOption = currentThemeOption) {
+            MorphTheme(themeOption = currentThemeOption, language = currentLanguage) {
                 val backgroundColor = if (isStandaloneMode) MaterialTheme.colorScheme.background else Color.Transparent
 
                 Surface(
@@ -263,15 +268,15 @@ class MainActivity : ComponentActivity() {
                                 onFinish = {
                                     showProgressScreen = false
                                     refreshFiles()
-                                }, onViewResult = { // <--- TAMBAHKAN BLOK INI
+                                }, onViewResult = {
                                     showProgressScreen = false
                                     refreshFiles()
                                     // Ambil file yang baru saja selesai dikonversi
                                     val latestFile = getMorphFiles().firstOrNull()
                                     if (latestFile != null) {
-                                        openFileDirectly(context, latestFile) // Memanggil chooser bawaan aplikasimu
+                                        openFileDirectly(context, latestFile, strings)
                                     } else {
-                                        Toast.makeText(context, "File tidak ditemukan", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, strings.fileNotFoundToast, Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             )
@@ -295,12 +300,12 @@ class MainActivity : ComponentActivity() {
                                             Icon(
                                                 if (currentTab == MorphTab.Home) Icons.Default.Home
                                                 else Icons.Outlined.Home,
-                                                contentDescription = "Beranda"
+                                                contentDescription = strings.tabHome
                                             )
                                         },
                                         label = {
                                             Text(
-                                                "Beranda",
+                                                strings.tabHome,
                                                 style = MaterialTheme.typography.labelMedium,
                                                 fontWeight = if (currentTab == MorphTab.Home) FontWeight.SemiBold else FontWeight.Normal
                                             )
@@ -313,12 +318,12 @@ class MainActivity : ComponentActivity() {
                                             Icon(
                                                 if (currentTab == MorphTab.Tools) Icons.Default.Build
                                                 else Icons.Outlined.Build,
-                                                contentDescription = "Tools"
+                                                contentDescription = strings.tabTools
                                             )
                                         },
                                         label = {
                                             Text(
-                                                "Tools",
+                                                strings.tabTools,
                                                 style = MaterialTheme.typography.labelMedium,
                                                 fontWeight = if (currentTab == MorphTab.Tools) FontWeight.SemiBold else FontWeight.Normal
                                             )
@@ -331,12 +336,12 @@ class MainActivity : ComponentActivity() {
                                             Icon(
                                                 if (currentTab == MorphTab.Settings) Icons.Default.Settings
                                                 else Icons.Outlined.Settings,
-                                                contentDescription = "Pengaturan"
+                                                contentDescription = strings.tabSettings
                                             )
                                         },
                                         label = {
                                             Text(
-                                                "Pengaturan",
+                                                strings.tabSettings,
                                                 style = MaterialTheme.typography.labelMedium,
                                                 fontWeight = if (currentTab == MorphTab.Settings) FontWeight.SemiBold else FontWeight.Normal
                                             )
@@ -355,8 +360,8 @@ class MainActivity : ComponentActivity() {
                                             onRefresh = { refreshFiles() },
                                             onPickFileClick = { filePickerLauncher.launch("*/*") },
                                             onRequestPermission = { askNotificationPermission() },
-                                            onFileClick = { file -> openFileDirectly(context, file) },
-                                            onShareFile = { file -> shareFileDirectly(context, file) },
+                                            onFileClick = { file -> openFileDirectly(context, file, strings) },
+                                            onShareFile = { file -> shareFileDirectly(context, file, strings) },
                                             onDeleteFile = { file ->
                                                 file.delete()
                                                 refreshFiles()
@@ -408,7 +413,13 @@ class MainActivity : ComponentActivity() {
                                                 currentThemeOption = newTheme
                                                 prefs.themeOption = newTheme
                                             },
-                                            onBackClick = { currentTab = MorphTab.Home }
+                                            onBackClick = { currentTab = MorphTab.Home },
+                                            currentLanguage = currentLanguage,
+                                            onLanguageChange = { newLang ->
+                                                currentLanguage = newLang
+                                                prefs.appLanguage = newLang
+                                                AppStrings.setLanguage(newLang)
+                                            }
                                         )
                                     }
                                 }
@@ -431,7 +442,7 @@ class MainActivity : ComponentActivity() {
                                 onConvertStarted = {
                                     showBottomSheet = false
                                     selectedFilesForConversion = emptyList()
-                                    Toast.makeText(this@MainActivity, "Konversi dimulai di latar belakang...", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(this@MainActivity, strings.conversionStartedBackgroundToast, Toast.LENGTH_SHORT).show()
                                     // PBI 8.2.3: Perilaku Tutup Otomatis
                                     if (prefs.closeAfterShare) {
                                         finish()
@@ -527,7 +538,7 @@ fun getExplicitMimeType(extension: String): String {
     }
 }
 
-fun openFileDirectly(context: Context, file: File) {
+fun openFileDirectly(context: Context, file: File, strings: Strings = AppStrings.get()) {
     try {
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
         val mimeType = getExplicitMimeType(file.extension)
@@ -537,15 +548,14 @@ fun openFileDirectly(context: Context, file: File) {
             clipData = ClipData.newRawUri("", uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         } 
-        // UBAH BARIS INI: Memaksa OS memunculkan popup Chooser agar tidak dibajak MI Browser
-        val chooserIntent = Intent.createChooser(intent, "Buka ${file.extension.uppercase()} dengan...")
+        val chooserIntent = Intent.createChooser(intent, strings.openWithTitle(file.extension.uppercase()))
         context.startActivity(chooserIntent)
     } catch (e: Exception) {
-        Toast.makeText(context, "Tidak ada aplikasi untuk membuka ${file.extension.uppercase()}", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, strings.noAppToOpenToast(file.extension.uppercase()), Toast.LENGTH_SHORT).show()
     }
 }
 
-fun shareFileDirectly(context: Context, file: File) {
+fun shareFileDirectly(context: Context, file: File, strings: Strings = AppStrings.get()) {
     try {
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
         val mimeType = getExplicitMimeType(file.extension)
@@ -556,9 +566,9 @@ fun shareFileDirectly(context: Context, file: File) {
             clipData = ClipData.newRawUri("", uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        context.startActivity(Intent.createChooser(intent, "Bagikan via..."))
+        context.startActivity(Intent.createChooser(intent, strings.shareViaTitle))
     } catch (e: Exception) {
-        Toast.makeText(context, "Gagal membagikan file", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, strings.shareFailedToast, Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -567,7 +577,7 @@ fun checkBatteryOptimizationDisabled(context: Context): Boolean {
     return powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: true
 }
 
-fun openAppBatterySettings(context: Context) {
+fun openAppBatterySettings(context: Context, strings: Strings = AppStrings.get()) {
     try {
         val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
             data = Uri.fromParts("package", context.packageName, null)
@@ -578,7 +588,7 @@ fun openAppBatterySettings(context: Context) {
         try {
             context.startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
         } catch (_: Exception) {
-            Toast.makeText(context, "Buka Setelan HP > Aplikasi > Morph > Baterai", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, strings.batterySettingsGuideToast, Toast.LENGTH_LONG).show()
         }
     }
 }

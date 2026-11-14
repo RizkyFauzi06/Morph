@@ -37,26 +37,27 @@ object EpubParser {
         epubFile: File,
         onProgress: ((step: String, percent: Int) -> Unit)? = null
     ): String {
+        val strings = AppStrings.get()
         val zip = try {
             ZipFile(epubFile)
         } catch (e: Exception) {
-            throw IllegalArgumentException("Berkas bukan kontainer ZIP/EPUB yang valid: ${e.message}")
+            throw IllegalArgumentException(strings.epubErrNotZip(e.message ?: ""))
         }
 
         zip.use { zipFile ->
-            onProgress?.invoke("Mencari berkas metadata EPUB...", 20)
+            onProgress?.invoke(strings.epubStepMetadata, 20)
 
             // Step 1: Find OPF package document path from META-INF/container.xml
             val opfPath = findOpfPath(zipFile)
-                ?: throw IllegalStateException("META-INF/container.xml atau rootfile OPF tidak ditemukan di dalam berkas EPUB.")
+                ?: throw IllegalStateException(strings.epubErrNoContainer)
 
             val opfEntry = zipFile.getEntry(opfPath)
-                ?: throw IllegalStateException("Berkas paket OPF ($opfPath) tidak ditemukan di dalam kontainer EPUB.")
+                ?: throw IllegalStateException(strings.epubErrNoOpf(opfPath))
 
             val opfBaseDir = if (opfPath.contains('/')) opfPath.substringBeforeLast('/') + "/" else ""
 
             // Step 2: Parse OPF Document
-            onProgress?.invoke("Membaca struktur dan urutan membaca (Spine)...", 35)
+            onProgress?.invoke(strings.epubStepSpine, 35)
             val opfDoc = zipFile.getInputStream(opfEntry).use { stream ->
                 dbFactory.newDocumentBuilder().parse(stream)
             }
@@ -97,13 +98,13 @@ object EpubParser {
             }
 
             if (spineOrder.isEmpty()) {
-                throw IllegalStateException("OPF Spine tidak memiliki itemref urutan membaca yang valid.")
+                throw IllegalStateException(strings.epubErrEmptySpine)
             }
 
             // Step 5: Read XHTML chapters in exact Spine order
             val sb = StringBuilder()
-            if (bookTitle.isNotEmpty()) sb.appendLine("JUDUL: $bookTitle")
-            if (bookAuthor.isNotEmpty()) sb.appendLine("PENULIS: $bookAuthor")
+            if (bookTitle.isNotEmpty()) sb.appendLine("${strings.epubBookTitlePrefix}$bookTitle")
+            if (bookAuthor.isNotEmpty()) sb.appendLine("${strings.epubBookAuthorPrefix}$bookAuthor")
             if (bookTitle.isNotEmpty() || bookAuthor.isNotEmpty()) {
                 sb.appendLine()
                 sb.appendLine("=".repeat(60))
@@ -121,7 +122,7 @@ object EpubParser {
                     ?: continue
 
                 val percent = 40 + ((index + 1).toFloat() / totalItems * 50).toInt()
-                onProgress?.invoke("Mengekstrak bab ${index + 1} dari $totalItems...", percent)
+                onProgress?.invoke(strings.epubStepExtractingChapter(index + 1, totalItems), percent)
 
                 val html = zipFile.getInputStream(entry).bufferedReader(Charsets.UTF_8).use { it.readText() }
                 val text = cleanHtmlToPlainText(html)
@@ -134,7 +135,7 @@ object EpubParser {
             }
 
             if (extractedCount == 0) {
-                throw IllegalStateException("Tidak ditemukan teks bab yang dapat dibaca dalam urutan Spine EPUB.")
+                throw IllegalStateException(strings.epubErrNoChapterText)
             }
 
             return sb.toString().trim()

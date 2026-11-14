@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.morph.app.MorphEngine
+import com.morph.app.core.AppStrings
 import com.morph.app.core.ConversionQueueManager
 import com.morph.app.core.FileCategory
 import com.morph.app.core.FileCategoryManager
@@ -53,6 +54,8 @@ import androidx.compose.ui.unit.sp
 // HOME SCREEN — STATE MODEL
 // Sesuai MORPH_UI_UX_SPEC.md Section 7.5
 // ============================================================
+
+data class CategoryFilterItem(val id: String, val label: String)
 
 sealed class HomeHistoryState {
     object NoHistory : HomeHistoryState()
@@ -80,6 +83,8 @@ fun HomeScreen(
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val strings = AppStrings.current
+
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshing,
         onRefresh = { onRefresh() }
@@ -125,18 +130,26 @@ fun HomeScreen(
     }
 
     // --- FILTER STATE ---
-    // Urutan sesuai spec: Semua, Dokumen, Gambar, Video, Audio
-    var selectedCategory by remember { mutableStateOf("Semua") }
-    val categories = listOf("Semua", "Dokumen", "Gambar", "Video", "Audio")
+    var selectedCategoryId by remember { mutableStateOf("all") }
+    val categories = listOf(
+        CategoryFilterItem("all", strings.categoryAll),
+        CategoryFilterItem("document", strings.categoryDocument),
+        CategoryFilterItem("image", strings.categoryImage),
+        CategoryFilterItem("video", strings.categoryVideo),
+        CategoryFilterItem("audio", strings.categoryAudio)
+    )
 
-    val filteredFiles = remember(morphFiles, selectedCategory) {
-        if (selectedCategory == "Semua") {
-            morphFiles
-        } else {
-            morphFiles.filter { file ->
-                val cat = FileCategoryManager.getCategory(file.extension)
-                cat.displayName.equals(selectedCategory, ignoreCase = true)
+    val filteredFiles = remember(morphFiles, selectedCategoryId) {
+        when (selectedCategoryId) {
+            "all" -> morphFiles
+            "document" -> morphFiles.filter {
+                val c = FileCategoryManager.getCategory(it.extension)
+                c == FileCategory.DOCUMENT || c == FileCategory.PDF || c == FileCategory.EBOOK || c == FileCategory.SPREADSHEET
             }
+            "image" -> morphFiles.filter { FileCategoryManager.getCategory(it.extension) == FileCategory.IMAGE }
+            "video" -> morphFiles.filter { FileCategoryManager.getCategory(it.extension) == FileCategory.VIDEO }
+            "audio" -> morphFiles.filter { FileCategoryManager.getCategory(it.extension) == FileCategory.AUDIO }
+            else -> morphFiles
         }
     }
 
@@ -164,9 +177,9 @@ fun HomeScreen(
             if (activeJob != null) {
                 val currentJobNumber = queueState.indexOfFirst { it.id == activeJob.id } + 1
                 val queueInfo = if (totalQueueCount > 1) {
-                    "Mengonversi ($currentJobNumber/$totalQueueCount)"
+                    strings.convertingBatchInfo(currentJobNumber, totalQueueCount)
                 } else {
-                    "Mengonversi ke ${activeJob.targetFormat.uppercase()}"
+                    strings.convertingTo(activeJob.targetFormat)
                 }
 
                 item {
@@ -187,7 +200,7 @@ fun HomeScreen(
                 failedJobs.forEach { failedJob ->
                     item(key = "failed_${failedJob.id}") {
                         ErrorCard(
-                            message = "${failedJob.originalFileName}: ${failedJob.errorMessage ?: "Gagal dikonversi"}",
+                            message = "${failedJob.originalFileName}: ${failedJob.errorMessage ?: strings.failedToConvertDefault}",
                             onDismiss = { ConversionQueueManager.dismissJob(failedJob.id) },
                             onRetry = {
                                 ConversionQueueManager.dismissJob(failedJob.id)
@@ -244,13 +257,13 @@ fun HomeScreen(
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "Lepas Pembatasan Baterai",
+                                        text = strings.batteryBannerTitle,
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSecondaryContainer
                                     )
                                     Text(
-                                        text = "Agar konversi video/audio panjang tidak dihentikan paksa saat layar mati atau pindah aplikasi.",
+                                        text = strings.batteryBannerDesc,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
                                     )
@@ -268,14 +281,14 @@ fun HomeScreen(
                                         prefs.dismissBatteryWarning = true
                                     }
                                 ) {
-                                    Text("Nanti", fontSize = 12.sp)
+                                    Text(strings.btnLater, fontSize = 12.sp)
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Button(
                                     onClick = { showBatteryGuideDialog = true },
                                     shape = RoundedCornerShape(10.dp)
                                 ) {
-                                    Text("Lihat Cara", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text(strings.btnLearnHow, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -289,8 +302,8 @@ fun HomeScreen(
                 item {
                     MorphCategoryFilter(
                         categories = categories,
-                        selectedCategory = selectedCategory,
-                        onCategorySelected = { selectedCategory = it }
+                        selectedCategoryId = selectedCategoryId,
+                        onCategorySelected = { selectedCategoryId = it }
                     )
                 }
             }
@@ -312,9 +325,10 @@ fun HomeScreen(
 
                 is HomeHistoryState.FilteredEmpty -> {
                     item {
+                        val currentLabel = categories.find { it.id == selectedCategoryId }?.label ?: strings.categoryAll
                         MorphFilteredEmptyState(
-                            category = selectedCategory,
-                            onClearFilter = { selectedCategory = "Semua" }
+                            category = currentLabel,
+                            onClearFilter = { selectedCategoryId = "all" }
                         )
                     }
                 }
@@ -361,14 +375,14 @@ fun HomeScreen(
 
         //Battery Dialog
         if (showBatteryGuideDialog) {
-                        BatteryOptimizationGuideDialog(
-                        onDismiss = { showBatteryGuideDialog = false },
-                        onOpenSettings = {
-                        showBatteryGuideDialog = false
-                        com.morph.app.openAppBatterySettings(context)
-                    }
-                )
-            }
+            BatteryOptimizationGuideDialog(
+                onDismiss = { showBatteryGuideDialog = false },
+                onOpenSettings = {
+                    showBatteryGuideDialog = false
+                    com.morph.app.openAppBatterySettings(context, strings)
+                }
+            )
+        }
         // --- FAB — Hanya muncul saat history tersedia ---
         if (historyState is HomeHistoryState.HistoryAvailable) {
             FloatingActionButton(
@@ -382,7 +396,7 @@ fun HomeScreen(
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
-                    contentDescription = "Pilih File Baru",
+                    contentDescription = strings.selectNewFile,
                     modifier = Modifier.size(26.dp)
                 )
             }
@@ -404,8 +418,8 @@ fun HomeScreen(
 
 @Composable
 fun MorphCategoryFilter(
-    categories: List<String>,
-    selectedCategory: String,
+    categories: List<CategoryFilterItem>,
+    selectedCategoryId: String,
     onCategorySelected: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -414,14 +428,14 @@ fun MorphCategoryFilter(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(vertical = 2.dp)
     ) {
-        items(categories) { category ->
-            val isSelected = selectedCategory == category
+        items(categories, key = { it.id }) { categoryItem ->
+            val isSelected = selectedCategoryId == categoryItem.id
             FilterChip(
                 selected = isSelected,
-                onClick = { onCategorySelected(category) },
+                onClick = { onCategorySelected(categoryItem.id) },
                 label = {
                     Text(
-                        text = category,
+                        text = categoryItem.label,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
                     )
@@ -526,8 +540,10 @@ fun MorphEmptyFileState(
                 .fillMaxWidth().padding(horizontal = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            val strings = AppStrings.current
+
             Text(
-                text = "Pilih File",
+                text = strings.selectFile,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -536,7 +552,7 @@ fun MorphEmptyFileState(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Pilih file dari perangkat untuk mulai mengonversi.",
+                text = strings.selectFileSubtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
@@ -556,6 +572,8 @@ fun MorphFilteredEmptyState(
     onClearFilter: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val strings = AppStrings.current
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -581,7 +599,7 @@ fun MorphFilteredEmptyState(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Tidak ada file $category",
+            text = strings.noFilesInCategory(category),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
@@ -591,7 +609,7 @@ fun MorphFilteredEmptyState(
         Spacer(modifier = Modifier.height(6.dp))
 
         Text(
-            text = "Belum ada file dalam kategori ini. Coba kategori lain atau konversi file baru.",
+            text = strings.noFilesInCategoryDesc,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
@@ -605,7 +623,7 @@ fun MorphFilteredEmptyState(
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
         ) {
             Text(
-                text = "Tampilkan Semua",
+                text = strings.btnShowAll,
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -622,6 +640,8 @@ fun NotificationPermissionBanner(
     onRequestPermission: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val strings = AppStrings.current
+
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
@@ -644,13 +664,13 @@ fun NotificationPermissionBanner(
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Aktifkan Notifikasi",
+                    text = strings.notifBannerTitle,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onErrorContainer
                 )
                 Text(
-                    text = "Agar konversi latar belakang tidak dihentikan sistem.",
+                    text = strings.notifBannerDesc,
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f)
                 )
@@ -658,7 +678,7 @@ fun NotificationPermissionBanner(
             Spacer(modifier = Modifier.width(8.dp))
             TextButton(onClick = onRequestPermission) {
                 Text(
-                    text = "Izinkan",
+                    text = strings.btnAllow,
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.error,
                     fontWeight = FontWeight.SemiBold
@@ -674,13 +694,15 @@ fun BatteryOptimizationGuideDialog(
     onDismiss: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
+    val strings = AppStrings.current
+
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(20.dp),
         containerColor = MaterialTheme.colorScheme.surface,
         title = {
             Text(
-                text = "Cara Menonaktifkan Pembatasan Baterai",
+                text = strings.batteryDialogTitle,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -694,7 +716,7 @@ fun BatteryOptimizationGuideDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Sistem Android sering menghentikan proses latar belakang untuk menghemat daya. Ikuti langkah berikut agar konversi tetap berjalan lancar:",
+                    text = strings.batteryDialogIntro,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -708,17 +730,17 @@ fun BatteryOptimizationGuideDialog(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "1. Ketuk tombol \"Buka Info Aplikasi\" di bawah.",
+                            text = strings.batteryStep1,
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            text = "2. Pilih menu \"Baterai\" atau \"Penggunaan baterai aplikasi\".",
+                            text = strings.batteryStep2,
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            text = "3. Ubah pengaturan menjadi \"Tidak dibatasi\" (Unrestricted).",
+                            text = strings.batteryStep3,
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -727,10 +749,7 @@ fun BatteryOptimizationGuideDialog(
                 }
 
                 Text(
-                    text = "Catatan per merek HP:\n" +
-                           "• Xiaomi / Redmi / Poco: Pilih \"Penghemat baterai\" → \"Tidak ada pembatasan\".\n" +
-                           "• Samsung: Pilih \"Baterai\" → \"Tidak dibatasi\".\n" +
-                           "• Oppo / Realme / Vivo: Aktifkan \"Izinkan aktivitas latar belakang\".",
+                    text = strings.batteryNotes,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -738,7 +757,7 @@ fun BatteryOptimizationGuideDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Tutup")
+                Text(strings.btnClose)
             }
         },
         confirmButton = {
@@ -746,7 +765,7 @@ fun BatteryOptimizationGuideDialog(
                 onClick = onOpenSettings,
                 shape = RoundedCornerShape(10.dp)
             ) {
-                Text("Buka Info Aplikasi", fontWeight = FontWeight.Bold)
+                Text(strings.btnOpenAppInfo, fontWeight = FontWeight.Bold)
             }
         }
     )
