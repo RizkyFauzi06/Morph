@@ -55,14 +55,14 @@
   <table>
     <tr>
       <td width="50%" align="center" valign="top">
-        <img src="Homescreen.jpg" alt="Beranda Morph" width="260" />
+        <img src="assets/Homescreen.jpg" alt="Beranda Morph" width="260" />
         <br /><br />
         <strong>Beranda & Riwayat File</strong>
         <br />
         <sub>Pemilih file cepat, filter kategori (Dokumen, Gambar, Video, Audio), serta pengelolaan riwayat hasil konversi lokal.</sub>
       </td>
       <td width="50%" align="center" valign="top">
-        <img src="Share%20To%20Convert.jpg" alt="Share To Convert" width="260" />
+        <img src="assets/Share%20To%20Convert.jpg" alt="Share To Convert" width="260" />
         <br /><br />
         <strong>Share to Convert</strong>
         <br />
@@ -71,14 +71,14 @@
     </tr>
     <tr>
       <td width="50%" align="center" valign="top">
-        <img src="Direct%20Web%20Convertion.jpg" alt="Direct Web Conversion" width="260" />
+        <img src="assets/Direct%20Web%20Convertion.jpg" alt="Direct Web Conversion" width="260" />
         <br /><br />
         <strong>Konversi Format Web Langsung</strong>
         <br />
         <sub>Mengubah aset media dan vektor berbasis web (WebP, WebM, SVG) menjadi format standar yang siap digunakan secara offline.</sub>
       </td>
       <td width="50%" align="center" valign="top">
-        <img src="Batch%20Processing.jpg" alt="Batch Processing" width="260" />
+        <img src="assets/Batch%20Processing.jpg" alt="Batch Processing" width="260" />
         <br /><br />
         <strong>Batch Processing Terkelompok</strong>
         <br />
