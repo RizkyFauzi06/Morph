@@ -29,4 +29,12 @@ class MorphPrefs(context: Context) {
     var onboardingDone: Boolean
         get() = prefs.getBoolean("onboarding_done", false)
         set(value) = prefs.edit().putBoolean("onboarding_done", value).apply()
+        
+    var appLanguage: String // "id": Bahasa Indonesia, "en": English
+        get() = prefs.getString("app_language", "id") ?: "id"
+        set(value) = prefs.edit().putString("app_language", value).apply()
+        
+    var dismissBatteryWarning: Boolean
+        get() = prefs.getBoolean("dismiss_battery_warning", false)
+        set(value) = prefs.edit().putBoolean("dismiss_battery_warning", value).apply()
 }

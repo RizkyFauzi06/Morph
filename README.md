@@ -174,7 +174,7 @@
 </p>
 <ol>
   <li>Go to the <a href="https://github.com/RizkyFauzi06/Morph/releases"><strong>Releases</strong></a> section of this repository.</li>
-  <li>Download the latest <code>Morph-v1.1.apk</code> file.</li>
+  <li>Download the latest <code>Morph-v1.0.0.apk</code> file.</li>
   <li>Open the downloaded APK on your Android device (Android 8.0 or newer) and allow installation from your browser or file manager if prompted.</li>
 </ol>
 
@@ -227,10 +227,17 @@ cd Morph
 <h2 id="tech-stack--license">Tech Stack &amp; License</h2>
 
 <ul>
-  <li><strong>Language &amp; UI:</strong> Kotlin, Jetpack Compose (Material 3), Kotlin Coroutines &amp; StateFlow</li>
-  <li><strong>Core Engines:</strong> FFmpegKit Full (GPLv3), AndroidSVG 1.4 (Apache 2.0), Android Native <code>PdfRenderer</code> &amp; <code>PdfDocument</code></li>
-  <li><strong>License:</strong> Distributed under the <a href="LICENSE">GNU General Public License v3.0 (GPLv3)</a>.</li>
+  <li><strong>Language &amp; UI:</strong> Kotlin, Jetpack Compose, AndroidX, &amp; Kotlin Coroutines (Apache License 2.0).</li>
+  <li><strong>Core Libraries (Third-Party Engines):</strong>
+    <ul>
+      <li><strong>FFmpegKit Full (8.1.7)</strong> — Audio/video processing (License: <strong>GPL-3.0 / LGPL-3.0</strong>).</li>
+      <li><strong>AndroidSVG (1.4)</strong> by Paul LeBeau — SVG vector graphics rendering (License: <strong>Apache License 2.0</strong>).</li>
+      <li><strong>Android Native SDK</strong> — <code>PdfRenderer</code>, <code>PdfDocument</code>, &amp; <code>java.util.zip</code> for PDF and EPUB/ZIP archive processing.</li>
+    </ul>
+  </li>
+  <li><strong>Morph Project License:</strong> Distributed under the <a href="LICENSE"><strong>GNU General Public License v3.0 (GPL-3.0)</strong></a>.</li>
 </ul>
+
 
 <hr />
 

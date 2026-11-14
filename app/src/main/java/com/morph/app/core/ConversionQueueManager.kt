@@ -7,6 +7,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.util.UUID
 
+/*
+ * Copyright (C) 2026 Rizki Fauzi
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 enum class JobStatus {
     WAITING,
     PROCESSING,

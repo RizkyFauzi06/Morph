@@ -3,8 +3,10 @@ package com.morph.app.ui.screens
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Lock
@@ -15,10 +17,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morph.app.ui.components.MorphLogo
@@ -28,7 +28,6 @@ fun WelcomeScreen(
     onGetStarted: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Gentle floating animation for visual elements
     val infiniteTransition = rememberInfiniteTransition(label = "welcomeFloat")
     val floatOffset by infiniteTransition.animateFloat(
         initialValue = -5f,
@@ -40,23 +39,57 @@ fun WelcomeScreen(
         label = "float"
     )
 
-    Surface(
+    Scaffold(
         modifier = modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
+        containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = {
+            // Otomatis memberi jarak aman di atas tombol Home/Back/Gesture HP
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 28.dp, vertical = 16.dp)
+            ) {
+                Button(
+                    onClick = onGetStarted,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                ) {
+                    Text(
+                        text = "Mulai Mengonversi",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 28.dp, vertical = 32.dp),
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 28.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+            verticalArrangement = Arrangement.SpaceEvenly
         ) {
-            Spacer(modifier = Modifier.height(20.dp))
-
             // Logo & Title Area
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.padding(top = 12.dp)
             ) {
                 Box(
                     modifier = Modifier.offset(y = floatOffset.dp),
@@ -91,6 +124,8 @@ fun WelcomeScreen(
                 }
             }
 
+            Spacer(modifier = Modifier.height(24.dp))
+
             // Feature Highlights
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -120,32 +155,6 @@ fun WelcomeScreen(
                         desc = "File Anda tidak pernah meninggalkan ponsel Anda."
                     )
                 }
-            }
-
-            // Bottom CTA
-            Button(
-                onClick = onGetStarted,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                )
-            ) {
-                // 1. Hapus bungkus Row(...) di sini, karena Button sudah berupa Row otomatis
-                Text(
-                    text = "Mulai Mengonversi",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
             }
         }
     }

@@ -44,6 +44,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.material3.ripple
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.BatteryAlert
+import androidx.compose.ui.unit.sp
 
 // ============================================================
 // HOME SCREEN — STATE MODEL
@@ -70,6 +74,7 @@ fun HomeScreen(
     onFileClick: (File) -> Unit,
     onShareFile: (File) -> Unit,
     onDeleteFile: (File) -> Unit,
+    isBatteryUnrestricted: Boolean = true,
     onRetryConversion: (android.net.Uri, String) -> Unit,
     onBannerClick: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -87,7 +92,27 @@ fun HomeScreen(
     val failedJobs = remember(queueState) { queueState.filter { it.status == JobStatus.FAILED } }
     val completedCount = remember(queueState) { queueState.count { it.status == JobStatus.COMPLETED } }
     val totalQueueCount = remember(queueState) { queueState.size }
+    
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val prefs = remember { com.morph.app.MorphPrefs(context) }
 
+    var batteryUnrestricted by remember {
+        mutableStateOf(com.morph.app.checkBatteryOptimizationDisabled(context))
+    }
+    var batteryBannerDismissed by remember { mutableStateOf(prefs.dismissBatteryWarning) }
+    var showBatteryGuideDialog by remember { mutableStateOf(false) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                batteryUnrestricted = com.morph.app.checkBatteryOptimizationDisabled(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    
     // Auto-refresh when conversion completes
     LaunchedEffect(engineState, completedCount) {
         if (engineState is MorphEngine.ConvertState.Success || completedCount > 0) {
@@ -193,6 +218,70 @@ fun HomeScreen(
                     NotificationPermissionBanner(onRequestPermission = onRequestPermission)
                 }
             }
+            
+            if (!batteryUnrestricted && !batteryBannerDismissed) {
+                item {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f)
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.BatteryAlert,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Lepas Pembatasan Baterai",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                    Text(
+                                        text = "Agar konversi video/audio panjang tidak dihentikan paksa saat layar mati atau pindah aplikasi.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
+                                    )
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TextButton(
+                                    onClick = {
+                                        batteryBannerDismissed = true
+                                        prefs.dismissBatteryWarning = true
+                                    }
+                                ) {
+                                    Text("Nanti", fontSize = 12.sp)
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Button(
+                                    onClick = { showBatteryGuideDialog = true },
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text("Lihat Cara", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             // --- 4. CATEGORY FILTER CHIPS ---
             // Hanya tampil saat ada history (populated atau filtered empty)
@@ -266,9 +355,20 @@ fun HomeScreen(
                         )
                     }
                 }
-            }
+                
+            }   
         }
 
+        //Battery Dialog
+        if (showBatteryGuideDialog) {
+                        BatteryOptimizationGuideDialog(
+                        onDismiss = { showBatteryGuideDialog = false },
+                        onOpenSettings = {
+                        showBatteryGuideDialog = false
+                        com.morph.app.openAppBatterySettings(context)
+                    }
+                )
+            }
         // --- FAB — Hanya muncul saat history tersedia ---
         if (historyState is HomeHistoryState.HistoryAvailable) {
             FloatingActionButton(
@@ -566,4 +666,88 @@ fun NotificationPermissionBanner(
             }
         }
     }
+}
+
+
+@Composable
+fun BatteryOptimizationGuideDialog(
+    onDismiss: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(20.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        title = {
+            Text(
+                text = "Cara Menonaktifkan Pembatasan Baterai",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(androidx.compose.foundation.rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Sistem Android sering menghentikan proses latar belakang untuk menghemat daya. Ikuti langkah berikut agar konversi tetap berjalan lancar:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "1. Ketuk tombol \"Buka Info Aplikasi\" di bawah.",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = "2. Pilih menu \"Baterai\" atau \"Penggunaan baterai aplikasi\".",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = "3. Ubah pengaturan menjadi \"Tidak dibatasi\" (Unrestricted).",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Catatan per merek HP:\n" +
+                           "• Xiaomi / Redmi / Poco: Pilih \"Penghemat baterai\" → \"Tidak ada pembatasan\".\n" +
+                           "• Samsung: Pilih \"Baterai\" → \"Tidak dibatasi\".\n" +
+                           "• Oppo / Realme / Vivo: Aktifkan \"Izinkan aktivitas latar belakang\".",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Tutup")
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onOpenSettings,
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("Buka Info Aplikasi", fontWeight = FontWeight.Bold)
+            }
+        }
+    )
 }

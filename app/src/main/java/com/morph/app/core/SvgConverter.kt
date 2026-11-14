@@ -9,6 +9,9 @@ import com.caverock.androidsvg.SVG
 import java.io.File
 import java.io.FileOutputStream
 
+// Vector rasterization powered by AndroidSVG (Apache License 2.0)
+// Copyright 2013-2019 Paul LeBeau, Cave Rock Software Ltd.
+
 object SvgConverter {
 
     fun convertSvg(

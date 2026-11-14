@@ -162,7 +162,7 @@
 
 <ol>
   <li>Buka halaman <a href="https://github.com/RizkyFauzi06/Morph/releases"><strong>Releases</strong></a> pada repositori ini.</li>
-  <li>Unduh berkas <code>Morph-v1.1.apk</code> (atau versi terbaru yang tersedia) pada bagian <strong>Assets</strong>.</li>
+  <li>Unduh berkas <code>Morph-v1.0.0.apk</code> (atau versi terbaru yang tersedia) pada bagian <strong>Assets</strong>.</li>
   <li>Buka berkas APK yang telah diunduh di perangkat Android Anda. Jika diminta, izinkan instalasi aplikasi dari sumber ini pada pengaturan peramban atau pengelola file Anda.</li>
   <li>Selesaikan proses instalasi dan buka <strong>Morph</strong>.</li>
 </ol>
@@ -211,11 +211,17 @@ cd Morph
 <h2 id="spesifikasi-teknis">Spesifikasi &amp; Lisensi</h2>
 
 <ul>
-  <li><strong>Arsitektur &amp; UI:</strong> 100% Kotlin, Jetpack Compose (Material 3), Kotlin Coroutines &amp; StateFlow.</li>
-  <li><strong>Pustaka Inti:</strong> FFmpegKit Full (<code>8.1.7</code>) untuk pemrosesan audio/video, AndroidSVG (<code>1.4</code>) untuk rendering vektor, serta Android Native PDF &amp; ZIP parser.</li>
-  <li><strong>Lisensi:</strong> Didistribusikan di bawah lisensi <strong>GNU General Public License v3.0 (GPL-3.0)</strong>.</li>
+  <li><strong>Bahasa &amp; UI:</strong> Kotlin, Jetpack Compose, AndroidX, &amp; Kotlin Coroutines (Apache License 2.0).</li>
+  <li><strong>Pustaka Inti (Third-Party Engines):</strong>
+    <ul>
+      <li><strong>FFmpegKit Full (8.1.7)</strong> — Pemrosesan audio/video (Lisensi: <strong>GPL-3.0 / LGPL-3.0</strong>).</li>
+      <li><strong>AndroidSVG (1.4)</strong> oleh Paul LeBeau — Rendering grafis vektor SVG (Lisensi: <strong>Apache License 2.0</strong>).</li>
+      <li><strong>Android Native SDK</strong> — <code>PdfRenderer</code>, <code>PdfDocument</code>, &amp; <code>java.util.zip</code> untuk pemrosesan PDF dan arsip EPUB/ZIP.</li>
+    </ul>
+  </li>
+  <li><strong>Lisensi Proyek Morph:</strong> Didistribusikan di bawah lisensi <a href="LICENSE"><strong>GNU General Public License v3.0 (GPL-3.0)</strong></a>.</li>
 </ul>
-
+ 
 <hr />
 
 <div align="center">

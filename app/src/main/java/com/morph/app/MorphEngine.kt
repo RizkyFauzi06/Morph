@@ -22,6 +22,11 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 
+/*
+ * Copyright (C) 2026 Rizki Fauzi
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 object MorphEngine {
 
     private const val TAG = "MorphEngine"

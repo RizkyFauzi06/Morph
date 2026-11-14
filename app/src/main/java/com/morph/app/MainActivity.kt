@@ -48,6 +48,13 @@ import com.morph.app.ui.screens.ToolsScreen
 import com.morph.app.ui.screens.WelcomeScreen
 import com.morph.app.ui.theme.MorphTheme
 import java.io.File
+import android.os.PowerManager
+import android.provider.Settings
+
+/*
+ * Copyright (C) 2026 Rizki Fauzi
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 enum class MorphTab {
     Home, Tools, Settings
@@ -63,6 +70,7 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "Izin notifikasi diperlukan agar konversi latar belakang berjalan optimal.", Toast.LENGTH_LONG).show()
         }
     }
+    
 
     // File Picker for Standalone Launcher - Supports single or multiple files (PBI 8.3 & PBI 7.1)
     private var filePickerLauncher = registerForActivityResult(
@@ -166,6 +174,9 @@ class MainActivity : ComponentActivity() {
 
             // Reactive Theme State (PBI 8.2.2)
             var currentThemeOption by remember { mutableStateOf(prefs.themeOption) }
+            
+            //batterry setting
+            var isBatteryUnrestricted by remember { mutableStateOf(checkBatteryOptimizationDisabled(context)) }
 
             // Dual-State Navigation: Standalone vs Share Mode
             var currentTab by remember { mutableStateOf(MorphTab.Home) }
@@ -215,6 +226,7 @@ class MainActivity : ComponentActivity() {
                         Lifecycle.Event.ON_RESUME -> {
                             isAppInForeground = true
                             hasNotificationPermission = checkNotifPermission(context)
+                            isBatteryUnrestricted = checkBatteryOptimizationDisabled(context)
                             refreshFiles()
                         }
                         Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
@@ -547,5 +559,26 @@ fun shareFileDirectly(context: Context, file: File) {
         context.startActivity(Intent.createChooser(intent, "Bagikan via..."))
     } catch (e: Exception) {
         Toast.makeText(context, "Gagal membagikan file", Toast.LENGTH_SHORT).show()
+    }
+}
+
+fun checkBatteryOptimizationDisabled(context: Context): Boolean {
+    val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+    return powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: true
+}
+
+fun openAppBatterySettings(context: Context) {
+    try {
+        val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.fromParts("package", context.packageName, null)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    } catch (_: Exception) {
+        try {
+            context.startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+        } catch (_: Exception) {
+            Toast.makeText(context, "Buka Setelan HP > Aplikasi > Morph > Baterai", Toast.LENGTH_LONG).show()
+        }
     }
 }
