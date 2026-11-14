@@ -49,7 +49,7 @@
   <tr>
     <td width="50%" valign="top">
       <h3>System-Wide Share Integration</h3>
-      <p>Convert files directly from your Gallery, File Manager, or messaging apps using Android's native <strong>Share</strong> menu—supporting both single and multiple file sharing.</p>
+      <p>Convert files directly from your Gallery, File Manager, or messaging apps using Android's native <strong>Share</strong> menu. Supporting both single and multiple file sharing.</p>
     </td>
     <td width="50%" valign="top">
       <h3>Background Queue &amp; Notifications</h3>
