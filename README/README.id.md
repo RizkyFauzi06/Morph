@@ -162,7 +162,7 @@
 
 <ol>
   <li>Buka halaman <a href="https://github.com/RizkyFauzi06/Morph/releases"><strong>Releases</strong></a> pada repositori ini.</li>
-  <li>Unduh berkas <code>Morph-v1.0.0.apk</code> (atau versi terbaru yang tersedia) pada bagian <strong>Assets</strong>.</li>
+  <li>Unduh file <code>Morph-v*.apk</code> terbaru dari <a href="https://github.com/RizkyFauzi06/Morph/releases/latest">GitHub Releases</a>.</li>
   <li>Buka berkas APK yang telah diunduh di perangkat Android Anda. Jika diminta, izinkan instalasi aplikasi dari sumber ini pada pengaturan peramban atau pengelola file Anda.</li>
   <li>Selesaikan proses instalasi dan buka <strong>Morph</strong>.</li>
 </ol>

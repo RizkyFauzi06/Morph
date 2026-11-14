@@ -174,7 +174,7 @@
 </p>
 <ol>
   <li>Go to the <a href="https://github.com/RizkyFauzi06/Morph/releases"><strong>Releases</strong></a> section of this repository.</li>
-  <li>Download the latest <code>Morph-v1.0.0.apk</code> file.</li>
+ <li>Download the latest <code>Morph-v*.apk</code> from <a href="https://github.com/RizkyFauzi06/Morph/releases/latest">GitHub Releases</a>.</li>
   <li>Open the downloaded APK on your Android device (Android 8.0 or newer) and allow installation from your browser or file manager if prompted.</li>
 </ol>
 
