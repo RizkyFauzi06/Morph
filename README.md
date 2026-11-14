@@ -195,6 +195,30 @@ cd Morph
   The compiled APK will be generated at <code>app/build/outputs/apk/debug/app-debug.apk</code>.
 </p>
 
+<h2 id="how-to-use">How to Use</h2>
+
+<h3>1. Convert Directly Inside Morph</h3>
+<ol>
+  <li>Open <strong>Morph</strong> and tap <strong>Select File</strong> on the <strong>Home</strong> screen.</li>
+  <li>Pick one or multiple files from your device (videos, audio, images, SVGs, PDFs, or EPUBs).</li>
+  <li>Choose your <strong>Target Format</strong> and <strong>Quality Preset</strong> (<strong>High</strong>, <strong>Medium</strong>, <strong>Low</strong>, or <strong>Instant</strong> lossless stream copy for compatible media).</li>
+  <li><em>(Optional)</em> Toggle <strong>Merge into a single PDF</strong> when selecting multiple images.</li>
+  <li>Tap <strong>Convert</strong>. Tasks run reliably in the background, and all converted files are saved to <code>Downloads/Morph</code>.</li>
+</ol>
+
+<h3>2. Share from Other Apps (Share-to-Morph)</h3>
+<ol>
+  <li>Select one or more files in your <strong>Gallery</strong>, <strong>File Manager</strong>, or any app that supports file sharing.</li>
+  <li>Tap Android's <strong>Share</strong> button and choose <strong>Morph</strong>.</li>
+  <li>Select your target format in the pop-up sheet and tap <strong>Convert</strong> without leaving your current app.</li>
+</ol>
+
+<h3>3. Manage Your Outputs</h3>
+<ul>
+  <li>Filter converted files by category on the <strong>Home</strong> screen, or tap any item to open, share, or delete it.</li>
+  <li>Enable <strong>Auto-Close (Share)</strong> or <strong>Keep Original Filename</strong> in <strong>Settings</strong> to customize your workflow.</li>
+</ul>
+
 <h2 id="privacy--permissions">Privacy &amp; Permissions</h2>
 
 <p><strong>100% Local Conversion Engine:</strong> All file conversions, media transcoding, and document parsing run entirely on your device. Morph has no backend servers, no analytics, and never uploads your files.</p>
