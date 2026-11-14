@@ -38,8 +38,8 @@
 <table>
   <tr>
     <td width="50%" valign="top">
-      <h3>100% Offline &amp; Private</h3>
-      <p>Morph does not request internet access. Every conversion, audio extraction, and document operation is processed locally on your device, ensuring your files never leave your phone.</p>
+      <h3>Offline Engine &amp; Private</h3>
+      <p>Every conversion, audio extraction, and document operation runs 100% locally on your device, ensuring your files never leave your phone. Minimal internet access is used solely to check for new GitHub releases (optional).</p>
     </td>
     <td width="50%" valign="top">
       <h3>Smart Batch Conversion</h3>

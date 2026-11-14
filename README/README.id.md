@@ -29,8 +29,8 @@
 <table>
   <tr>
     <td width="50%" valign="top">
-      <h4>100% Offline &amp; Privasi Terjaga</h4>
-      <p>Morph tidak memiliki izin akses internet. Seluruh proses konversi dan ekstraksi media diproses secara lokal di dalam ponsel Anda sehingga file pribadi tidak pernah keluar dari perangkat.</p>
+      <h3>Mesin Offline &amp; Privat</h3>
+      <p>Seluruh konversi file, ekstraksi audio, dan pengolahan dokumen berjalan 100% secara lokal di perangkat Anda, memastikan file tidak pernah keluar dari ponsel. Akses internet minimal hanya digunakan untuk memeriksa pembaruan rilis di GitHub (opsional).</p>
     </td>
     <td width="50%" valign="top">
       <h4>Konversi Instan dari Menu Share</h4>
