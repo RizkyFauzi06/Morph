@@ -31,7 +31,7 @@
 <hr />
 
 <p>
-  <strong>Morph</strong> is a local, offline-first file converter for Android built with Kotlin and Jetpack Compose. It allows you to convert videos, audio tracks, raster images, vector graphics, PDF documents, and e-books directly on your device—with no internet connection, no accounts, and no cloud uploads.
+  <strong>Morph</strong> is a local, offline-first file converter for Android built with Kotlin and Jetpack Compose. It allows you to convert videos, audio tracks, raster images, vector graphics, PDF documents, and e-books directly on your device—with no cloud uploads, no accounts, and no tracking.
 </p>
 
 <h2 id="features">Features</h2>
@@ -43,14 +43,14 @@
       <p>Every conversion, audio extraction, and document operation runs 100% locally on your device, ensuring your files never leave your phone. Minimal internet access is used solely to check for new GitHub releases (optional).</p>
     </td>
     <td width="50%" valign="top">
-      <h3>Grouped Batch Processing</h3>
-      <p>Select multiple files of different types in one session. Morph automatically groups files by source extension so you can assign independent target formats and quality presets per group.</p>
+      <h3>Batch Conversion</h3>
+      <p>Select multiple files of different types in a single session. Morph automatically groups files by source format so you can assign independent target formats and quality presets per group.</p>
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <h3>Share to Convert</h3>
-      <p>Trigger conversions directly from your Gallery, File Manager, or messaging apps via Android's native <strong>Share</strong> sheet. Supports both single and multiple file sharing.</p>
+      <h3>Share to Morph</h3>
+      <p>Send single or multiple files directly from your Gallery, File Manager, or browsers via Android's native <strong>Share</strong> sheet without opening the main app—complete with an optional auto-close mode.</p>
     </td>
     <td width="50%" valign="top">
       <h3>Background Queue &amp; Notifications</h3>
@@ -59,38 +59,38 @@
   </tr>
 </table>
 
-<h2>Interface &amp; Workflow Preview</h2>
+<h2 id="interface--workflow-preview">Interface &amp; Workflow Preview</h2>
 
 <div align="center">
   <table>
     <tr>
       <td width="50%" align="center" valign="top">
-        <img src="assets/Homescreen.jpg" alt="Morph Homescreen" width="260" />
+        <img src="assets/Homescreen.jpg" alt="Homescreen & File History" width="260" />
         <br /><br />
         <strong>Homescreen &amp; File History</strong>
         <br />
         <sub>Quick file picker, category filters (Documents, Images, Video, Audio), and local conversion history management.</sub>
       </td>
       <td width="50%" align="center" valign="top">
-        <img src="assets/Share%20To%20Convert.jpg" alt="Share To Convert" width="260" />
+        <img src="assets/Share%20To%20Convert.jpg" alt="Share to Morph" width="260" />
         <br /><br />
-        <strong>Share to Convert</strong>
+        <strong>Share to Morph</strong>
         <br />
         <sub>Trigger conversions directly from Gallery, File Manager, or other apps via the native Android Share sheet.</sub>
       </td>
     </tr>
     <tr>
       <td width="50%" align="center" valign="top">
-        <img src="assets/Direct%20Web%20Convertion.jpg" alt="Direct Web Conversion" width="260" />
+        <img src="assets/Direct%20Web%20Convertion.jpg" alt="Direct Web Format Conversion" width="260" />
         <br /><br />
         <strong>Direct Web Format Conversion</strong>
         <br />
-        <sub>Convert web-centric media and vector assets (WebP, WebM, SVG) into standard offline-ready formats on-device.</sub>
+        <sub>Share images directly from Google/browsers ("Share image") or convert web formats (WebP, WebM, SVG) into standard offline-ready files without saving them first.</sub>
       </td>
       <td width="50%" align="center" valign="top">
-        <img src="assets/Batch%20Processing.jpg" alt="Batch Processing" width="260" />
+        <img src="assets/Batch%20Processing.jpg" alt="Batch Conversion" width="260" />
         <br /><br />
-        <strong>Grouped Batch Processing</strong>
+        <strong>Batch Conversion</strong>
         <br />
         <sub>Automatically groups multiple selected files by source extension with independent target formats and quality presets.</sub>
       </td>
@@ -107,7 +107,7 @@
 <table>
   <thead>
     <tr>
-      <th align="left">Category</th>
+      <th align="left">Tool / Category</th>
       <th align="left">Input Formats</th>
       <th align="left">Output Formats</th>
       <th align="left">Capabilities &amp; Notes</th>
@@ -115,7 +115,7 @@
   </thead>
   <tbody>
     <tr>
-      <td><strong>Video</strong></td>
+      <td><strong>Video Conversion</strong></td>
       <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>AVI</code></td>
       <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>GIF</code></td>
       <td>Supports <strong>Instant</strong> lossless stream copy for compatible containers, VP9/Opus encoding for WebM, and aspect-ratio preserved animated GIF export.</td>
@@ -133,25 +133,25 @@
       <td>Uncompressed PCM WAV, lossless FLAC, high-bitrate MP3/AAC, and <strong>Instant</strong> stream copy for compatible M4A/AAC streams.</td>
     </tr>
     <tr>
-      <td><strong>Raster Images</strong></td>
+      <td><strong>Image Conversion</strong></td>
       <td><code>PNG</code>, <code>JPG</code>, <code>JPEG</code>, <code>WEBP</code>, <code>BMP</code></td>
       <td><code>PNG</code>, <code>JPG</code>, <code>WEBP</code>, <code>BMP</code>, <code>PDF</code></td>
       <td>Automatic white canvas compositing when converting transparent images to JPG. Multiple images can be merged into a single PDF or exported separately.</td>
     </tr>
     <tr>
-      <td><strong>Vector Graphics</strong></td>
+      <td><strong>SVG Conversion</strong></td>
       <td><code>SVG</code></td>
       <td><code>PNG</code>, <code>JPG</code>, <code>WEBP</code></td>
       <td>High-resolution vector rasterization powered by AndroidSVG with full alpha transparency retention on PNG.</td>
     </tr>
     <tr>
-      <td><strong>PDF Documents</strong></td>
+      <td><strong>PDF Toolkit</strong></td>
       <td><code>PDF</code></td>
       <td><code>JPG</code>, <code>PNG</code>, <code>WEBP</code>, <code>PDF</code></td>
       <td>Render multi-page PDFs into individual high-resolution images or compress existing PDF file sizes.</td>
     </tr>
     <tr>
-      <td><strong>E-Books</strong></td>
+      <td><strong>EPUB Text Extraction</strong></td>
       <td><code>EPUB</code></td>
       <td><code>TXT</code></td>
       <td>Parses OPF spine structure to extract clean, readable plain text from digital books.</td>
@@ -207,10 +207,10 @@ cd Morph
   <li>Tap <strong>Convert</strong>. Tasks run reliably via <strong>Background Queue &amp; Notifications</strong>, and all converted files are saved to <code>Downloads/Morph</code>.</li>
 </ol>
 
-<h3>2. Share from Other Apps (Share to Convert)</h3>
+<h3>2. Share from Other Apps (Share to Morph)</h3>
 <ol>
-  <li>Select one or more files in your <strong>Gallery</strong>, <strong>File Manager</strong>, or any app that supports file sharing.</li>
-  <li>Tap Android's <strong>Share</strong> button and choose <strong>Morph</strong>.</li>
+  <li>Select one or more files in your <strong>Gallery</strong>, <strong>File Manager</strong>, or tap <strong>Share image</strong> directly on an image in Google/your mobile browser.</li>
+  <li>Choose <strong>Morph</strong> from Android's <strong>Share</strong> sheet.</li>
   <li>Select your target format in the pop-up sheet and tap <strong>Convert</strong> without leaving your current app.</li>
 </ol>
 
