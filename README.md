@@ -31,7 +31,7 @@
 <hr />
 
 <p>
-  <strong>Morph</strong> is a local, offline-first file converter for Android built with Kotlin and Jetpack Compose. It allows you to convert videos, audio tracks, raster images, vector graphics, PDF documents, and e-books directly on your device—with no cloud uploads, no accounts, and no tracking.
+  <strong>Morph</strong> is a local, offline-first file converter for Android built with Kotlin and Jetpack Compose. It allows you to convert videos, audio tracks, raster images, vector graphics, PDF documents, and e-books directly on your device. With no cloud uploads, no accounts, and no tracking.
 </p>
 
 <h2 id="features">Features</h2>
