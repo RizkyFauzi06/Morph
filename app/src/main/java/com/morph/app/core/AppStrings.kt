@@ -19,6 +19,7 @@ interface Strings {
     val tabSettings: String
     val pressBackAgainToExit: String
     val notifPermissionRequiredToast: String
+    val storagePermissionRequiredToast: String
     val webUrlNotSupportedToast: String
     val noFilesFromShareToast: String
     val fileNotFoundToast: String
@@ -95,6 +96,8 @@ interface Strings {
     val toolPdfDesc: String
     val toolAudioTitle: String
     val toolAudioDesc: String
+    val toolAudioConvertTitle: String
+    val toolAudioConvertDesc: String
     val toolSvgTitle: String
     val toolSvgDesc: String
     val toolEpubTitle: String
@@ -300,6 +303,7 @@ object IndonesianStrings : Strings {
     override val tabSettings = "Pengaturan"
     override val pressBackAgainToExit = "Tekan sekali lagi untuk keluar"
     override val notifPermissionRequiredToast = "Izin notifikasi diperlukan agar konversi latar belakang berjalan optimal."
+    override val storagePermissionRequiredToast = "Izin penyimpanan diperlukan agar hasil konversi dapat disimpan ke Downloads/Morph."
     override val webUrlNotSupportedToast = "Morph adalah converter file offline. Format URL atau teks web tidak didukung."
     override val noFilesFromShareToast = "Tidak ada file yang dapat diproses dari Share."
     override val fileNotFoundToast = "File tidak ditemukan"
@@ -370,8 +374,10 @@ object IndonesianStrings : Strings {
     override val toolVideoDesc = "Mengubah container video dengan proses cepat tanpa encoding ulang. Ukuran hasil dapat sedikit berbeda."
     override val toolPdfTitle = "PDF Toolkit"
     override val toolPdfDesc = "Kompres dokumen PDF atau ubah setiap halaman menjadi gambar yang dapat dibuka dan dibagikan."
-    override val toolAudioTitle = "Audio Extraction"
+    override val toolAudioTitle = "Video to Audio Extraction"
     override val toolAudioDesc = "Ekstrak jalur audio dari video dan simpan dalam berbagai format audio."
+    override val toolAudioConvertTitle = "Audio Format Conversion"
+    override val toolAudioConvertDesc = "Ubah format audio, termasuk output lossless FLAC/WAV dan mode Instan untuk stream yang kompatibel."
     override val toolSvgTitle = "SVG Conversion"
     override val toolSvgDesc = "Ubah grafik vektor SVG menjadi gambar raster yang dapat dibuka di galeri atau dibagikan."
     override val toolEpubTitle = "EPUB Text Extraction"
@@ -575,6 +581,7 @@ object EnglishStrings : Strings {
     override val tabSettings = "Settings"
     override val pressBackAgainToExit = "Press back again to exit"
     override val notifPermissionRequiredToast = "Notification permission is required for optimal background conversions."
+    override val storagePermissionRequiredToast = "Storage permission is required to save converted files to Downloads/Morph."
     override val webUrlNotSupportedToast = "Morph is an offline file converter. Web URLs or plain text are not supported."
     override val noFilesFromShareToast = "No files found to process from Share."
     override val fileNotFoundToast = "File not found"
@@ -645,8 +652,10 @@ object EnglishStrings : Strings {
     override val toolVideoDesc = "Quickly re-container videos without re-encoding. Output file size may vary slightly."
     override val toolPdfTitle = "PDF Toolkit"
     override val toolPdfDesc = "Compress PDF documents or extract each page into shareable images."
-    override val toolAudioTitle = "Audio Extraction"
+    override val toolAudioTitle = "Video to Audio Extraction"
     override val toolAudioDesc = "Extract audio tracks from video files and save them in various audio formats."
+    override val toolAudioConvertTitle = "Audio Format Conversion"
+    override val toolAudioConvertDesc = "Convert between audio formats, including lossless FLAC/WAV output and Instant mode for compatible streams."
     override val toolSvgTitle = "SVG Conversion"
     override val toolSvgDesc = "Convert SVG vector graphics into raster images for gallery viewing and sharing."
     override val toolEpubTitle = "EPUB Text Extraction"

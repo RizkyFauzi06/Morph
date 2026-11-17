@@ -80,8 +80,17 @@ fun ToolsScreen(
             ToolFeatureCard(
                 title = strings.toolAudioTitle,
                 description = strings.toolAudioDesc,
-                supportedFormats = "MP4 · MKV · MOV · WEBM  →  MP3 · M4A · WAV · FLAC · OGG · OPUS",
+                supportedFormats = "MP4 · MKV · MOV · WEBM · AVI  →  MP3 · M4A · WAV · FLAC · OGG · OPUS",
                 icon = Icons.Default.Audiotrack
+            )
+        }
+
+        item {
+            ToolFeatureCard(
+                title = strings.toolAudioConvertTitle,
+                description = strings.toolAudioConvertDesc,
+                supportedFormats = "MP3 · WAV · FLAC · AAC · M4A · OGG · OPUS  →  MP3 · M4A · AAC · WAV · FLAC · OGG · OPUS",
+                icon = Icons.Default.GraphicEq
             )
         }
 

@@ -128,7 +128,69 @@ object ConversionCapabilityManager {
         // M4A to M4A re-container
         if (src == "m4a" && tgt == "m4a") return true
 
+        // Audio-only stream copy candidates. Shown as "Instant" in the UI; the engine still probes
+        // the real codec (isStreamCopyCodecCompatible) and re-encodes when it doesn't match.
+        val audioCopySources = streamCopyAudioSources[tgt]
+        if (audioCopySources != null && src != tgt && src in audioCopySources) return true
+
         return false
+    }
+
+    /** Containers whose audio stream is commonly already in the target codec. */
+    private val streamCopyAudioSources: Map<String, Set<String>> = mapOf(
+        "m4a" to setOf("mp4", "mov", "mkv", "m4v", "ts", "aac"),
+        "aac" to setOf("mp4", "mov", "mkv", "m4v", "ts", "m4a"),
+        "mp3" to setOf("mkv", "avi", "mp4", "mov"),
+        "opus" to setOf("webm", "mkv", "ogg"),
+        "ogg" to setOf("webm", "mkv", "opus"),
+        "flac" to setOf("mkv")
+    )
+
+    private val audioOnlyTargets = setOf("m4a", "aac", "mp3", "opus", "ogg", "flac", "wav")
+
+    /** Audio codecs (ffprobe codec_name) each audio-only target can hold without re-encoding. */
+    private fun audioCopyCodecs(targetExt: String): Set<String> = when (targetExt) {
+        "m4a" -> setOf("aac", "alac")
+        "aac" -> setOf("aac")
+        "mp3" -> setOf("mp3")
+        "opus" -> setOf("opus")
+        "ogg" -> setOf("vorbis", "opus", "flac")
+        "flac" -> setOf("flac")
+        "wav" -> setOf("pcm_s16le", "pcm_s24le", "pcm_s32le", "pcm_u8", "pcm_f32le", "pcm_f64le")
+        else -> emptySet()
+    }
+
+    /**
+     * BUG-03 codec guard for the Instant preset (`-c copy`).
+     * Returns true only when every relevant source stream can be copied into [targetExt] as-is.
+     * Unknown/missing probe data returns false so the caller falls back to re-encoding.
+     *
+     * @param videoCodecs ffprobe codec_name of each real video stream (cover art excluded)
+     * @param audioCodecs ffprobe codec_name of each audio stream
+     */
+    fun isStreamCopyCodecCompatible(targetExt: String, videoCodecs: List<String>, audioCodecs: List<String>): Boolean {
+        val tgt = targetExt.trim().removePrefix(".").lowercase()
+        val video = videoCodecs.map { it.lowercase() }
+        val audio = audioCodecs.map { it.lowercase() }
+
+        if (tgt in audioOnlyTargets) {
+            // Video is dropped with -vn; the audio stream must already match the target container
+            val allowed = audioCopyCodecs(tgt)
+            return audio.isNotEmpty() && audio.all { it in allowed }
+        }
+
+        val (allowedVideo, allowedAudio) = when (tgt) {
+            // first = allowed video codecs, second = allowed audio codecs (null = any)
+            "mp4", "mov", "m4v" -> setOf("h264", "hevc", "mpeg4") to setOf("aac", "mp3", "alac")
+            "webm" -> setOf("vp8", "vp9", "av1") to setOf("opus", "vorbis")
+            "mkv" -> Pair<Set<String>?, Set<String>?>(null, null) // Matroska holds virtually any codec
+            else -> return false
+        }
+
+        if (video.isEmpty() || video.any { it.isBlank() || it == "none" }) return false
+        if (allowedVideo != null && !video.all { it in allowedVideo }) return false
+        if (allowedAudio != null && !audio.all { it in allowedAudio }) return false
+        return true
     }
 
     fun getTargetFormats(fileName: String, mimeType: String? = null): List<String> {
@@ -148,7 +210,7 @@ object ConversionCapabilityManager {
                 targets.addAll(listOf("pdf", "jpg", "png"))
             }
             category == FileCategory.VIDEO -> {
-                targets.addAll(listOf("mp4", "mkv", "mov", "webm", "gif", "avi", "mp3", "m4a", "wav", "ogg", "opus"))
+                targets.addAll(listOf("mp4", "mkv", "mov", "webm", "gif", "avi", "mp3", "m4a", "wav", "flac", "ogg", "opus"))
             }
             category == FileCategory.AUDIO -> {
                 targets.addAll(listOf("mp3", "wav", "flac", "aac", "m4a", "ogg", "opus"))

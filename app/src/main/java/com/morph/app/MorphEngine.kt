@@ -31,6 +31,9 @@ object MorphEngine {
 
     private const val TAG = "MorphEngine"
 
+    /** HFX-4A: longest rendered PDF page edge (~A4 at 300 DPI) to stay clear of OutOfMemoryError. */
+    private const val MAX_PDF_RENDER_EDGE_PX = 2480f
+
     sealed class ConvertState {
         object Idle : ConvertState()
         data class Converting(val format: String, val progress: Int) : ConvertState()
@@ -217,42 +220,40 @@ object MorphEngine {
             // Video rotation check
             val videoRotation = getVideoRotation(mediaInfo)
 
-            // Lossless / Stream Copy validation
+            // Lossless / Stream Copy validation (extension-level rule)
             val isLosslessSupported = ConversionCapabilityManager.isLosslessCompatible(inputExt, targetExt)
             // Crucial: If video has rotation metadata and target is MKV or WebM, stream copy causes unrotated orientation on Android
-            val isLosslessCapable = isLosslessSupported && !(videoRotation != 0 && targetExt in listOf("mkv", "webm"))
+            val isLosslessCapable = isLosslessSupported &&
+                !(videoRotation != 0 && targetExt in listOf("mkv", "webm")) &&
+                // BUG-03: the probed source codecs must really fit the target container
+                (qualityPreset != 3 || isStreamCopyCodecSafe(mediaInfo, targetExt))
 
             val effectivePreset = if (qualityPreset == 3 && !isLosslessCapable) {
-                0 // Fallback to High if format doesn't support stream copying
+                Log.i(TAG, "Instant (-c copy) not compatible for $inputExt -> $targetExt, re-encoding instead")
+                0 // Fallback to High if format/codec doesn't support stream copying
             } else {
                 qualityPreset
             }
 
-            val qualityArgs = buildFFmpegQualityArgs(inputExt, targetExt, effectivePreset, videoBitrateBps, videoRotation)
-            val command = "-y -i \"${tempInput.absolutePath}\" $qualityArgs \"${tempOutput.absolutePath}\""
-
-            val ffmpegSession = CompletableDeferred<ReturnCode>()
-
-            val session = FFmpegKit.executeAsync(
-                command,
-                { s -> ffmpegSession.complete(s.returnCode) },
-                { log -> Log.d(TAG, "[FFmpeg] ${log.message}") },
-                { stats ->
-                    if (!ffmpegSession.isCompleted) {
-                        if (totalDurationMs > 0) {
-                            val percentage = ((stats.time.toFloat() / totalDurationMs) * 95).toInt().coerceIn(5, 95)
-                            currentStatus.value = ConvertState.Converting(targetExt, percentage)
-                            onProgress(strings.engineProcessedPercent(percentage), percentage)
-                        } else {
-                            val seconds = (stats.time / 1000).toLong()
-                            currentStatus.value = ConvertState.Converting(targetExt, 50)
-                            onProgress(strings.engineProcessedSeconds(seconds), 50)
-                        }
-                    }
-                }
+            var usedPreset = effectivePreset
+            var ffmpegResult = runFFmpeg(
+                buildFFmpegCommand(tempInput, tempOutput, inputExt, targetExt, usedPreset, videoBitrateBps, videoRotation),
+                targetExt, totalDurationMs, onProgress
             )
 
-            val returnCode = ffmpegSession.await()
+            // Safety net: if stream copy still fails (e.g. odd timestamps), re-encode instead of failing
+            if (usedPreset == 3 && !ReturnCode.isSuccess(ffmpegResult.first) && !ReturnCode.isCancel(ffmpegResult.first)) {
+                Log.w(TAG, "Stream copy failed (${ffmpegResult.first?.value}), retrying with re-encode")
+                tempOutput.delete()
+                usedPreset = 0
+                updateProgress(targetExt, strings.enginePreparingMedia, 5, onProgress)
+                ffmpegResult = runFFmpeg(
+                    buildFFmpegCommand(tempInput, tempOutput, inputExt, targetExt, usedPreset, videoBitrateBps, videoRotation),
+                    targetExt, totalDurationMs, onProgress
+                )
+            }
+
+            val returnCode = ffmpegResult.first
 
             if (ReturnCode.isSuccess(returnCode)) {
                 updateProgress(targetExt, strings.engineFinalizingValidating, 98, onProgress)
@@ -289,15 +290,15 @@ object MorphEngine {
                     onError(strings.engineCancelled)
                 }
             } else {
-                val failLogs = session.allLogsAsString ?: ""
+                val failLogs = ffmpegResult.second
                 OutputManager.cleanTempFiles(tempInput, tempOutput)
                 val errorMessage = when {
-                    qualityPreset == 3 ->
+                    usedPreset == 3 ->
                         strings.engineErrStreamCopyIncompatible
                     failLogs.contains("does not support", ignoreCase = true) ->
                         strings.engineErrFormatNotSupported
                     else ->
-                        strings.engineErrFFmpeg(returnCode.value)
+                        strings.engineErrFFmpeg(returnCode?.value ?: -1)
                 }
                 withContext(Dispatchers.Main) {
                     currentStatus.value = ConvertState.Error(errorMessage, inputUri, targetExt)
@@ -307,6 +308,81 @@ object MorphEngine {
         } catch (e: Exception) {
             OutputManager.cleanTempFiles(tempInput, tempOutput)
             throw e
+        }
+    }
+
+    private fun buildFFmpegCommand(
+        tempInput: File,
+        tempOutput: File,
+        inputExt: String,
+        targetExt: String,
+        preset: Int,
+        videoBitrateBps: Long,
+        videoRotation: Int
+    ): String {
+        val qualityArgs = buildFFmpegQualityArgs(inputExt, targetExt, preset, videoBitrateBps, videoRotation)
+        return "-y -i \"${tempInput.absolutePath}\" $qualityArgs \"${tempOutput.absolutePath}\""
+    }
+
+    /** Runs one FFmpeg command and reports progress. Returns the return code and the full log. */
+    private suspend fun runFFmpeg(
+        command: String,
+        targetExt: String,
+        totalDurationMs: Long,
+        onProgress: (String, Int) -> Unit
+    ): Pair<ReturnCode?, String> {
+        val strings = AppStrings.get()
+        val ffmpegSession = CompletableDeferred<ReturnCode?>()
+
+        val session = FFmpegKit.executeAsync(
+            command,
+            { s -> ffmpegSession.complete(s.returnCode) },
+            { log -> Log.d(TAG, "[FFmpeg] ${log.message}") },
+            { stats ->
+                if (!ffmpegSession.isCompleted) {
+                    if (totalDurationMs > 0) {
+                        val percentage = ((stats.time.toFloat() / totalDurationMs) * 95).toInt().coerceIn(5, 95)
+                        currentStatus.value = ConvertState.Converting(targetExt, percentage)
+                        onProgress(strings.engineProcessedPercent(percentage), percentage)
+                    } else {
+                        val seconds = (stats.time / 1000).toLong()
+                        currentStatus.value = ConvertState.Converting(targetExt, 50)
+                        onProgress(strings.engineProcessedSeconds(seconds), 50)
+                    }
+                }
+            }
+        )
+
+        val returnCode = ffmpegSession.await()
+        return returnCode to (session.allLogsAsString ?: "")
+    }
+
+    /**
+     * BUG-03: inspects the probed streams and asks ConversionCapabilityManager whether
+     * `-c copy` into [targetExt] is safe. Missing probe data => not safe (re-encode).
+     */
+    private fun isStreamCopyCodecSafe(mediaInfo: com.arthenica.ffmpegkit.MediaInformation?, targetExt: String): Boolean {
+        val streams = mediaInfo?.streams ?: return false
+        if (streams.isEmpty()) return false
+
+        val videoCodecs = streams
+            .filter { it.type.equals("video", ignoreCase = true) && !isAttachedPicture(it) }
+            .map { it.codec ?: "" }
+        val audioCodecs = streams
+            .filter { it.type.equals("audio", ignoreCase = true) }
+            .map { it.codec ?: "" }
+
+        val compatible = ConversionCapabilityManager.isStreamCopyCodecCompatible(targetExt, videoCodecs, audioCodecs)
+        Log.i(TAG, "Stream copy guard -> $targetExt video=$videoCodecs audio=$audioCodecs compatible=$compatible")
+        return compatible
+    }
+
+    /** Cover art (MP3/M4A/MKV attachments) shows up as a video stream with disposition.attached_pic=1. */
+    private fun isAttachedPicture(stream: com.arthenica.ffmpegkit.StreamInformation): Boolean {
+        return try {
+            stream.allProperties?.optJSONObject("disposition")?.optInt("attached_pic", 0) == 1
+        } catch (_: Exception) {
+            false
         }
     }
 
@@ -357,8 +433,9 @@ object MorphEngine {
         if (preset == 3) {
             return when (targetExt) {
                 "mp4", "mov" -> "-c copy -sn -dn -movflags +faststart"
-                "mkv" -> "-c copy -sn -dn"
-                "m4a", "aac" -> "-vn -sn -dn -c:a copy"
+                "mkv", "webm" -> "-c copy -sn -dn"
+                "m4a" -> "-vn -sn -dn -c:a copy -movflags +faststart"
+                "aac", "mp3", "opus", "ogg", "flac", "wav" -> "-vn -sn -dn -c:a copy"
                 else -> "-c copy"
             }
         }
@@ -402,18 +479,24 @@ object MorphEngine {
         if (targetExt in listOf("mp4", "mkv", "mov", "avi")) {
             val rotateArg = if (videoRotation != 0) "-metadata:s:v rotate=0 " else ""
             val fastStartArg = if (targetExt in listOf("mp4", "mov")) "-movflags +faststart " else ""
+            // BUG-02: libx264's default "medium" preset stalls phone CPUs at ~1–2 fps (thermal throttling).
+            // AVI keeps FFmpeg's default MPEG-4 Part 2 + MP3 encoders, which are already fast.
+            val codecArg = if (targetExt == "avi") "" else {
+                val x264Preset = if (preset == 1 || preset == 2) "ultrafast" else "veryfast"
+                "-c:v libx264 -preset $x264Preset -pix_fmt yuv420p -c:a aac "
+            }
             return when (preset) {
-                0 -> "$fastStartArg-b:v $videoBitrateBps -b:a 256k $rotateArg"
+                0 -> "$codecArg$fastStartArg-b:v $videoBitrateBps -b:a 256k $rotateArg"
                 1 -> {
                     val targetBv = (videoBitrateBps * 0.6).toLong()
-                    "$fastStartArg-b:v $targetBv -b:a 160k $rotateArg"
+                    "$codecArg$fastStartArg-b:v $targetBv -b:a 160k $rotateArg"
                 }
                 2 -> {
                     val targetBv = (videoBitrateBps * 0.35).toLong()
                     val scaleFilter = "scale='if(gt(iw,ih),854,-2)':'if(gt(iw,ih),-2,854)'"
-                    "$fastStartArg-vf \"$scaleFilter\" -b:v $targetBv -b:a 96k $rotateArg"
+                    "$codecArg$fastStartArg-vf \"$scaleFilter\" -b:v $targetBv -b:a 96k $rotateArg"
                 }
-                else -> "$fastStartArg-b:v $videoBitrateBps -b:a 256k $rotateArg"
+                else -> "$codecArg$fastStartArg-b:v $videoBitrateBps -b:a 256k $rotateArg"
             }
         }
 
@@ -477,6 +560,8 @@ object MorphEngine {
         val strings = AppStrings.get()
         val tempPdf = OutputManager.createTempFile(context, "in_pdf", "pdf")
         val createdTempFiles = mutableListOf<File>()
+        var openPfd: ParcelFileDescriptor? = null
+        var openRenderer: PdfRenderer? = null
 
         try {
             updateProgress(targetExtension, strings.engineReadingPdf, 10, onProgress)
@@ -486,12 +571,12 @@ object MorphEngine {
             } ?: throw IOException(strings.engineErrPdfRead)
 
             val pfd = ParcelFileDescriptor.open(tempPdf, ParcelFileDescriptor.MODE_READ_ONLY)
+            openPfd = pfd
             val renderer = PdfRenderer(pfd)
+            openRenderer = renderer
             val pageCount = renderer.pageCount
 
             if (pageCount == 0) {
-                renderer.close()
-                pfd.close()
                 throw IllegalStateException(strings.engineErrPdfNoPages)
             }
 
@@ -519,33 +604,44 @@ object MorphEngine {
                 val percent = (((i + 1).toFloat() / pageCount) * 85).toInt() + 10
                 updateProgress(targetExtension, strings.engineRenderingPage(i + 1, pageCount), percent, onProgress)
 
-                val page = renderer.openPage(i)
-                val width = (page.width * scale).toInt()
-                val height = (page.height * scale).toInt()
-
-                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                val canvas = Canvas(bitmap)
-                canvas.drawColor(Color.WHITE) // PDF pages need opaque white background
-
-                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
-                page.close()
-
                 val pageSuffix = if (pageCount > 1) "_hal_${i + 1}" else ""
                 val pageFileName = "$baseName$pageSuffix.$targetExtension"
                 val tempPageFile = OutputManager.createTempFile(context, "pdf_page_$i", targetExtension)
                 createdTempFiles.add(tempPageFile)
 
-                FileOutputStream(tempPageFile).use { fos ->
-                    bitmap.compress(format, qualityVal, fos)
+                // One page in memory at a time; page and bitmap are always released
+                var bitmap: Bitmap? = null
+                try {
+                    renderer.openPage(i).use { page ->
+                        // HFX-4A: clamp the longest edge so huge pages (A0 posters) don't OOM low-RAM phones
+                        var pageScale = scale
+                        val longestEdge = maxOf(page.width, page.height) * pageScale
+                        if (longestEdge > MAX_PDF_RENDER_EDGE_PX) {
+                            pageScale *= MAX_PDF_RENDER_EDGE_PX / longestEdge
+                        }
+                        val width = (page.width * pageScale).toInt().coerceAtLeast(1)
+                        val height = (page.height * pageScale).toInt().coerceAtLeast(1)
+
+                        val pageBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                        bitmap = pageBitmap
+                        Canvas(pageBitmap).drawColor(Color.WHITE) // PDF pages need opaque white background
+                        page.render(pageBitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
+                    }
+
+                    FileOutputStream(tempPageFile).use { fos ->
+                        bitmap!!.compress(format, qualityVal, fos)
+                    }
+                } finally {
+                    bitmap?.recycle()
                 }
-                bitmap.recycle()
 
                 val savedPath = OutputManager.finalizeOutput(context, tempPageFile, pageFileName, targetExtension)
                 if (savedPath != null) lastSavedPath = savedPath
             }
 
-            renderer.close()
-            pfd.close()
+            closePdfRenderer(openRenderer, openPfd)
+            openRenderer = null
+            openPfd = null
             OutputManager.cleanTempFiles(tempPdf, *createdTempFiles.toTypedArray())
 
             withContext(Dispatchers.Main) {
@@ -559,9 +655,16 @@ object MorphEngine {
                 }
             }
         } catch (e: Exception) {
+            // Release native renderer + fd even on cancellation / OOM-adjacent failures
+            closePdfRenderer(openRenderer, openPfd)
             OutputManager.cleanTempFiles(tempPdf, *createdTempFiles.toTypedArray())
             throw e
         }
+    }
+
+    private fun closePdfRenderer(renderer: PdfRenderer?, pfd: ParcelFileDescriptor?) {
+        try { renderer?.close() } catch (_: Exception) {}
+        try { pfd?.close() } catch (_: Exception) {}
     }
 
     // --- 3. PDF COMPRESSOR ---

@@ -10,7 +10,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.OpenableColumns
-import android.webkit.MimeTypeMap
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -72,7 +71,15 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, AppStrings.get().notifPermissionRequiredToast, Toast.LENGTH_LONG).show()
         }
     }
-    
+
+    // BUG-01: legacy storage permission launcher (API 26–28 write, API 29 read)
+    private val storagePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (!isGranted) {
+            Toast.makeText(this, AppStrings.get().storagePermissionRequiredToast, Toast.LENGTH_LONG).show()
+        }
+    }
 
     // File Picker for Standalone Launcher - Supports single or multiple files (PBI 8.3 & PBI 7.1)
     private var filePickerLauncher = registerForActivityResult(
@@ -101,6 +108,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AppStrings.init(this)
+        ensureLegacyStoragePermission()
         handleIntent(intent)
     }
 
@@ -466,6 +474,22 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    /**
+     * Android 8–9 (API 26–28) write Downloads/Morph with direct File I/O and need
+     * WRITE_EXTERNAL_STORAGE. Android 10 saves via MediaStore (no permission) but lists
+     * history through file paths in legacy mode, which needs READ_EXTERNAL_STORAGE.
+     */
+    private fun ensureLegacyStoragePermission() {
+        val permission = when {
+            Build.VERSION.SDK_INT <= Build.VERSION_CODES.P -> Manifest.permission.WRITE_EXTERNAL_STORAGE
+            Build.VERSION.SDK_INT == Build.VERSION_CODES.Q -> Manifest.permission.READ_EXTERNAL_STORAGE
+            else -> return
+        }
+        if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
+            storagePermissionLauncher.launch(permission)
+        }
+    }
 }
 
 // --- UTILITY METHODS FOR FILE ACCESS & SHARING ---
@@ -512,31 +536,8 @@ fun getMorphFiles(): List<File> {
     }
 }
 
-fun getExplicitMimeType(extension: String): String {
-    val ext = extension.lowercase()
-    return when (ext) {
-        "opus" -> "audio/opus"
-        "ogg", "oga" -> "audio/ogg"
-        "flac" -> "audio/flac"
-        "wav" -> "audio/wav"
-        "m4a" -> "audio/mp4"
-        "mp3" -> "audio/mpeg"
-        "aac" -> "audio/aac"
-        "webm" -> "video/webm"
-        "mkv" -> "video/x-matroska"
-        "mp4" -> "video/mp4"
-        "mov" -> "video/quicktime"
-        "png" -> "image/png"
-        "jpg", "jpeg" -> "image/jpeg"
-        "webp" -> "image/webp"
-        "bmp" -> "image/bmp"
-        "svg" -> "image/svg+xml"
-        "pdf" -> "application/pdf"
-        "txt" -> "text/plain"
-        "epub" -> "application/epub+zip"
-        else -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"
-    }
-}
+fun getExplicitMimeType(extension: String): String =
+    OutputManager.getMimeTypeForExtension(extension, fallback = "*/*")
 
 fun openFileDirectly(context: Context, file: File, strings: Strings = AppStrings.get()) {
     try {
