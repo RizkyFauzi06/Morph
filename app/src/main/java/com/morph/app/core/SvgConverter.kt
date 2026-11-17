@@ -57,8 +57,10 @@ object SvgConverter {
             else -> 1.5f
         }
 
-        val finalWidth = (rawWidth * scaleFactor).toInt().coerceIn(16, 8192)
-        val finalHeight = (rawHeight * scaleFactor).toInt().coerceIn(16, 8192)
+        // One scale for both sides so a clamp never stretches the image (6000x1000 -> 8192x1365)
+        val scale = minOf(scaleFactor, 8192f / maxOf(rawWidth, rawHeight))
+        val finalWidth = (rawWidth * scale).toInt().coerceAtLeast(16)
+        val finalHeight = (rawHeight * scale).toInt().coerceAtLeast(16)
 
         onProgress(strings.engineRenderingSvg, 65)
 
@@ -81,16 +83,6 @@ object SvgConverter {
         onProgress(strings.engineCompressingSvgOut, 85)
 
         val tempOut = OutputManager.createTempFile(context, "svg_out", targetExt)
-        val format = when (targetExt) {
-            "png" -> Bitmap.CompressFormat.PNG
-            "webp" -> if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                Bitmap.CompressFormat.WEBP_LOSSLESS
-            } else {
-                @Suppress("DEPRECATION") Bitmap.CompressFormat.WEBP
-            }
-            else -> Bitmap.CompressFormat.JPEG
-        }
-
         val quality = when (qualityPreset) {
             0, 3 -> 100
             1    -> 85
@@ -99,7 +91,7 @@ object SvgConverter {
         }
 
         FileOutputStream(tempOut).use { fos ->
-            bitmap.compress(format, quality, fos)
+            bitmap.compress(com.morph.app.MorphEngine.compressFormatFor(targetExt, quality), quality, fos)
             fos.flush()
         }
         bitmap.recycle()

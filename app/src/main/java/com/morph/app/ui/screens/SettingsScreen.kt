@@ -1,6 +1,9 @@
 package com.morph.app.ui.screens
 
+import android.content.Intent
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -11,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Tune
@@ -27,6 +31,7 @@ import com.morph.app.MorphPrefs
 import com.morph.app.core.AppStrings
 import com.morph.app.core.EnglishStrings
 import com.morph.app.core.IndonesianStrings
+import com.morph.app.core.OutputManager
 import com.morph.app.ui.components.MorphScreenHeader
 import kotlinx.coroutines.launch
 
@@ -71,6 +76,25 @@ fun SettingsScreen(
     val coroutineScope = rememberCoroutineScope()
     var isCheckingUpdate by remember { mutableStateOf(false) }
     var autoCheckUpdates by remember { mutableStateOf(prefs.autoCheckUpdates) }
+
+    // PBI 5.1: custom output folder (validated on open so a revoked folder shows as default)
+    var customFolderLabel by remember {
+        mutableStateOf(OutputManager.validCustomTreeUri(context, prefs)?.let { OutputManager.describeTreeUri(it) })
+    }
+    var autoSubfolder by remember { mutableStateOf(prefs.autoSubfolderPerFile) }
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { treeUri ->
+        if (treeUri == null) return@rememberLauncherForActivityResult
+        try {
+            context.contentResolver.takePersistableUriPermission(
+                treeUri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+            prefs.customOutputTreeUri = treeUri.toString()
+            customFolderLabel = OutputManager.describeTreeUri(treeUri)
+        } catch (e: SecurityException) {
+            Toast.makeText(context, strings.outputFolderPermissionFailed, Toast.LENGTH_LONG).show()
+        }
+    }
 
     LazyColumn(
         modifier = modifier
@@ -226,6 +250,63 @@ fun SettingsScreen(
                         text = desc,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        }
+
+        // --- PBI 5.1: FOLDER OUTPUT ---
+        item {
+            SettingsSectionCard(title = strings.outputFolderSectionTitle, icon = Icons.Default.Folder) {
+                Text(
+                    text = customFolderLabel ?: strings.outputFolderDefault,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = if (customFolderLabel != null) strings.outputFolderCustomDesc else strings.outputFolderDefaultDesc,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { folderPicker.launch(null) }) {
+                        Text(strings.outputFolderChoose)
+                    }
+                    if (customFolderLabel != null) {
+                        TextButton(onClick = {
+                            prefs.customOutputTreeUri = null
+                            customFolderLabel = null
+                        }) {
+                            Text(strings.outputFolderReset)
+                        }
+                    }
+                }
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 12.dp),
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                        Text(
+                            text = strings.autoSubfolderTitle,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = strings.autoSubfolderDesc,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = autoSubfolder,
+                        onCheckedChange = {
+                            autoSubfolder = it
+                            prefs.autoSubfolderPerFile = it
+                        }
                     )
                 }
             }

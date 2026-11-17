@@ -18,8 +18,8 @@ android {
         applicationId = "com.morph.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "1.1.0"
     }
 
     buildFeatures {

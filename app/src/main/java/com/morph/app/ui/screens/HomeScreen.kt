@@ -39,7 +39,7 @@ import com.morph.app.core.JobStatus
 import com.morph.app.ui.components.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.io.File
+import com.morph.app.core.MorphOutputFile
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
 import androidx.compose.material3.ripple
@@ -59,7 +59,7 @@ data class CategoryFilterItem(val id: String, val label: String)
 
 sealed class HomeHistoryState {
     object NoHistory : HomeHistoryState()
-    data class HistoryAvailable(val files: List<File>) : HomeHistoryState()
+    data class HistoryAvailable(val files: List<MorphOutputFile>) : HomeHistoryState()
     object FilteredEmpty : HomeHistoryState()
     object Loading : HomeHistoryState()
     data class Error(val message: String) : HomeHistoryState()
@@ -68,15 +68,15 @@ sealed class HomeHistoryState {
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun HomeScreen(
-    morphFiles: List<File>,
+    morphFiles: List<MorphOutputFile>,
     isRefreshing: Boolean,
     hasNotificationPermission: Boolean,
     onRefresh: () -> Unit,
     onPickFileClick: () -> Unit,
     onRequestPermission: () -> Unit,
-    onFileClick: (File) -> Unit,
-    onShareFile: (File) -> Unit,
-    onDeleteFile: (File) -> Unit,
+    onFileClick: (MorphOutputFile) -> Unit,
+    onShareFile: (MorphOutputFile) -> Unit,
+    onDeleteFile: (MorphOutputFile) -> Unit,
     isBatteryUnrestricted: Boolean = true,
     onRetryConversion: (android.net.Uri, String) -> Unit,
     onBannerClick: () -> Unit = {},
@@ -155,7 +155,8 @@ fun HomeScreen(
 
     // --- HISTORY STATE MODEL ---
     val historyState: HomeHistoryState = when {
-        isRefreshing -> HomeHistoryState.Loading
+        // Refresh is async now; keep showing the current list instead of flashing a spinner
+        morphFiles.isEmpty() && isRefreshing -> HomeHistoryState.Loading
         morphFiles.isEmpty() -> HomeHistoryState.NoHistory
         filteredFiles.isEmpty() -> HomeHistoryState.FilteredEmpty
         else -> HomeHistoryState.HistoryAvailable(filteredFiles)
@@ -419,7 +420,7 @@ fun HomeScreen(
                 }
 
                 is HomeHistoryState.HistoryAvailable -> {
-                    items(historyState.files, key = { it.absolutePath }) { file ->
+                    items(historyState.files, key = { it.uri.toString() }) { file ->
                         FileHistoryItemCard(
                             file = file,
                             onClick = { onFileClick(file) },

@@ -45,4 +45,24 @@ class MorphPrefs(context: Context) {
     var dismissedUpdateTag: String
         get() = prefs.getString("dismissed_update_tag", "") ?: ""
         set(value) = prefs.edit().putString("dismissed_update_tag", value).apply()
+
+    // PBI 5.1: SAF tree URI of the custom output folder; null = default Downloads/Morph
+    var customOutputTreeUri: String?
+        get() = prefs.getString("custom_output_tree_uri", null)
+        set(value) = prefs.edit().putString("custom_output_tree_uri", value).apply()
+
+    // Build.FINGERPRINT of a firmware whose hardware H.264 encoder ignored the bitrate. A firmware
+    // update changes the fingerprint, so the hardware encoder gets a fresh chance automatically.
+    var hwH264IgnoresBitrateOnBuild: String
+        get() = prefs.getString("hw_h264_ignores_bitrate_build", "") ?: ""
+        set(value) = prefs.edit().putString("hw_h264_ignores_bitrate_build", value).apply()
+
+    var autoSubfolderPerFile: Boolean
+        get() = prefs.getBoolean("auto_subfolder_per_file", false)
+        set(value) = prefs.edit().putBoolean("auto_subfolder_per_file", value).apply()
+
+    // Document URIs Morph wrote into SAF folders, so history never lists unrelated user files there
+    var safOutputUris: Set<String>
+        get() = prefs.getStringSet("saf_output_uris", emptySet())?.toSet() ?: emptySet()
+        set(value) = prefs.edit().putStringSet("saf_output_uris", value).apply()
 }

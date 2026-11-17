@@ -241,6 +241,21 @@ fun ProgressScreen(
                     textAlign = TextAlign.Center
                 )
 
+                // HFX-5: per-file result details (e.g. PDF size before → after)
+                val resultDetails = queueState.mapNotNull { job ->
+                    job.resultDetail?.let { if (totalCount == 1) it else "${job.originalFileName}: $it" }
+                }
+                if (resultDetails.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = resultDetails.joinToString("\n"),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        textAlign = TextAlign.Center
+                    )
+                }
+
                 Spacer(modifier = Modifier.weight(1f))
 
                 Column(

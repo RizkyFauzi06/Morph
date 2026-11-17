@@ -175,40 +175,9 @@ object FileCategoryManager {
         }
     }
 
-    // Compatibility helpers
-    fun getCategoryColor(category: FileCategory): Color =
-        getCategoryColors(category, isDarkTheme = false).icon
-
-    fun getExtensionBadgeColor(extension: String): Color =
-        getCategoryColor(getCategory(extension))
-
     fun getExtensionColors(extension: String, isDarkTheme: Boolean): FileCategoryColors =
         getCategoryColors(getCategory(extension), isDarkTheme)
 
-    fun isAudio(extension: String): Boolean =
-        getCategory(extension) == FileCategory.AUDIO
-
     fun isVideo(extension: String): Boolean =
         getCategory(extension) == FileCategory.VIDEO
-
-    fun isImage(extension: String): Boolean =
-        getCategory(extension) == FileCategory.IMAGE
-
-    fun isDocument(extension: String): Boolean =
-        getCategory(extension) == FileCategory.DOCUMENT
-
-    fun isPdf(extension: String): Boolean =
-        getCategory(extension) == FileCategory.PDF
-
-    fun isEbook(extension: String): Boolean =
-        getCategory(extension) == FileCategory.EBOOK
-
-    fun isSpreadsheet(extension: String): Boolean =
-        getCategory(extension) == FileCategory.SPREADSHEET
-
-    fun isArchive(extension: String): Boolean =
-        getCategory(extension) == FileCategory.ARCHIVE
-
-    fun isCode(extension: String): Boolean =
-        getCategory(extension) == FileCategory.CODE
 }

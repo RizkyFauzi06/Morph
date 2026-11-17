@@ -20,6 +20,31 @@ interface Strings {
     val pressBackAgainToExit: String
     val notifPermissionRequiredToast: String
     val storagePermissionRequiredToast: String
+    val deleteFileFailedToast: String
+
+    // PBI 5.1: output folder
+    val outputFolderSectionTitle: String
+    val outputFolderDefault: String
+    val outputFolderDefaultDesc: String
+    val outputFolderCustomDesc: String
+    val outputFolderChoose: String
+    val outputFolderReset: String
+    val outputFolderPermissionFailed: String
+    val autoSubfolderTitle: String
+    val autoSubfolderDesc: String
+
+    // PBI 5.2: video options
+    val videoResolutionTitle: String
+    val videoFpsTitle: String
+    val optionOriginal: String
+    val videoOptionsDisableInstant: String
+
+    // HFX-5 & PBI 5.4
+    fun pdfCompressionResult(sizeChange: String): String
+    val engineReadingTxt: String
+    val engineBuildingEpub: String
+    fun engineWritingChapter(done: Int, total: Int): String
+    fun epubChunkTitle(index: Int): String
     val webUrlNotSupportedToast: String
     val noFilesFromShareToast: String
     val fileNotFoundToast: String
@@ -243,7 +268,15 @@ interface Strings {
     val engineErrSavePdfCompress: String
     val engineLoadingImage: String
     val engineBuildingPdfPages: String
-    val engineErrImageToPdf: String
+    val engineErrOutOfMemory: String
+    val engineErrNoAudioTrack: String
+    fun instantSkippedRotation(target: String): String
+    fun instantSkippedCodec(target: String): String
+    val instantSkippedGeneric: String
+    fun pdfAlreadyOptimal(size: String): String
+    val crossMergePdfTitle: String
+    fun crossMergePdfDesc(parts: String, total: Int): String
+    val noTargetFormatAvailable: String
     fun engineBuildingPdfPage(curr: Int, total: Int): String
     val engineSavingPdfDoc: String
     val engineErrSaveMergedPdf: String
@@ -304,6 +337,25 @@ object IndonesianStrings : Strings {
     override val pressBackAgainToExit = "Tekan sekali lagi untuk keluar"
     override val notifPermissionRequiredToast = "Izin notifikasi diperlukan agar konversi latar belakang berjalan optimal."
     override val storagePermissionRequiredToast = "Izin penyimpanan diperlukan agar hasil konversi dapat disimpan ke Downloads/Morph."
+    override val deleteFileFailedToast = "Gagal menghapus file."
+    override val outputFolderSectionTitle = "Folder Output"
+    override val outputFolderDefault = "Downloads/Morph (bawaan)"
+    override val outputFolderDefaultDesc = "Hasil konversi disimpan ke folder bawaan."
+    override val outputFolderCustomDesc = "Hasil konversi disimpan ke folder pilihan Anda. Jika akses folder dicabut, Morph kembali ke Downloads/Morph."
+    override val outputFolderChoose = "Pilih Folder"
+    override val outputFolderReset = "Gunakan Bawaan"
+    override val outputFolderPermissionFailed = "Tidak dapat menyimpan izin akses folder. Pilih folder lain."
+    override val autoSubfolderTitle = "Subfolder per File"
+    override val autoSubfolderDesc = "Simpan hasil tiap file ke subfolder bernama sama dengan file aslinya, misalnya Buku.pdf → Buku/."
+    override val videoResolutionTitle = "Resolusi"
+    override val videoFpsTitle = "Frame Rate"
+    override val optionOriginal = "Asli"
+    override val videoOptionsDisableInstant = "Mengubah resolusi atau frame rate memerlukan encoding ulang, jadi mode Instan diganti ke kualitas Tinggi."
+    override fun pdfCompressionResult(sizeChange: String) = "Ukuran PDF: $sizeChange"
+    override val engineReadingTxt = "Membaca file teks..."
+    override val engineBuildingEpub = "Menyusun bab EPUB..."
+    override fun engineWritingChapter(done: Int, total: Int) = "Menulis bab $done dari $total..."
+    override fun epubChunkTitle(index: Int) = "Bagian $index"
     override val webUrlNotSupportedToast = "Morph adalah converter file offline. Format URL atau teks web tidak didukung."
     override val noFilesFromShareToast = "Tidak ada file yang dapat diproses dari Share."
     override val fileNotFoundToast = "File tidak ditemukan"
@@ -380,8 +432,8 @@ object IndonesianStrings : Strings {
     override val toolAudioConvertDesc = "Ubah format audio, termasuk output lossless FLAC/WAV dan mode Instan untuk stream yang kompatibel."
     override val toolSvgTitle = "SVG Conversion"
     override val toolSvgDesc = "Ubah grafik vektor SVG menjadi gambar raster yang dapat dibuka di galeri atau dibagikan."
-    override val toolEpubTitle = "EPUB Text Extraction"
-    override val toolEpubDesc = "Ekstrak isi dan bab buku digital menjadi satu file teks yang lebih ringan dan mudah dibaca."
+    override val toolEpubTitle = "EPUB ⇄ TXT"
+    override val toolEpubDesc = "Ekstrak isi buku EPUB menjadi teks, atau ubah file TXT menjadi EPUB lengkap dengan bab dan daftar isi."
     override val toolImageTitle = "Image Conversion"
     override val toolImageDesc = "Ubah format gambar dengan penanganan transparansi dan pilihan output yang beragam."
     override val toolsOtherWaysTitle = "Cara Lain Menggunakan Morph"
@@ -492,8 +544,8 @@ object IndonesianStrings : Strings {
     override val notifActionCancelAll = "Batal Semua"
     override val notifSuccessTitle = "✅ Konversi Selesai"
     override val notifPartialTitle = "⚠️ Konversi Selesai Sebagian"
-    override val notifSuccessBodySingle = "1 berkas berhasil dikonversi ke Downloads/Morph"
-    override fun notifSuccessBodyBatch(count: Int) = "$count berkas berhasil dikonversi ke Downloads/Morph"
+    override val notifSuccessBodySingle = "1 berkas berhasil dikonversi."
+    override fun notifSuccessBodyBatch(count: Int) = "$count berkas berhasil dikonversi."
     override fun notifSummaryBody(completed: Int, failed: Int) = "$completed berhasil, $failed gagal diproses."
 
     override val enginePreparingMedia = "Menyiapkan file multimedia..."
@@ -506,7 +558,7 @@ object IndonesianStrings : Strings {
     override val engineErrReadInput = "Tidak dapat membaca berkas input."
     override val engineErrInputEmpty = "Berkas input kosong atau tidak valid."
     override fun engineErrInvalidOutput(reason: String) = "Hasil tidak valid: $reason"
-    override val engineErrSaveOutput = "Gagal menyimpan hasil ke direktori Downloads/Morph"
+    override val engineErrSaveOutput = "Gagal menyimpan hasil konversi ke folder output."
     override val engineErrStreamCopyIncompatible =
         "Stream Copy tidak kompatibel untuk codec stream berkas ini. Gunakan kualitas Tinggi atau Sedang."
     override val engineErrFormatNotSupported =
@@ -516,7 +568,7 @@ object IndonesianStrings : Strings {
     override val engineErrPdfRead = "Tidak dapat membaca dokumen PDF."
     override val engineErrPdfNoPages = "Dokumen PDF tidak memiliki halaman."
     override fun engineRenderingPage(page: Int, total: Int) = "Merender halaman $page dari $total..."
-    override fun enginePagesExtractedSuccess(count: Int) = "$count halaman berhasil diekstrak ke Downloads/Morph"
+    override fun enginePagesExtractedSuccess(count: Int) = "$count halaman berhasil diekstrak."
     override val engineErrSavePdfImage = "Gagal menyimpan hasil gambar PDF"
     override val engineAnalyzingPdf = "Menganalisis ukuran PDF..."
     override val engineErrPdfEmpty = "Dokumen PDF kosong."
@@ -524,7 +576,15 @@ object IndonesianStrings : Strings {
     override val engineErrSavePdfCompress = "Gagal menyimpan hasil kompresi PDF"
     override val engineLoadingImage = "Memuat gambar..."
     override val engineBuildingPdfPages = "Menyusun lembar PDF..."
-    override val engineErrImageToPdf = "Gagal membuat PDF dari gambar"
+    override val engineErrOutOfMemory = "Memori tidak cukup untuk memproses file ini. Coba kualitas lebih rendah atau file yang lebih kecil."
+    override val engineErrNoAudioTrack = "File ini tidak memiliki trek audio, jadi tidak bisa diubah ke format audio."
+    override fun instantSkippedRotation(target: String) = "Mode Instan tidak dipakai: video ini direkam dengan rotasi (misalnya potret), dan $target tidak menyimpan rotasi sehingga hasil salinan akan miring. Video di-encode ulang. Pilih MP4 atau MOV untuk mode Instan."
+    override fun instantSkippedCodec(target: String) = "Mode Instan tidak dipakai: codec video atau audio file ini tidak didukung $target, jadi video di-encode ulang."
+    override val instantSkippedGeneric = "Mode Instan tidak bisa dipakai untuk file ini, jadi video di-encode ulang."
+    override fun pdfAlreadyOptimal(size: String) = "PDF ini sudah optimal ($size) dan tidak bisa diperkecil lagi. File asli tetap dipakai, tidak ada file baru yang disimpan."
+    override val crossMergePdfTitle = "Gabungkan semua gambar ke satu PDF"
+    override fun crossMergePdfDesc(parts: String, total: Int) = "$parts jadi satu PDF berisi $total halaman, urut sesuai pilihan Anda."
+    override val noTargetFormatAvailable = "Format ini belum bisa dikonversi. File ini akan dilewati."
     override fun engineBuildingPdfPage(curr: Int, total: Int) = "Menyusun lembar $curr dari $total..."
     override val engineSavingPdfDoc = "Menyimpan dokumen PDF..."
     override val engineErrSaveMergedPdf = "Gagal menyimpan dokumen PDF gabungan"
@@ -582,6 +642,25 @@ object EnglishStrings : Strings {
     override val pressBackAgainToExit = "Press back again to exit"
     override val notifPermissionRequiredToast = "Notification permission is required for optimal background conversions."
     override val storagePermissionRequiredToast = "Storage permission is required to save converted files to Downloads/Morph."
+    override val deleteFileFailedToast = "Failed to delete the file."
+    override val outputFolderSectionTitle = "Output Folder"
+    override val outputFolderDefault = "Downloads/Morph (default)"
+    override val outputFolderDefaultDesc = "Converted files are saved to the default folder."
+    override val outputFolderCustomDesc = "Converted files are saved to your chosen folder. If folder access is revoked, Morph falls back to Downloads/Morph."
+    override val outputFolderChoose = "Choose Folder"
+    override val outputFolderReset = "Use Default"
+    override val outputFolderPermissionFailed = "Could not keep access to that folder. Please choose another one."
+    override val autoSubfolderTitle = "Subfolder per File"
+    override val autoSubfolderDesc = "Save each file's results into a subfolder named after the original file, e.g. Book.pdf → Book/."
+    override val videoResolutionTitle = "Resolution"
+    override val videoFpsTitle = "Frame Rate"
+    override val optionOriginal = "Original"
+    override val videoOptionsDisableInstant = "Changing resolution or frame rate needs re-encoding, so Instant mode switches to High quality."
+    override fun pdfCompressionResult(sizeChange: String) = "PDF size: $sizeChange"
+    override val engineReadingTxt = "Reading text file..."
+    override val engineBuildingEpub = "Building EPUB chapters..."
+    override fun engineWritingChapter(done: Int, total: Int) = "Writing chapter $done of $total..."
+    override fun epubChunkTitle(index: Int) = "Part $index"
     override val webUrlNotSupportedToast = "Morph is an offline file converter. Web URLs or plain text are not supported."
     override val noFilesFromShareToast = "No files found to process from Share."
     override val fileNotFoundToast = "File not found"
@@ -658,8 +737,8 @@ object EnglishStrings : Strings {
     override val toolAudioConvertDesc = "Convert between audio formats, including lossless FLAC/WAV output and Instant mode for compatible streams."
     override val toolSvgTitle = "SVG Conversion"
     override val toolSvgDesc = "Convert SVG vector graphics into raster images for gallery viewing and sharing."
-    override val toolEpubTitle = "EPUB Text Extraction"
-    override val toolEpubDesc = "Extract digital book chapters into a clean, lightweight text file."
+    override val toolEpubTitle = "EPUB ⇄ TXT"
+    override val toolEpubDesc = "Extract EPUB books into plain text, or turn TXT files into EPUB books with chapters and a table of contents."
     override val toolImageTitle = "Image Conversion"
     override val toolImageDesc = "Convert image formats with transparency handling and multiple output options."
     override val toolsOtherWaysTitle = "More Ways to Use Morph"
@@ -770,8 +849,8 @@ object EnglishStrings : Strings {
     override val notifActionCancelAll = "Cancel All"
     override val notifSuccessTitle = "✅ Conversion Completed"
     override val notifPartialTitle = "⚠️ Conversion Partially Completed"
-    override val notifSuccessBodySingle = "1 file successfully converted to Downloads/Morph"
-    override fun notifSuccessBodyBatch(count: Int) = "$count files successfully converted to Downloads/Morph"
+    override val notifSuccessBodySingle = "1 file converted successfully."
+    override fun notifSuccessBodyBatch(count: Int) = "$count files converted successfully."
     override fun notifSummaryBody(completed: Int, failed: Int) = "$completed succeeded, $failed failed."
 
     override val enginePreparingMedia = "Preparing multimedia file..."
@@ -784,7 +863,7 @@ object EnglishStrings : Strings {
     override val engineErrReadInput = "Cannot read input file."
     override val engineErrInputEmpty = "Input file is empty or invalid."
     override fun engineErrInvalidOutput(reason: String) = "Invalid output: $reason"
-    override val engineErrSaveOutput = "Failed to save output to Downloads/Morph"
+    override val engineErrSaveOutput = "Failed to save the converted file to the output folder."
     override val engineErrStreamCopyIncompatible =
         "Stream Copy is incompatible with this file's stream codec. Please use High or Medium quality."
     override val engineErrFormatNotSupported =
@@ -794,7 +873,7 @@ object EnglishStrings : Strings {
     override val engineErrPdfRead = "Cannot read PDF document."
     override val engineErrPdfNoPages = "PDF document has no pages."
     override fun engineRenderingPage(page: Int, total: Int) = "Rendering page $page of $total..."
-    override fun enginePagesExtractedSuccess(count: Int) = "$count pages successfully extracted to Downloads/Morph"
+    override fun enginePagesExtractedSuccess(count: Int) = "$count pages extracted successfully."
     override val engineErrSavePdfImage = "Failed to save PDF images"
     override val engineAnalyzingPdf = "Analyzing PDF size..."
     override val engineErrPdfEmpty = "PDF document is empty."
@@ -802,7 +881,15 @@ object EnglishStrings : Strings {
     override val engineErrSavePdfCompress = "Failed to save compressed PDF"
     override val engineLoadingImage = "Loading image..."
     override val engineBuildingPdfPages = "Building PDF pages..."
-    override val engineErrImageToPdf = "Failed to create PDF from image"
+    override val engineErrOutOfMemory = "Not enough memory to process this file. Try a lower quality or a smaller file."
+    override val engineErrNoAudioTrack = "This file has no audio track, so it can't be converted to an audio format."
+    override fun instantSkippedRotation(target: String) = "Instant mode was not used: this video was recorded rotated (for example portrait), and $target can't store rotation, so a copy would play sideways. It was re-encoded instead. Choose MP4 or MOV for Instant."
+    override fun instantSkippedCodec(target: String) = "Instant mode was not used: this file's video or audio codec isn't supported by $target, so it was re-encoded."
+    override val instantSkippedGeneric = "Instant mode couldn't be used for this file, so it was re-encoded."
+    override fun pdfAlreadyOptimal(size: String) = "This PDF is already optimal ($size) and can't be made smaller. The original is kept and no new file was saved."
+    override val crossMergePdfTitle = "Combine all images into one PDF"
+    override fun crossMergePdfDesc(parts: String, total: Int) = "$parts become one PDF with $total pages, in the order you picked them."
+    override val noTargetFormatAvailable = "This format cannot be converted yet. These files will be skipped."
     override fun engineBuildingPdfPage(curr: Int, total: Int) = "Building page $curr of $total..."
     override val engineSavingPdfDoc = "Saving PDF document..."
     override val engineErrSaveMergedPdf = "Failed to save merged PDF document"

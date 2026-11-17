@@ -107,7 +107,7 @@ fun ToolsScreen(
             ToolFeatureCard(
                 title = strings.toolEpubTitle,
                 description = strings.toolEpubDesc,
-                supportedFormats = "EPUB  →  TXT",
+                supportedFormats = "EPUB  →  TXT   ·   TXT  →  EPUB",
                 icon = Icons.Default.Book
             )
         }

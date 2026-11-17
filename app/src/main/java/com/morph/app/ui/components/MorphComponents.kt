@@ -30,7 +30,7 @@ import com.morph.app.ui.theme.MorphAccentPink
 import com.morph.app.ui.theme.MorphSecondary
 import com.morph.app.ui.theme.MorphPink
 import com.morph.app.ui.theme.MorphViolet
-import java.io.File
+import com.morph.app.core.MorphOutputFile
 import java.text.DecimalFormat
 import kotlin.math.log10
 import kotlin.math.pow
@@ -385,7 +385,7 @@ fun ErrorCard(
 
 @Composable
 fun FileHistoryItemCard(
-    file: File,
+    file: MorphOutputFile,
     onClick: () -> Unit,
     onShare: () -> Unit,
     onDelete: () -> Unit,
@@ -507,7 +507,7 @@ fun FileHistoryItemCard(
                 )
 
                 Text(
-                    text = formatFileSize(file.length()),
+                    text = formatFileSize(file.size),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

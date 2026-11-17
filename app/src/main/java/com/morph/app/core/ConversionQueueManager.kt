@@ -32,7 +32,10 @@ data class ConversionJob(
     val progressMessage: String = AppStrings.get().queueWaiting,
     val outputFilePath: String? = null,
     val errorMessage: String? = null,
-    val extraInputUris: List<Uri> = emptyList()
+    val extraInputUris: List<Uri> = emptyList(),
+    val videoResolution: Int = 0, // PBI 5.2: 0 = original, else target short side (1080/720/480)
+    val videoFps: Int = 0, // PBI 5.2: 0 = original
+    val resultDetail: String? = null // HFX-5: e.g. "2.4 MB → 850 KB (-65%)"
 )
 
 data class ConversionJobRequest(
@@ -41,7 +44,9 @@ data class ConversionJobRequest(
     val mimeType: String,
     val targetFormat: String,
     val qualityPreset: Int,
-    val extraInputUris: List<Uri> = emptyList()
+    val extraInputUris: List<Uri> = emptyList(),
+    val videoResolution: Int = 0,
+    val videoFps: Int = 0
 )
 
 data class SelectedFileItem(
@@ -108,14 +113,22 @@ object ConversionQueueManager {
                 mimeType = req.mimeType,
                 targetFormat = req.targetFormat,
                 qualityPreset = req.qualityPreset,
-                extraInputUris = req.extraInputUris
+                extraInputUris = req.extraInputUris,
+                videoResolution = req.videoResolution,
+                videoFps = req.videoFps
             )
         }
         _queueState.update { currentList -> currentList + newJobs }
         return newJobs.map { it.id }
     }
 
-    fun updateJobStatus(jobId: String, newStatus: JobStatus, filePath: String? = null, error: String? = null) {
+    fun updateJobStatus(
+        jobId: String,
+        newStatus: JobStatus,
+        filePath: String? = null,
+        error: String? = null,
+        detail: String? = null
+    ) {
         _queueState.update { currentList ->
             currentList.map { job ->
                 if (job.id == jobId) {
@@ -127,7 +140,7 @@ object ConversionQueueManager {
                     }
                     val strings = AppStrings.get()
                     val finalMsg = when (newStatus) {
-                        JobStatus.COMPLETED -> strings.queueCompleted
+                        JobStatus.COMPLETED -> detail ?: strings.queueCompleted
                         JobStatus.FAILED -> error ?: strings.queueFailed
                         JobStatus.CANCELLED -> strings.queueCancelled
                         JobStatus.WAITING -> strings.queueWaiting
@@ -139,7 +152,8 @@ object ConversionQueueManager {
                         progress = finalProgress,
                         progressMessage = finalMsg,
                         outputFilePath = filePath ?: job.outputFilePath,
-                        errorMessage = error ?: job.errorMessage
+                        errorMessage = error ?: job.errorMessage,
+                        resultDetail = detail ?: job.resultDetail
                     )
                 } else {
                     job

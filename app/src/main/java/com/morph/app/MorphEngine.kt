@@ -12,9 +12,11 @@ import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import com.arthenica.ffmpegkit.FFmpegKit
+import com.arthenica.ffmpegkit.FFmpegKitConfig
 import com.arthenica.ffmpegkit.FFprobeKit
 import com.arthenica.ffmpegkit.ReturnCode
 import com.morph.app.core.*
+import com.morph.app.ui.components.formatFileSize
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.io.ByteArrayOutputStream
@@ -31,6 +33,59 @@ object MorphEngine {
 
     private const val TAG = "MorphEngine"
 
+    /**
+     * H.264 encoders in try order. ffmpeg-kit-full is LGPL, so there is no libx264:
+     * h264_mediacodec = the phone's hardware encoder (fast, cool), libopenh264 = software fallback
+     * that works everywhere. Each gets only its own flags (see h264CodecArgs).
+     */
+    internal val H264_ENCODERS = listOf("h264_mediacodec", "libopenh264")
+    private val H264_TARGETS = setOf("mp4", "mkv", "mov")
+
+    /**
+     * Encoder-only flags. h264_mediacodec: CBR so vendor drivers honour -b:v (VBR undershot to ~10%
+     * on a Redmi), and -g so the i-frame interval is ~2 s instead of FFmpeg's 1-frame default.
+     * BT.709 tags stop the stream being labelled "gbr" (RGB), which the chip also receives.
+     */
+    internal fun h264CodecArgs(encoder: String): String {
+        val colors = "-colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv"
+        return if (encoder == "h264_mediacodec") {
+            "-c:v h264_mediacodec -bitrate_mode cbr -g 60 $colors"
+        } else {
+            "-c:v $encoder $colors"
+        }
+    }
+
+    /** Pixel format the encoder is fed. Hardware takes NV12; many Qualcomm chips reject planar yuv420p. */
+    internal fun h264PixelFormat(encoder: String): String =
+        if (encoder == "h264_mediacodec") "nv12" else "yuv420p"
+
+    /** Media time after which a running hardware encode is checked for an ignored bitrate. */
+    private const val EARLY_BITRATE_CHECK_MS = 5_000L
+
+    /** High at Original size is where an ignored bitrate visibly hurts, so only it is guarded. */
+    internal fun needsBitrateGuard(preset: Int, videoResolution: Int): Boolean = preset == 0 && videoResolution == 0
+
+    /**
+     * H.264 encoders to try. When this firmware's hardware encoder is known to ignore the bitrate,
+     * guarded encodes go straight to software instead of losing time on a doomed hardware run.
+     */
+    internal fun h264EncoderOrder(preset: Int, videoResolution: Int, hwIgnoresBitrate: Boolean): List<String> =
+        if (hwIgnoresBitrate && needsBitrateGuard(preset, videoResolution)) H264_ENCODERS.takeLast(1) else H264_ENCODERS
+
+    /** Software output at least twice as dense as hardware => the driver, not the content, was the cause. */
+    internal fun confirmsHwIgnoredBitrate(hwBytesPerMs: Double, swBytesPerMs: Double): Boolean =
+        hwBytesPerMs > 0 && swBytesPerMs >= hwBytesPerMs * 2
+
+    /** Audio bitrate of the High preset, used to estimate the expected output size. */
+    private const val HIGH_AUDIO_BPS = 256_000L
+
+    /** True when the output is under 35% of the size the target bitrate should give. */
+    internal fun isBitrateUnderflow(outputBytes: Long, targetBitsPerSec: Long, durationMs: Long): Boolean {
+        if (durationMs <= 0 || targetBitsPerSec <= 0) return false
+        val expectedBytes = targetBitsPerSec / 8.0 * (durationMs / 1000.0)
+        return outputBytes < expectedBytes * 0.35
+    }
+
     /** HFX-4A: longest rendered PDF page edge (~A4 at 300 DPI) to stay clear of OutOfMemoryError. */
     private const val MAX_PDF_RENDER_EDGE_PX = 2480f
 
@@ -43,8 +98,6 @@ object MorphEngine {
 
     val currentStatus = MutableStateFlow<ConvertState>(ConvertState.Idle)
 
-    // Managed Coroutine Scope tied to the Engine lifecycle
-    private val engineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var activeJob: Job? = null
 
     suspend fun executeConversion(
@@ -53,7 +106,10 @@ object MorphEngine {
         outputExtension: String,
         originalFileName: String,
         qualityPreset: Int,
-        onProgress: (String, Int) -> Unit
+        onProgress: (String, Int) -> Unit,
+        videoResolution: Int = 0, // PBI 5.2: target short side (1080/720/480), 0 = original
+        videoFps: Int = 0, // PBI 5.2: 60/30/24, 0 = original
+        onResultDetail: (String) -> Unit = {} // HFX-5: e.g. PDF size comparison
     ): String = withContext(Dispatchers.IO) {
         val inputExt = originalFileName.substringAfterLast('.', "").trim().lowercase()
         val targetExt = outputExtension.trim().removePrefix(".").lowercase()
@@ -71,7 +127,7 @@ object MorphEngine {
                     )
                 }
                 inputExt == "pdf" && targetExt == "pdf" -> {
-                    compressPdf(context, inputUri, originalFileName, qualityPreset, onProgress,
+                    compressPdf(context, inputUri, originalFileName, qualityPreset, onProgress, onResultDetail,
                         { path -> resultDeferred.complete(path) },
                         { err -> resultDeferred.completeExceptionally(IOException(err)) }
                     )
@@ -79,9 +135,8 @@ object MorphEngine {
 
                 // Route 2: Image to PDF
                 targetExt == "pdf" && inputExt in listOf("jpg", "jpeg", "png", "webp", "bmp", "heic", "heif") -> {
-                    convertImageToPdf(context, inputUri, originalFileName, onProgress,
-                        { path -> resultDeferred.complete(path) },
-                        { err -> resultDeferred.completeExceptionally(IOException(err)) }
+                    resultDeferred.complete(
+                        mergeImagesToPdf(context, listOf(inputUri), originalFileName, onProgress = onProgress)
                     )
                 }
 
@@ -101,6 +156,14 @@ object MorphEngine {
                     )
                 }
 
+                // Route 4b: Plain text TXT to EPUB (PBI 5.4)
+                inputExt == "txt" && targetExt == "epub" -> {
+                    convertTxtToEpub(context, inputUri, originalFileName, onProgress,
+                        { path -> resultDeferred.complete(path) },
+                        { err -> resultDeferred.completeExceptionally(IOException(err)) }
+                    )
+                }
+
                 // Route 5: Native Raster Image Converter
                 inputExt in listOf("png", "jpg", "jpeg", "webp", "bmp") &&
                     targetExt in listOf("png", "jpg", "jpeg", "webp", "bmp") -> {
@@ -112,7 +175,7 @@ object MorphEngine {
 
                 // Route 6: Multimedia (Video & Audio) via FFmpeg Engine
                 else -> {
-                    convertMediaWithFFmpeg(context, inputUri, inputExt, targetExt, originalFileName, qualityPreset, onProgress,
+                    convertMediaWithFFmpeg(context, inputUri, inputExt, targetExt, originalFileName, qualityPreset, videoResolution, videoFps, onProgress, onResultDetail,
                         { path -> resultDeferred.complete(path) },
                         { err -> resultDeferred.completeExceptionally(IOException(err)) }
                     )
@@ -130,51 +193,6 @@ object MorphEngine {
         }
     }
 
-    fun convert(
-        context: Context,
-        inputUri: Uri,
-        outputExtension: String,
-        originalFileName: String,
-        qualityPreset: Int, // 0: Tinggi, 1: Sedang, 2: Rendah, 3: Instan (Lossless)
-        onProgress: (String, Int) -> Unit,
-        onSuccess: (String) -> Unit,
-        onError: (String) -> Unit
-    ) {
-        val targetExt = outputExtension.trim().removePrefix(".").lowercase()
-
-        // Cancel any pending conversion job before starting a new one
-        activeJob?.cancel()
-
-        activeJob = engineScope.launch {
-            try {
-                val finalPath = executeConversion(
-                    context = context,
-                    inputUri = inputUri,
-                    outputExtension = targetExt,
-                    originalFileName = originalFileName,
-                    qualityPreset = qualityPreset,
-                    onProgress = onProgress
-                )
-                withContext(Dispatchers.Main) {
-                    currentStatus.value = ConvertState.Success
-                    onSuccess(finalPath)
-                }
-            } catch (e: CancellationException) {
-                withContext(Dispatchers.Main) {
-                    currentStatus.value = ConvertState.Idle
-                    onError(AppStrings.get().engineCancelled)
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Conversion setup error", e)
-                withContext(Dispatchers.Main) {
-                    val errMsg = AppStrings.get().engineErrSetup(e.message ?: "")
-                    currentStatus.value = ConvertState.Error(errMsg, inputUri, targetExt)
-                    onError(errMsg)
-                }
-            }
-        }
-    }
-
     // --- 1. MEDIA CONVERTER (FFMPEG) ---
     private suspend fun convertMediaWithFFmpeg(
         context: Context,
@@ -183,7 +201,10 @@ object MorphEngine {
         targetExt: String,
         originalFileName: String,
         qualityPreset: Int,
+        videoResolution: Int,
+        videoFps: Int,
         onProgress: (String, Int) -> Unit,
+        onResultDetail: (String) -> Unit,
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
@@ -194,28 +215,63 @@ object MorphEngine {
         try {
             updateProgress(targetExt, strings.enginePreparingMedia, 5, onProgress)
 
-            // Copy input stream to temp cache file
-            context.contentResolver.openInputStream(inputUri)?.use { input ->
-                FileOutputStream(tempInput).use { output ->
-                    input.copyTo(output)
-                }
-            } ?: throw IOException(strings.engineErrReadInput)
+            // Read the source straight from its content:// URI ("saf:" protocol) so big videos
+            // don't need a full copy in cache (2x storage). Each saf: parameter is single-use.
+            var useSaf = true
+            fun inputArg(): String =
+                if (useSaf) FFmpegKitConfig.getSafParameterForRead(context, inputUri) else tempInput.absolutePath
 
-            if (!tempInput.exists() || tempInput.length() <= 0) {
-                throw IOException(strings.engineErrInputEmpty)
+            var inputSize = getFileSizeFromUri(context, inputUri)
+            // Clean cache copy of the source: used when saf: can't be probed or a saf: run fails
+            fun copyInputToCache() {
+                useSaf = false
+                tempInput.delete()
+                context.contentResolver.openInputStream(inputUri)?.use { input ->
+                    FileOutputStream(tempInput).use { output -> input.copyTo(output) }
+                } ?: throw IOException(strings.engineErrReadInput)
+                if (!tempInput.exists() || tempInput.length() <= 0) {
+                    throw IOException(strings.engineErrInputEmpty)
+                }
+                inputSize = tempInput.length()
             }
 
-            // Probe media information via FFprobe
-            val mediaInfo = FFprobeKit.getMediaInformation(tempInput.absolutePath).mediaInformation
+            var mediaInfo = try {
+                FFprobeKit.getMediaInformation(inputArg()).mediaInformation
+            } catch (e: Exception) {
+                Log.w(TAG, "SAF probe failed, falling back to cache copy", e)
+                null
+            }
+
+            if (mediaInfo == null || mediaInfo.streams.isNullOrEmpty()) {
+                // Non-seekable providers (streams, some cloud apps), or a saf: probe that saw no
+                // streams: copy to cache so codecs are read reliably (Instant depends on them)
+                copyInputToCache()
+                mediaInfo = FFprobeKit.getMediaInformation(inputArg()).mediaInformation
+            }
+
+            // Audio output from a video with no audio stream would be an empty/broken file
+            if (ConversionCapabilityManager.isAudioOnlyTarget(targetExt) &&
+                mediaInfo?.streams?.none { it.type.equals("audio", ignoreCase = true) } == true
+            ) {
+                throw IOException(strings.engineErrNoAudioTrack)
+            }
+
             val totalDurationStr = mediaInfo?.duration
             val totalDurationMs = (totalDurationStr?.toDoubleOrNull()?.times(1000))?.toLong() ?: 0L
 
-            val originalBitrateBps = if (totalDurationMs > 0) {
-                ((tempInput.length() * 8.0) / (totalDurationMs / 1000.0)).toLong()
+            val originalBitrateBps = if (totalDurationMs > 0 && inputSize > 0) {
+                ((inputSize * 8.0) / (totalDurationMs / 1000.0)).toLong()
             } else {
                 4000000L
             }
-            val videoBitrateBps = (originalBitrateBps * 0.9).toLong().coerceIn(400000L, 20000000L)
+            // PBI 5.2: fewer pixels need proportionally fewer bits, or 480p stays as big as 1080p
+            val sourceShortSide = mediaInfo?.streams
+                ?.firstOrNull { it.type.equals("video", ignoreCase = true) && !isAttachedPicture(it) }
+                ?.let { minOf(it.width ?: 0L, it.height ?: 0L) } ?: 0L
+            val pixelRatio = if (videoResolution > 0 && sourceShortSide > videoResolution) {
+                (videoResolution.toDouble() / sourceShortSide).let { it * it }
+            } else 1.0
+            val videoBitrateBps = (originalBitrateBps * 0.9 * pixelRatio).toLong().coerceIn(400000L, 20000000L)
 
             // Video rotation check
             val videoRotation = getVideoRotation(mediaInfo)
@@ -223,34 +279,117 @@ object MorphEngine {
             // Lossless / Stream Copy validation (extension-level rule)
             val isLosslessSupported = ConversionCapabilityManager.isLosslessCompatible(inputExt, targetExt)
             // Crucial: If video has rotation metadata and target is MKV or WebM, stream copy causes unrotated orientation on Android
-            val isLosslessCapable = isLosslessSupported &&
-                !(videoRotation != 0 && targetExt in listOf("mkv", "webm")) &&
+            // PBI 5.2: a resolution/FPS change needs re-encoding, so Instant (-c copy) is off
+            val wantsVideoChange = videoResolution > 0 || videoFps > 0
+            val rotationBlocksCopy = ConversionCapabilityManager.rotationBlocksStreamCopy(videoRotation, targetExt)
+            val codecsFit = qualityPreset != 3 || isStreamCopyCodecSafe(mediaInfo, targetExt)
+            val isLosslessCapable = !wantsVideoChange && isLosslessSupported && !rotationBlocksCopy &&
                 // BUG-03: the probed source codecs must really fit the target container
-                (qualityPreset != 3 || isStreamCopyCodecSafe(mediaInfo, targetExt))
+                codecsFit
 
+            // Told to the user on success, so "Instant" never silently becomes a full re-encode
+            var instantNote: String? = null
             val effectivePreset = if (qualityPreset == 3 && !isLosslessCapable) {
-                Log.i(TAG, "Instant (-c copy) not compatible for $inputExt -> $targetExt, re-encoding instead")
+                Log.i(TAG, "Instant not used for $inputExt -> $targetExt: rotation=$videoRotation " +
+                    "codecsFit=$codecsFit videoChange=$wantsVideoChange extOk=$isLosslessSupported")
+                instantNote = when {
+                    rotationBlocksCopy -> strings.instantSkippedRotation(targetExt.uppercase())
+                    !codecsFit -> strings.instantSkippedCodec(targetExt.uppercase())
+                    else -> strings.instantSkippedGeneric
+                }
                 0 // Fallback to High if format/codec doesn't support stream copying
             } else {
                 qualityPreset
             }
 
+            fun failed(r: Pair<ReturnCode?, String>) = !ReturnCode.isSuccess(r.first) && !ReturnCode.isCancel(r.first)
+
+            // Tries each H.264 encoder (hardware first) on the current input. Non-H.264 targets
+            // ignore the encoder, so they get one attempt. Hardware failures are usually instant.
+            val prefs = MorphPrefs(context)
+            val hwIgnoresBitrate = prefs.hwH264IgnoresBitrateOnBuild == Build.FINGERPRINT
+
+            suspend fun encodeWithFallback(preset: Int): Pair<ReturnCode?, String> {
+                val encoders = if (preset != 3 && targetExt in H264_TARGETS) {
+                    h264EncoderOrder(preset, videoResolution, hwIgnoresBitrate)
+                } else {
+                    H264_ENCODERS.takeLast(1)
+                }
+                val guarded = needsBitrateGuard(preset, videoResolution)
+                val targetBps = videoBitrateBps + HIGH_AUDIO_BPS
+                var result: Pair<ReturnCode?, String> = null to ""
+                // Output rate (bytes per ms) the hardware run had when it was judged too small
+                var hwBytesPerMs: Double? = null
+                for ((attempt, encoder) in encoders.withIndex()) {
+                    if (attempt > 0) {
+                        Log.w(TAG, "${encoders[attempt - 1]} not used (rc=${result.first?.value}), trying $encoder")
+                        updateProgress(targetExt, strings.enginePreparingMedia, 5, onProgress)
+                    }
+                    // Some vendor drivers ignore -b:v even in CBR (79 MB -> 6-7 MB on a Redmi 15). For
+                    // High at Original size that is a visible quality loss, so we redo it in software.
+                    val watchBitrate = guarded && encoder == "h264_mediacodec" && encoder != encoders.last()
+                    // Set from FFmpegKit's statistics thread, read here after the session ends
+                    val underflow = java.util.concurrent.atomic.AtomicBoolean(false)
+                    val rateAtAbort = java.util.concurrent.atomic.AtomicReference<Double>(null)
+                    tempOutput.delete()
+                    result = runFFmpeg(
+                        buildFFmpegCommand(inputArg(), tempOutput, inputExt, targetExt, preset, videoBitrateBps, videoRotation, videoResolution, videoFps, encoder),
+                        targetExt, totalDurationMs, onProgress,
+                        // Decide after 5 s of video instead of wasting a whole hardware encode
+                        abortWhen = if (watchBitrate) { bytes, timeMs ->
+                            (timeMs >= EARLY_BITRATE_CHECK_MS && isBitrateUnderflow(bytes, targetBps, timeMs))
+                                .also { if (it) rateAtAbort.set(bytes.toDouble() / timeMs) }
+                        } else null,
+                        onAbort = { underflow.set(true) }
+                    )
+                    // Clips shorter than the early check are judged on the finished file
+                    if (watchBitrate && !underflow.get() && !failed(result) && !ReturnCode.isCancel(result.first)) {
+                        underflow.set(isBitrateUnderflow(tempOutput.length(), targetBps, totalDurationMs))
+                        if (underflow.get()) rateAtAbort.set(tempOutput.length().toDouble() / totalDurationMs)
+                    }
+                    if (underflow.get()) {
+                        Log.w(TAG, "h264_mediacodec output far below target, redoing in software")
+                        hwBytesPerMs = rateAtAbort.get()
+                        continue
+                    }
+                    if (!failed(result)) {
+                        // Only remember the firmware when software proves the content needed the bits.
+                        // A static screen recording is small in software too, so it must not flag the device.
+                        val hwRate = hwBytesPerMs
+                        if (hwRate != null && !ReturnCode.isCancel(result.first) && totalDurationMs > 0 &&
+                            confirmsHwIgnoredBitrate(hwRate, tempOutput.length().toDouble() / totalDurationMs)
+                        ) {
+                            Log.w(TAG, "h264_mediacodec ignores the bitrate on this firmware, using software from now on")
+                            prefs.hwH264IgnoresBitrateOnBuild = Build.FINGERPRINT
+                        }
+                        if (targetExt in H264_TARGETS && preset != 3 && !ReturnCode.isCancel(result.first)) {
+                            Log.i(TAG, "H.264 encoded with $encoder")
+                        }
+                        break
+                    }
+                }
+                return result
+            }
+
             var usedPreset = effectivePreset
-            var ffmpegResult = runFFmpeg(
-                buildFFmpegCommand(tempInput, tempOutput, inputExt, targetExt, usedPreset, videoBitrateBps, videoRotation),
-                targetExt, totalDurationMs, onProgress
-            )
+            var ffmpegResult = encodeWithFallback(usedPreset)
 
             // Safety net: if stream copy still fails (e.g. odd timestamps), re-encode instead of failing
-            if (usedPreset == 3 && !ReturnCode.isSuccess(ffmpegResult.first) && !ReturnCode.isCancel(ffmpegResult.first)) {
+            if (usedPreset == 3 && failed(ffmpegResult)) {
                 Log.w(TAG, "Stream copy failed (${ffmpegResult.first?.value}), retrying with re-encode")
-                tempOutput.delete()
+                instantNote = strings.instantSkippedGeneric
                 usedPreset = 0
                 updateProgress(targetExt, strings.enginePreparingMedia, 5, onProgress)
-                ffmpegResult = runFFmpeg(
-                    buildFFmpegCommand(tempInput, tempOutput, inputExt, targetExt, usedPreset, videoBitrateBps, videoRotation),
-                    targetExt, totalDurationMs, onProgress
-                )
+                ffmpegResult = encodeWithFallback(usedPreset)
+            }
+
+            // Last resort: some providers' saf: fds misbehave for certain demuxers/muxers. Copy once
+            // (useSaf turns false, so this can't repeat) and reuse that copy for every encoder.
+            if (useSaf && failed(ffmpegResult)) {
+                Log.w(TAG, "FFmpeg failed on saf: input (${ffmpegResult.first?.value}), retrying from cache copy")
+                copyInputToCache()
+                updateProgress(targetExt, strings.enginePreparingMedia, 5, onProgress)
+                ffmpegResult = encodeWithFallback(usedPreset)
             }
 
             val returnCode = ffmpegResult.first
@@ -275,6 +414,7 @@ object MorphEngine {
                             if (finalPath != null) {
                                 currentStatus.value = ConvertState.Success
                                 onProgress(strings.engineFinished100, 100)
+                                instantNote?.let(onResultDetail)
                                 onSuccess(finalPath)
                             } else {
                                 currentStatus.value = ConvertState.Error(strings.engineErrSaveOutput, inputUri, targetExt)
@@ -311,17 +451,49 @@ object MorphEngine {
         }
     }
 
+    /**
+     * Video filter chain for re-encoding: optional downscale (PBI 5.2 resolution, or the Low
+     * preset's 854px cap), then force even dimensions so H.264/yuv420p never fails on odd sizes
+     * (e.g. 1081x1921 phone recordings). FFmpeg autorotates first, so iw/ih are display-oriented.
+     */
+    internal fun buildVideoFilterArgs(preset: Int, videoResolution: Int, videoFps: Int, outPixFmt: String? = null): String {
+        val filters = mutableListOf<String>()
+        when {
+            // Scale the short side to the target, never upscale, keep aspect ratio
+            videoResolution > 0 -> filters += "scale='if(gt(iw,ih),-2,min($videoResolution,iw))':'if(gt(iw,ih),min($videoResolution,ih),-2)'"
+            preset == 2 -> filters += "scale='if(gt(iw,ih),854,-2)':'if(gt(iw,ih),-2,854)'"
+        }
+        // With an explicit output format, convert once here (BT.709 matrix) so swscale doesn't detour via RGB
+        filters += if (outPixFmt != null) {
+            "scale='trunc(iw/2)*2':'trunc(ih/2)*2':out_color_matrix=bt709:out_range=tv,format=$outPixFmt"
+        } else {
+            "scale='trunc(iw/2)*2':'trunc(ih/2)*2'"
+        }
+        val fpsArg = if (videoFps > 0) "-r $videoFps " else ""
+        return "-vf \"${filters.joinToString(",")}\" $fpsArg"
+    }
+
+    /** "2.4 MB → 850 KB (-65%)"; a bigger result shows "(+12%)". */
+    internal fun formatSizeChange(beforeBytes: Long, afterBytes: Long): String {
+        val pct = if (beforeBytes > 0) Math.round((afterBytes - beforeBytes) * 100.0 / beforeBytes) else 0L
+        val sign = if (pct > 0) "+" else ""
+        return "${formatFileSize(beforeBytes)} → ${formatFileSize(afterBytes)} ($sign$pct%)"
+    }
+
     private fun buildFFmpegCommand(
-        tempInput: File,
+        inputArg: String,
         tempOutput: File,
         inputExt: String,
         targetExt: String,
         preset: Int,
         videoBitrateBps: Long,
-        videoRotation: Int
+        videoRotation: Int,
+        videoResolution: Int,
+        videoFps: Int,
+        h264Encoder: String
     ): String {
-        val qualityArgs = buildFFmpegQualityArgs(inputExt, targetExt, preset, videoBitrateBps, videoRotation)
-        return "-y -i \"${tempInput.absolutePath}\" $qualityArgs \"${tempOutput.absolutePath}\""
+        val qualityArgs = buildFFmpegQualityArgs(inputExt, targetExt, preset, videoBitrateBps, videoRotation, videoResolution, videoFps, h264Encoder)
+        return "-y -i \"$inputArg\" $qualityArgs \"${tempOutput.absolutePath}\""
     }
 
     /** Runs one FFmpeg command and reports progress. Returns the return code and the full log. */
@@ -329,16 +501,24 @@ object MorphEngine {
         command: String,
         targetExt: String,
         totalDurationMs: Long,
-        onProgress: (String, Int) -> Unit
+        onProgress: (String, Int) -> Unit,
+        abortWhen: ((outputBytes: Long, mediaTimeMs: Long) -> Boolean)? = null,
+        onAbort: () -> Unit = {}
     ): Pair<ReturnCode?, String> {
         val strings = AppStrings.get()
         val ffmpegSession = CompletableDeferred<ReturnCode?>()
+        var aborted = false
 
         val session = FFmpegKit.executeAsync(
             command,
             { s -> ffmpegSession.complete(s.returnCode) },
             { log -> Log.d(TAG, "[FFmpeg] ${log.message}") },
             { stats ->
+                if (!aborted && abortWhen != null && abortWhen(stats.size, stats.time.toLong())) {
+                    aborted = true
+                    onAbort()
+                    FFmpegKit.cancel(stats.sessionId)
+                }
                 if (!ffmpegSession.isCompleted) {
                     if (totalDurationMs > 0) {
                         val percentage = ((stats.time.toFloat() / totalDurationMs) * 95).toInt().coerceIn(5, 95)
@@ -422,12 +602,15 @@ object MorphEngine {
         return 0
     }
 
-    private fun buildFFmpegQualityArgs(
+    internal fun buildFFmpegQualityArgs(
         inputExt: String,
         targetExt: String,
         preset: Int,
         videoBitrateBps: Long,
-        videoRotation: Int = 0
+        videoRotation: Int = 0,
+        videoResolution: Int = 0,
+        videoFps: Int = 0,
+        h264Encoder: String = H264_ENCODERS.first()
     ): String {
         // Stream Copy (Lossless Remuxing)
         if (preset == 3) {
@@ -457,47 +640,38 @@ object MorphEngine {
             return "-an -sn -dn $rotateArg-vf \"$filterGraph\""
         }
 
+        val rotateArg = if (videoRotation != 0) "-metadata:s:v rotate=0 " else ""
+        val videoArgs = buildVideoFilterArgs(preset, videoResolution, videoFps)
+
         // Target: WebM
         if (targetExt == "webm") {
-            val rotateArg = if (videoRotation != 0) "-metadata:s:v rotate=0 " else ""
-            return when (preset) {
-                0 -> "-c:v libvpx-vp9 -b:v $videoBitrateBps -deadline realtime -cpu-used 4 -c:a libopus -b:a 192k $rotateArg"
-                1 -> {
-                    val halfBv = (videoBitrateBps * 0.6).toLong()
-                    "-c:v libvpx-vp9 -b:v $halfBv -deadline realtime -cpu-used 4 -c:a libopus -b:a 128k $rotateArg"
-                }
-                2 -> {
-                    val lowBv = (videoBitrateBps * 0.35).toLong()
-                    val scaleFilter = "scale='if(gt(iw,ih),854,-2)':'if(gt(iw,ih),-2,854)'"
-                    "-vf \"$scaleFilter\" -c:v libvpx-vp9 -b:v $lowBv -deadline realtime -cpu-used 4 -c:a libopus -b:a 96k $rotateArg"
-                }
-                else -> "-c:v libvpx-vp9 -b:v $videoBitrateBps -deadline realtime -cpu-used 4 -c:a libopus -b:a 128k $rotateArg"
+            val (bv, ba) = when (preset) {
+                0 -> videoBitrateBps to "192k"
+                1 -> (videoBitrateBps * 0.6).toLong() to "128k"
+                2 -> (videoBitrateBps * 0.35).toLong() to "96k"
+                else -> videoBitrateBps to "128k"
             }
+            // -pix_fmt yuv420p forces VP9 profile 0: 10-bit phone videos otherwise become profile 2,
+            // which many Android players render as a black screen. -row-mt uses all cores.
+            return "$videoArgs-c:v libvpx-vp9 -pix_fmt yuv420p -b:v $bv -deadline realtime -cpu-used 4 -row-mt 1 -c:a libopus -b:a $ba $rotateArg"
         }
 
         // Target: Standard Video Containers (MP4, MKV, MOV, AVI)
         if (targetExt in listOf("mp4", "mkv", "mov", "avi")) {
-            val rotateArg = if (videoRotation != 0) "-metadata:s:v rotate=0 " else ""
             val fastStartArg = if (targetExt in listOf("mp4", "mov")) "-movflags +faststart " else ""
-            // BUG-02: libx264's default "medium" preset stalls phone CPUs at ~1–2 fps (thermal throttling).
+            // This FFmpegKit build is LGPL ("full"): libx264 is NOT compiled in, so asking for it made
+            // every MP4/MKV/MOV encode fail. libopenh264 (BSD) is the H.264 encoder that ships with it.
             // AVI keeps FFmpeg's default MPEG-4 Part 2 + MP3 encoders, which are already fast.
-            val codecArg = if (targetExt == "avi") "" else {
-                val x264Preset = if (preset == 1 || preset == 2) "ultrafast" else "veryfast"
-                "-c:v libx264 -preset $x264Preset -pix_fmt yuv420p -c:a aac "
+            val codecArg = if (targetExt == "avi") "" else "${h264CodecArgs(h264Encoder)} -c:a aac "
+            val h264VideoArgs = if (targetExt == "avi") videoArgs
+                else buildVideoFilterArgs(preset, videoResolution, videoFps, h264PixelFormat(h264Encoder))
+            val (bv, ba) = when (preset) {
+                0 -> videoBitrateBps to "256k"
+                1 -> (videoBitrateBps * 0.6).toLong() to "160k"
+                2 -> (videoBitrateBps * 0.35).toLong() to "96k"
+                else -> videoBitrateBps to "256k"
             }
-            return when (preset) {
-                0 -> "$codecArg$fastStartArg-b:v $videoBitrateBps -b:a 256k $rotateArg"
-                1 -> {
-                    val targetBv = (videoBitrateBps * 0.6).toLong()
-                    "$codecArg$fastStartArg-b:v $targetBv -b:a 160k $rotateArg"
-                }
-                2 -> {
-                    val targetBv = (videoBitrateBps * 0.35).toLong()
-                    val scaleFilter = "scale='if(gt(iw,ih),854,-2)':'if(gt(iw,ih),-2,854)'"
-                    "$codecArg$fastStartArg-vf \"$scaleFilter\" -b:v $targetBv -b:a 96k $rotateArg"
-                }
-                else -> "$codecArg$fastStartArg-b:v $videoBitrateBps -b:a 256k $rotateArg"
-            }
+            return "$codecArg$fastStartArg$h264VideoArgs-b:v $bv -b:a $ba $rotateArg"
         }
 
         // Target: Audio Formats
@@ -635,7 +809,7 @@ object MorphEngine {
                     bitmap?.recycle()
                 }
 
-                val savedPath = OutputManager.finalizeOutput(context, tempPageFile, pageFileName, targetExtension)
+                val savedPath = OutputManager.finalizeOutput(context, tempPageFile, pageFileName, targetExtension, sourceName = originalFileName)
                 if (savedPath != null) lastSavedPath = savedPath
             }
 
@@ -674,12 +848,15 @@ object MorphEngine {
         originalFileName: String,
         qualityPreset: Int,
         onProgress: (String, Int) -> Unit,
+        onResultDetail: (String) -> Unit,
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
         val strings = AppStrings.get()
         val tempInput = OutputManager.createTempFile(context, "comp_in", "pdf")
         val tempOutput = OutputManager.createTempFile(context, "comp_out", "pdf")
+        var openPfd: ParcelFileDescriptor? = null
+        var openRenderer: PdfRenderer? = null
 
         try {
             updateProgress("pdf", strings.engineAnalyzingPdf, 10, onProgress)
@@ -689,60 +866,67 @@ object MorphEngine {
             } ?: throw IOException(strings.engineErrPdfRead)
 
             val pfd = ParcelFileDescriptor.open(tempInput, ParcelFileDescriptor.MODE_READ_ONLY)
+            openPfd = pfd
             val renderer = PdfRenderer(pfd)
+            openRenderer = renderer
             val pageCount = renderer.pageCount
 
             if (pageCount == 0) {
-                renderer.close()
-                pfd.close()
                 throw IllegalStateException(strings.engineErrPdfEmpty)
             }
 
-            val (scale, jpegQuality) = when (qualityPreset) {
-                0 -> Pair(1.0f, 85)
-                1 -> Pair(0.8f, 65)
-                2 -> Pair(0.6f, 45)
-                3 -> Pair(1.0f, 95)
-                else -> Pair(0.8f, 65)
+            // Longest rendered edge + JPEG quality. ~2200px on A4 is ~190 DPI: text stays sharp.
+            val (maxEdgePx, jpegQuality) = when (qualityPreset) {
+                1 -> 1800 to 65 // Medium
+                2 -> 1400 to 50 // Low
+                else -> 2200 to 80 // High (Instant does not apply to PDF)
             }
-
-            val pdfDocument = PdfDocument()
-
-            for (i in 0 until pageCount) {
-                currentCoroutineContext().ensureActive()
-
-                val page = renderer.openPage(i)
-                val width = (page.width * scale).toInt()
-                val height = (page.height * scale).toInt()
-                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                val canvas = Canvas(bitmap)
-                canvas.drawColor(Color.WHITE)
-                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                page.close()
-
-                val baos = ByteArrayOutputStream()
-                bitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality, baos)
-                val compressedBytes = baos.toByteArray()
-                val compressedBitmap = BitmapFactory.decodeByteArray(compressedBytes, 0, compressedBytes.size)
-                bitmap.recycle()
-
-                val pageInfo = PdfDocument.PageInfo.Builder(width, height, i + 1).create()
-                val docPage = pdfDocument.startPage(pageInfo)
-                docPage.canvas.drawBitmap(compressedBitmap, 0f, 0f, null)
-                pdfDocument.finishPage(docPage)
-                compressedBitmap.recycle()
-
-                val percent = (((i + 1).toFloat() / pageCount) * 80).toInt() + 10
-                updateProgress("pdf", strings.engineCompressingPage(i + 1, pageCount), percent, onProgress)
-            }
-
-            renderer.close()
-            pfd.close()
 
             FileOutputStream(tempOutput).use { fos ->
-                pdfDocument.writeTo(fos)
+                JpegPdfWriter(fos.buffered()).use { writer ->
+                    for (i in 0 until pageCount) {
+                        currentCoroutineContext().ensureActive()
+
+                        renderer.openPage(i).use { page ->
+                            val scale = maxEdgePx.toFloat() / maxOf(page.width, page.height)
+                            val width = (page.width * scale).toInt().coerceAtLeast(1)
+                            val height = (page.height * scale).toInt().coerceAtLeast(1)
+                            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                            val jpeg = try {
+                                Canvas(bitmap).drawColor(Color.WHITE)
+                                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                                ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality, it) }.toByteArray()
+                            } finally {
+                                bitmap.recycle()
+                            }
+                            // Page keeps its original size in points; only the image inside is resampled
+                            writer.addPage(jpeg, width, height, page.width.toFloat(), page.height.toFloat())
+                        }
+
+                        val percent = (((i + 1).toFloat() / pageCount) * 80).toInt() + 10
+                        updateProgress("pdf", strings.engineCompressingPage(i + 1, pageCount), percent, onProgress)
+                    }
+                }
             }
-            pdfDocument.close()
+
+            closePdfRenderer(openRenderer, openPfd)
+            openRenderer = null
+            openPfd = null
+
+            // HFX-5: measure before finalizeOutput moves/deletes the temp files
+            val beforeBytes = tempInput.length()
+            val afterBytes = tempOutput.length()
+
+            // Text-only or already-optimized PDFs grow when rasterized: keep the original, save nothing
+            if (afterBytes >= beforeBytes) {
+                OutputManager.cleanTempFiles(tempInput, tempOutput)
+                val msg = strings.pdfAlreadyOptimal(formatFileSize(beforeBytes))
+                withContext(Dispatchers.Main) {
+                    currentStatus.value = ConvertState.Error(msg, inputUri, "pdf")
+                    onError(msg)
+                }
+                return
+            }
 
             val finalPath = OutputManager.finalizeOutput(context, tempOutput, originalFileName, "pdf")
             OutputManager.cleanTempFiles(tempInput, tempOutput)
@@ -750,6 +934,7 @@ object MorphEngine {
             withContext(Dispatchers.Main) {
                 if (finalPath != null) {
                     currentStatus.value = ConvertState.Success
+                    onResultDetail(strings.pdfCompressionResult(formatSizeChange(beforeBytes, afterBytes)))
                     onSuccess(finalPath)
                 } else {
                     currentStatus.value = ConvertState.Error(strings.engineErrSavePdfCompress, inputUri, "pdf")
@@ -757,68 +942,14 @@ object MorphEngine {
                 }
             }
         } catch (e: Exception) {
+            // Release native renderer and fd on cancel/error
+            closePdfRenderer(openRenderer, openPfd)
             OutputManager.cleanTempFiles(tempInput, tempOutput)
             throw e
         }
     }
 
-    // --- 4. IMAGE TO PDF ---
-    private suspend fun convertImageToPdf(
-        context: Context,
-        inputUri: Uri,
-        originalFileName: String,
-        onProgress: (String, Int) -> Unit,
-        onSuccess: (String) -> Unit,
-        onError: (String) -> Unit
-    ) {
-        val strings = AppStrings.get()
-        val tempOutput = OutputManager.createTempFile(context, "img_pdf", "pdf")
-        try {
-            updateProgress("pdf", strings.engineLoadingImage, 30, onProgress)
-
-            val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                val source = android.graphics.ImageDecoder.createSource(context.contentResolver, inputUri)
-                android.graphics.ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
-                    decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
-                    decoder.isMutableRequired = true
-                }
-            } else {
-                @Suppress("DEPRECATION")
-                android.provider.MediaStore.Images.Media.getBitmap(context.contentResolver, inputUri)
-            }
-
-            updateProgress("pdf", strings.engineBuildingPdfPages, 60, onProgress)
-
-            val pdfDocument = PdfDocument()
-            val pageInfo = PdfDocument.PageInfo.Builder(bitmap.width, bitmap.height, 1).create()
-            val page = pdfDocument.startPage(pageInfo)
-            page.canvas.drawBitmap(bitmap, 0f, 0f, null)
-            pdfDocument.finishPage(page)
-            bitmap.recycle()
-
-            FileOutputStream(tempOutput).use { fos ->
-                pdfDocument.writeTo(fos)
-            }
-            pdfDocument.close()
-
-            val finalPath = OutputManager.finalizeOutput(context, tempOutput, originalFileName, "pdf")
-            OutputManager.cleanTempFiles(tempOutput)
-
-            withContext(Dispatchers.Main) {
-                if (finalPath != null) {
-                    currentStatus.value = ConvertState.Success
-                    onSuccess(finalPath)
-                } else {
-                    currentStatus.value = ConvertState.Error(strings.engineErrImageToPdf, inputUri, "pdf")
-                    onError(strings.engineErrImageToPdf)
-                }
-            }
-        } catch (e: Exception) {
-            OutputManager.cleanTempFiles(tempOutput)
-            throw e
-        }
-    }
-
+    // --- 4. IMAGE(S) TO PDF ---
     suspend fun mergeImagesToPdf(
         context: Context,
         inputUris: List<Uri>,
@@ -829,6 +960,7 @@ object MorphEngine {
         val strings = AppStrings.get()
         val tempOutput = OutputManager.createTempFile(context, "img_merge_pdf", "pdf")
         val pdfDocument = PdfDocument()
+        activeJob = coroutineContext[Job] // so cancelCurrentConversion() can stop a merge too
 
         try {
             val total = inputUris.size
@@ -837,15 +969,7 @@ object MorphEngine {
                 val percent = ((index.toFloat() / total) * 85).toInt() + 5
                 updateProgress("pdf", strings.engineBuildingPdfPage(index + 1, total), percent, onProgress)
 
-                val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    val source = android.graphics.ImageDecoder.createSource(context.contentResolver, uri)
-                    android.graphics.ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
-                        decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
-                    }
-                } else {
-                    @Suppress("DEPRECATION")
-                    android.provider.MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
-                }
+                val bitmap = decodeBitmap(context, uri)
 
                 val pageInfo = PdfDocument.PageInfo.Builder(bitmap.width, bitmap.height, index + 1).create()
                 val page = pdfDocument.startPage(pageInfo)
@@ -903,57 +1027,37 @@ object MorphEngine {
         try {
             updateProgress(targetExt, strings.engineProcessingImage, 40, onProgress)
 
-            val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                val source = android.graphics.ImageDecoder.createSource(context.contentResolver, inputUri)
-                android.graphics.ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
-                    decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
-                }
-            } else {
-                @Suppress("DEPRECATION")
-                android.provider.MediaStore.Images.Media.getBitmap(context.contentResolver, inputUri)
-            }
+            val bitmap = decodeBitmap(context, inputUri)
 
             updateProgress(targetExt, strings.engineCompressingImage, 70, onProgress)
 
-            if (targetExt == "bmp") {
-                BmpWriter.writeBitmapAsBmp(bitmap, tempOutput)
+            // JPG and 24-bit BMP have no alpha: composite on white, or transparent pixels turn black
+            val needsOpaque = targetExt in listOf("jpg", "jpeg", "bmp")
+            val finalBitmap = if (needsOpaque && bitmap.hasAlpha()) {
+                val opaqueBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(opaqueBitmap)
+                canvas.drawColor(Color.WHITE)
+                canvas.drawBitmap(bitmap, 0f, 0f, null)
                 bitmap.recycle()
+                opaqueBitmap
             } else {
-                val isJpg = targetExt == "jpg" || targetExt == "jpeg"
-                val finalBitmap = if (isJpg && bitmap.hasAlpha()) {
-                    // Composite alpha over solid white background to prevent black distortion
-                    val opaqueBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
-                    val canvas = Canvas(opaqueBitmap)
-                    canvas.drawColor(Color.WHITE)
-                    canvas.drawBitmap(bitmap, 0f, 0f, null)
-                    bitmap.recycle()
-                    opaqueBitmap
-                } else {
-                    bitmap
-                }
+                bitmap
+            }
 
-                val format = when (targetExt) {
-                    "png" -> Bitmap.CompressFormat.PNG
-                    "webp" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        Bitmap.CompressFormat.WEBP_LOSSLESS
-                    } else {
-                        @Suppress("DEPRECATION") Bitmap.CompressFormat.WEBP
-                    }
-                    else -> Bitmap.CompressFormat.JPEG
-                }
-
+            if (targetExt == "bmp") {
+                BmpWriter.writeBitmapAsBmp(finalBitmap, tempOutput)
+            } else {
                 val qualitySetting = when (qualityPreset) {
                     0, 3 -> 100 // High / Lossless
                     1    -> 85  // Medium
                     2    -> 65  // Low
                     else -> 90
                 }
-
                 FileOutputStream(tempOutput).use { fos ->
-                    finalBitmap.compress(format, qualitySetting, fos)
+                    finalBitmap.compress(compressFormatFor(targetExt, qualitySetting), qualitySetting, fos)
                 }
-                finalBitmap.recycle()
             }
+            finalBitmap.recycle()
 
             val finalPath = OutputManager.finalizeOutput(context, tempOutput, originalFileName, targetExt)
             OutputManager.cleanTempFiles(tempOutput)
@@ -1016,6 +1120,65 @@ object MorphEngine {
     }
 
     // --- 7. EPUB TO TXT ---
+    // --- TXT TO EPUB (PBI 5.4) ---
+    private suspend fun convertTxtToEpub(
+        context: Context,
+        inputUri: Uri,
+        originalFileName: String,
+        onProgress: (String, Int) -> Unit,
+        onSuccess: (String) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val strings = AppStrings.get()
+        val tempEpub = OutputManager.createTempFile(context, "out_epub", "epub")
+        val job = currentCoroutineContext()[Job]
+
+        try {
+            updateProgress("epub", strings.engineReadingTxt, 10, onProgress)
+
+            // shortcut: whole TXT is held in memory; fine for books (a few MB), stream it if 100MB+ logs matter
+            val bytes = context.contentResolver.openInputStream(inputUri)?.use { it.readBytes() }
+                ?: throw IOException(strings.engineErrReadInput)
+            val text = EpubBuilder.decodeText(bytes)
+            if (text.isBlank()) throw IOException(strings.engineErrInputEmpty)
+
+            job?.ensureActive()
+            updateProgress("epub", strings.engineBuildingEpub, 30, onProgress)
+            val chapters = EpubBuilder.splitChapters(text) { strings.epubChunkTitle(it) }
+            if (chapters.isEmpty()) throw IOException(strings.engineErrInputEmpty)
+
+            val title = originalFileName.substringBeforeLast('.', originalFileName)
+            EpubBuilder.build(
+                chapters = chapters,
+                title = title,
+                language = AppStrings.currentLanguage, // best guess for dc:language; text language is unknown
+                output = tempEpub,
+                onProgress = { done, total ->
+                    val percent = 30 + (done * 65 / total)
+                    updateProgress("epub", strings.engineWritingChapter(done, total), percent, onProgress)
+                },
+                checkCancelled = { job?.ensureActive() }
+            )
+
+            val finalPath = OutputManager.finalizeOutput(context, tempEpub, originalFileName, "epub")
+            OutputManager.cleanTempFiles(tempEpub)
+
+            withContext(Dispatchers.Main) {
+                if (finalPath != null) {
+                    currentStatus.value = ConvertState.Success
+                    onProgress(strings.engineFinished100, 100)
+                    onSuccess(finalPath)
+                } else {
+                    currentStatus.value = ConvertState.Error(strings.engineErrSaveOutput, inputUri, "epub")
+                    onError(strings.engineErrSaveOutput)
+                }
+            }
+        } catch (e: Exception) {
+            OutputManager.cleanTempFiles(tempEpub)
+            throw e
+        }
+    }
+
     private suspend fun convertEpubToTxt(
         context: Context,
         inputUri: Uri,
@@ -1058,6 +1221,46 @@ object MorphEngine {
             OutputManager.cleanTempFiles(tempEpub, tempTxt)
             throw e
         }
+    }
+
+    /** Longest decoded image edge; a 200 MP photo would otherwise need ~800 MB and crash. */
+    private const val MAX_IMAGE_EDGE_PX = 8192
+
+    /** Decodes an image URI as a software bitmap, downscaled so its longest edge fits MAX_IMAGE_EDGE_PX. */
+    internal fun decodeBitmap(context: Context, uri: Uri): Bitmap {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val source = android.graphics.ImageDecoder.createSource(context.contentResolver, uri)
+            return android.graphics.ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+                val longest = maxOf(info.size.width, info.size.height)
+                if (longest > MAX_IMAGE_EDGE_PX) {
+                    val f = MAX_IMAGE_EDGE_PX.toDouble() / longest
+                    decoder.setTargetSize(
+                        (info.size.width * f).toInt().coerceAtLeast(1),
+                        (info.size.height * f).toInt().coerceAtLeast(1)
+                    )
+                }
+            }
+        }
+        val resolver = context.contentResolver
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > MAX_IMAGE_EDGE_PX) sample *= 2
+        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+        return resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
+            ?: throw IOException(AppStrings.get().engineErrReadInput)
+    }
+
+    /** WEBP_LOSSLESS ignores quality, so Medium/Low must use lossy WebP to actually shrink. */
+    internal fun compressFormatFor(targetExt: String, quality: Int): Bitmap.CompressFormat = when (targetExt) {
+        "png" -> Bitmap.CompressFormat.PNG
+        "webp" -> when {
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.R -> @Suppress("DEPRECATION") Bitmap.CompressFormat.WEBP
+            quality >= 100 -> Bitmap.CompressFormat.WEBP_LOSSLESS
+            else -> Bitmap.CompressFormat.WEBP_LOSSY
+        }
+        else -> Bitmap.CompressFormat.JPEG
     }
 
     private fun updateProgress(

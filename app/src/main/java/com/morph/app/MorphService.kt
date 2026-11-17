@@ -26,7 +26,7 @@ class MorphService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var queueExecutionJob: Job? = null
-    private var isCancelled = false
+    @Volatile private var isCancelled = false
 
     companion object {
         const val ACTION_START_QUEUE = "com.morph.app.ACTION_START_QUEUE"
@@ -120,6 +120,7 @@ class MorphService : Service() {
                 updateNotificationForJob(job, 0, AppStrings.get().serviceStartingConversion)
 
                 try {
+                    var resultDetail: String? = null
                     val allUris = listOf(job.inputUri) + job.extraInputUris
                     val finalPath = if (allUris.size > 1 && job.targetFormat.equals("pdf", ignoreCase = true)) {
                         MorphEngine.mergeImagesToPdf(
@@ -147,14 +148,21 @@ class MorphService : Service() {
                                 if (!MainActivity.isAppInForeground && !isCancelled) {
                                     updateNotificationForJob(job, percent, stepMsg)
                                 }
-                            }
+                            },
+                            videoResolution = job.videoResolution,
+                            videoFps = job.videoFps,
+                            onResultDetail = { resultDetail = it }
                         )
                     }
 
-                    ConversionQueueManager.updateJobStatus(job.id, JobStatus.COMPLETED, filePath = finalPath)
+                    ConversionQueueManager.updateJobStatus(job.id, JobStatus.COMPLETED, filePath = finalPath, detail = resultDetail)
                 } catch (e: CancellationException) {
                     ConversionQueueManager.updateJobStatus(job.id, JobStatus.CANCELLED)
                     if (isCancelled || !ConversionQueueManager.hasActiveOrWaitingJobs()) break
+                } catch (e: OutOfMemoryError) {
+                    // An Error, not an Exception: uncaught it would kill the app and the whole batch
+                    Log.e("MorphService", "Out of memory on job ${job.id}: ${job.originalFileName}", e)
+                    ConversionQueueManager.updateJobStatus(job.id, JobStatus.FAILED, error = AppStrings.get().engineErrOutOfMemory)
                 } catch (e: Exception) {
                     Log.e("MorphService", "Gagal memproses job ${job.id}: ${job.originalFileName}", e)
                     ConversionQueueManager.updateJobStatus(
@@ -210,9 +218,12 @@ class MorphService : Service() {
                 strings.notifPartialTitle
             }
 
+            val singleDetail = ConversionQueueManager.queueState.value
+                .singleOrNull { it.status == JobStatus.COMPLETED }?.resultDetail
             val body = if (summary.failedCount == 0) {
-                if (summary.completedCount == 1) strings.notifSuccessBodySingle
-                else strings.notifSuccessBodyBatch(summary.completedCount)
+                if (summary.completedCount == 1) {
+                    if (singleDetail != null) "${strings.notifSuccessBodySingle} $singleDetail" else strings.notifSuccessBodySingle
+                } else strings.notifSuccessBodyBatch(summary.completedCount)
             } else {
                 strings.notifSummaryBody(summary.completedCount, summary.failedCount)
             }
@@ -287,6 +298,19 @@ class MorphService : Service() {
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
         }
+    }
+
+    // Android 15+: dataSync services get ~6h per 24h. The system calls onTimeout and kills
+    // the app if the service is still running a few seconds later, so stop cleanly.
+    override fun onTimeout(startId: Int) = stopOnTimeout()
+
+    override fun onTimeout(startId: Int, fgsType: Int) = stopOnTimeout()
+
+    private fun stopOnTimeout() {
+        Log.w("MorphService", "Foreground service time limit reached, cancelling queue")
+        isCancelled = true
+        ConversionQueueManager.cancelAllJobs()
+        stopForegroundAndService()
     }
 
     override fun onDestroy() {

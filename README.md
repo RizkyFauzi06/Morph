@@ -57,6 +57,16 @@
       <p>Powered by a sequential conversion queue and an Android Foreground Service. Conversions continue reliably when minimized or with the screen off, complete with real-time progress notifications.</p>
     </td>
   </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>Custom Output Folder <sup>v1.1.0</sup></h3>
+      <p>Save results to any folder you choose (internal storage or SD card) via Android's folder picker, with an optional <strong>Subfolder per File</strong> mode (<code>Book.pdf</code> &rarr; <code>Book/</code>). If folder access is revoked, Morph safely falls back to <code>Downloads/Morph</code>.</p>
+    </td>
+    <td width="50%" valign="top">
+      <h3>Video Resolution &amp; Frame Rate <sup>v1.1.0</sup></h3>
+      <p>Optionally downscale videos to <strong>1080p</strong>, <strong>720p</strong>, or <strong>480p</strong> (aspect ratio preserved) and change the frame rate to <strong>60</strong>, <strong>30</strong>, or <strong>24 fps</strong>.</p>
+    </td>
+  </tr>
 </table>
 
 <h2 id="interface--workflow-preview">Interface &amp; Workflow Preview</h2>
@@ -101,7 +111,7 @@
 <h2 id="supported-formats">Supported Formats</h2>
 
 <p>
-  All converted files are saved directly to your device's <code>Downloads/Morph</code> directory, with an option to preserve original filenames.
+  Converted files are saved to <code>Downloads/Morph</code> by default, or to a custom folder of your choice (<strong>Settings &rarr; Output Folder</strong>), with options to preserve original filenames and to group results into a subfolder per file.
 </p>
 
 <table>
@@ -118,11 +128,11 @@
       <td><strong>Video Conversion</strong></td>
       <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>AVI</code></td>
       <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>GIF</code></td>
-      <td>Supports <strong>Instant</strong> lossless stream copy for compatible containers, VP9/Opus encoding for WebM, and aspect-ratio preserved animated GIF export.</td>
+      <td>Supports <strong>Instant</strong> lossless stream copy when the source codecs fit the target container (otherwise it re-encodes automatically), fast H.264 encoding, optional resolution (1080p/720p/480p) and frame rate (60/30/24 fps), VP9/Opus encoding for WebM, and aspect-ratio preserved animated GIF export.</td>
     </tr>
     <tr>
-      <td><strong>Audio Extraction</strong></td>
-      <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code></td>
+      <td><strong>Video to Audio Extraction</strong></td>
+      <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>AVI</code></td>
       <td><code>MP3</code>, <code>M4A</code>, <code>WAV</code>, <code>FLAC</code>, <code>OGG</code>, <code>OPUS</code></td>
       <td>Extracts audio tracks directly from video files with configurable quality presets.</td>
     </tr>
@@ -130,7 +140,7 @@
       <td><strong>Audio Conversion</strong></td>
       <td><code>MP3</code>, <code>WAV</code>, <code>FLAC</code>, <code>AAC</code>, <code>M4A</code>, <code>OGG</code>, <code>OPUS</code></td>
       <td><code>MP3</code>, <code>WAV</code>, <code>AAC</code>, <code>FLAC</code>, <code>M4A</code>, <code>OGG</code>, <code>OPUS</code></td>
-      <td>Uncompressed PCM WAV, lossless FLAC, high-bitrate MP3/AAC, and <strong>Instant</strong> stream copy for compatible M4A/AAC streams.</td>
+      <td>Uncompressed PCM WAV, lossless FLAC, high-bitrate MP3/AAC, and <strong>Instant</strong> stream copy when the source audio codec already matches the target.</td>
     </tr>
     <tr>
       <td><strong>Image Conversion</strong></td>
@@ -147,14 +157,14 @@
     <tr>
       <td><strong>PDF Toolkit</strong></td>
       <td><code>PDF</code></td>
-      <td><code>JPG</code>, <code>PNG</code>, <code>WEBP</code>, <code>PDF</code></td>
-      <td>Render multi-page PDFs into individual high-resolution images or compress existing PDF file sizes.</td>
+      <td><code>JPG</code>, <code>PNG</code>, <code>PDF</code></td>
+      <td>Render multi-page PDFs into individual high-resolution images (memory-safe on large pages) or compress PDFs, with the actual size result shown when done (e.g. <code>2.4 MB &rarr; 850 KB (-65%)</code>).</td>
     </tr>
     <tr>
-      <td><strong>EPUB Text Extraction</strong></td>
-      <td><code>EPUB</code></td>
-      <td><code>TXT</code></td>
-      <td>Parses OPF spine structure to extract clean, readable plain text from digital books.</td>
+      <td><strong>EPUB &hArr; TXT</strong></td>
+      <td><code>EPUB</code>, <code>TXT</code></td>
+      <td><code>TXT</code>, <code>EPUB</code></td>
+      <td>Parses the OPF spine to extract clean plain text from EPUB books, and builds standard EPUB books from TXT files with automatic chapter detection (<em>Chapter 1</em>, <em>Bab 2</em>, &hellip;) and a table of contents.</td>
     </tr>
   </tbody>
 </table>
@@ -181,11 +191,18 @@
 
 <h3>Option 2: Build from Source</h3>
 <p>
-  If you want to inspect or compile the project yourself, ensure you have <strong>Android Studio</strong> and <strong>JDK 21</strong> installed:
+  To inspect or compile the project yourself, you need:
+</p>
+<ul>
+  <li><strong>JDK 21</strong></li>
+  <li><strong>Android SDK</strong> (the Command-Line Tools are enough, e.g. with VS Code) <strong>or Android Studio</strong></li>
+</ul>
+<p>
+  Point Gradle to your SDK with the <code>ANDROID_HOME</code> environment variable or a <code>local.properties</code> file containing <code>sdk.dir=/path/to/Android/sdk</code>, then run:
 </p>
 
 ```bash
-git clone [https://github.com/RizkyFauzi06/Morph.git](https://github.com/RizkyFauzi06/Morph.git)
+git clone https://github.com/RizkyFauzi06/Morph.git
 cd Morph
 
 # Compile Debug APK
@@ -203,8 +220,8 @@ cd Morph
   <li>Open <strong>Morph</strong> and tap <strong>Select File</strong> on the <strong>Homescreen</strong>.</li>
   <li>Pick one or multiple files from your device (videos, audio, images, web formats like WebP/WebM/SVG, PDFs, or EPUBs).</li>
   <li>Choose your <strong>Target Format</strong> and <strong>Quality Preset</strong> (<strong>High</strong>, <strong>Medium</strong>, <strong>Low</strong>, or <strong>Instant</strong> lossless stream copy for compatible media).</li>
-  <li><em>(Optional)</em> Toggle <strong>Merge into a single PDF</strong> when selecting multiple images.</li>
-  <li>Tap <strong>Convert</strong>. Tasks run reliably via <strong>Background Queue &amp; Notifications</strong>, and all converted files are saved to <code>Downloads/Morph</code>.</li>
+  <li><em>(Optional)</em> Toggle <strong>Merge into a single PDF</strong> when selecting multiple images, or pick a <strong>Resolution</strong> and <strong>Frame Rate</strong> when converting video to video.</li>
+  <li>Tap <strong>Convert</strong>. Tasks run reliably via <strong>Background Queue &amp; Notifications</strong>, and converted files are saved to your output folder (<code>Downloads/Morph</code> by default).</li>
 </ol>
 
 <h3>2. Share from Other Apps (Share to Morph)</h3>
@@ -218,6 +235,7 @@ cd Morph
 <ul>
   <li>Filter converted files by category on the <strong>Homescreen</strong>, or tap any item in your <strong>File History</strong> to open, share, or delete it.</li>
   <li>Enable <strong>Auto-Close (Share)</strong> or <strong>Keep Original Filename</strong> in <strong>Settings</strong> to customize your workflow.</li>
+  <li>Choose a custom <strong>Output Folder</strong> and toggle <strong>Subfolder per File</strong> in <strong>Settings</strong>. Files saved there also appear in your File History.</li>
 </ul>
 
 <h2 id="privacy--permissions">Privacy &amp; Permissions</h2>
@@ -253,6 +271,16 @@ cd Morph
       <td>Prevents Android's battery saver from terminating long video or audio conversions in the background (configured manually via App Info).</td>
       <td align="center">Recommended</td>
     </tr>
+    <tr>
+      <td><code>WRITE_EXTERNAL_STORAGE</code> / <code>READ_EXTERNAL_STORAGE</code></td>
+      <td>Only requested on Android 8&ndash;10 to save and list files in <code>Downloads/Morph</code>. Not used on Android 11+.</td>
+      <td align="center">Android 8&ndash;10</td>
+    </tr>
+    <tr>
+      <td>Folder access <em>(Storage Access Framework)</em></td>
+      <td>Granted only to the custom output folder you pick. You can revoke it anytime; Morph then uses <code>Downloads/Morph</code>.</td>
+      <td align="center">Optional</td>
+    </tr>
   </tbody>
 </table>
 
@@ -264,7 +292,7 @@ cd Morph
     <ul>
       <li><strong>FFmpegKit Full (8.1.7)</strong> — Audio/video processing (License: <strong>GPL-3.0 / LGPL-3.0</strong>).</li>
       <li><strong>AndroidSVG (1.4)</strong> by Paul LeBeau — SVG vector graphics rendering (License: <strong>Apache License 2.0</strong>).</li>
-      <li><strong>Android Native SDK</strong> — <code>PdfRenderer</code>, <code>PdfDocument</code>, &amp; <code>java.util.zip</code> for PDF rendering and EPUB parsing.</li>
+      <li><strong>Android Native SDK</strong> — <code>PdfRenderer</code>, <code>PdfDocument</code>, &amp; <code>java.util.zip</code> for PDF rendering, EPUB parsing, and EPUB building.</li>
     </ul>
   </li>
   <li><strong>Morph Project License:</strong> Distributed under the <a href="LICENSE"><strong>GNU General Public License v3.0 (GPL-3.0)</strong></a>.</li>

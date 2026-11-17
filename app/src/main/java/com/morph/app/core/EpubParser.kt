@@ -213,7 +213,6 @@ object EpubParser {
     fun decodeHtmlEntities(input: String): String {
         var text = input
             .replace("&nbsp;", " ", ignoreCase = true)
-            .replace("&amp;", "&", ignoreCase = true)
             .replace("&lt;", "<", ignoreCase = true)
             .replace("&gt;", ">", ignoreCase = true)
             .replace("&quot;", "\"", ignoreCase = true)
@@ -250,6 +249,7 @@ object EpubParser {
             }
         }
 
-        return text
+        // &amp; last, or "&amp;lt;" (a literal "&lt;") would be decoded twice into "<"
+        return text.replace("&amp;", "&", ignoreCase = true)
     }
 }

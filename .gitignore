@@ -39,8 +39,7 @@ google-services.json
 # Android Profiling
 *.hprof
 
-# Local test files - do not upload to GitHub
-app/src/test/
+# Unit tests in app/src/test/ are tracked so they run on every clone/CI
 
 # (Jika Anda memiliki file sampah test terpisah di luar source code utama)
 **/test_sandboxes/

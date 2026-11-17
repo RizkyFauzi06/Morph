@@ -1,0 +1,194 @@
+package com.morph.app
+
+import com.morph.app.core.ConversionCapabilityManager
+import com.morph.app.core.FileCategory
+import com.morph.app.core.FileCategoryManager
+import com.morph.app.core.JpegPdfWriter
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.io.ByteArrayOutputStream
+
+class ConversionMappingTest {
+
+    private val audioOutputs = listOf("mp3", "m4a", "wav", "flac", "ogg", "opus")
+    private val videoInputs = listOf("mp4", "mkv", "mov", "webm", "avi")
+    private val audioInputs = listOf("mp3", "m4a", "wav", "flac", "ogg", "opus", "aac")
+
+    @Test
+    fun audioToAudioOffersEveryOtherAudioFormat() {
+        for (src in audioInputs) {
+            val targets = ConversionCapabilityManager.getTargetFormats("song.$src", "audio/*")
+            for (out in audioOutputs - src) {
+                assertTrue("$src -> $out missing", targets.contains(out))
+            }
+            assertFalse("$src -> $src must not be offered", targets.contains(src))
+        }
+    }
+
+    @Test
+    fun videoToAudioOffersEveryAudioFormat() {
+        for (src in videoInputs) {
+            val targets = ConversionCapabilityManager.getTargetFormats("clip.$src", "video/*")
+            for (out in audioOutputs) {
+                assertTrue("$src -> $out missing", targets.contains(out))
+            }
+        }
+    }
+
+    @Test
+    fun audioTargetsUseTheRightEncoderAndDropVideo() {
+        val expected = mapOf(
+            "mp3" to "libmp3lame", "m4a" to "-c:a aac", "wav" to "pcm_s16le",
+            "flac" to "-c:a flac", "ogg" to "libvorbis", "opus" to "libopus"
+        )
+        for ((target, codec) in expected) {
+            for (preset in 0..2) {
+                val args = MorphEngine.buildFFmpegQualityArgs("mp4", target, preset, 4_000_000L)
+                assertTrue("$target/$preset: $args", args.contains(codec))
+                assertTrue("$target must drop video: $args", args.contains("-vn"))
+            }
+            assertTrue(ConversionCapabilityManager.isAudioOnlyTarget(target.uppercase()))
+        }
+        assertFalse(ConversionCapabilityManager.isAudioOnlyTarget("mp4"))
+    }
+
+    @Test
+    fun videoTargetsOnlyUseEncodersShippedInFfmpegKitFull() {
+        // Regression: the LGPL build has no libx264, so asking for it failed every MP4/MKV/MOV encode
+        assertEquals("hardware first, software fallback last",
+            listOf("h264_mediacodec", "libopenh264"), MorphEngine.H264_ENCODERS)
+        for (target in listOf("mp4", "mkv", "mov")) {
+            val hw = MorphEngine.buildFFmpegQualityArgs("webm", target, 0, 4_000_000L, h264Encoder = "h264_mediacodec")
+            val sw = MorphEngine.buildFFmpegQualityArgs("webm", target, 0, 4_000_000L, h264Encoder = "libopenh264")
+            // Each encoder gets only its own flags and pixel format; never libx264
+            assertTrue(hw, hw.contains("-c:v h264_mediacodec -bitrate_mode cbr -g 60"))
+            assertTrue(hw, hw.contains("format=nv12"))
+            assertFalse(hw, hw.contains("yuv420p") || hw.contains("libopenh264"))
+            assertTrue(sw, sw.contains("-c:v libopenh264"))
+            assertTrue(sw, sw.contains("format=yuv420p"))
+            assertFalse(sw, sw.contains("nv12") || sw.contains("mediacodec") || sw.contains("bitrate_mode"))
+            assertFalse(hw + sw, (hw + sw).contains("libx264"))
+            // Never tagged as RGB ("gbr"): BT.709 tags + matrix conversion inside the filter graph
+            for (args in listOf(hw, sw)) {
+                assertTrue(args, args.contains("-colorspace bt709 -color_primaries bt709 -color_trc bt709"))
+                assertTrue(args, args.contains("out_color_matrix=bt709"))
+                // Even-dimension guard is present even at Original resolution
+                assertTrue(args, args.contains("scale='trunc(iw/2)*2':'trunc(ih/2)*2'"))
+            }
+        }
+        val webm = MorphEngine.buildFFmpegQualityArgs("mp4", "webm", 1, 4_000_000L)
+        // Black-screen fix: force VP9 profile 0 (8-bit 4:2:0)
+        assertTrue(webm, webm.contains("-c:v libvpx-vp9 -pix_fmt yuv420p"))
+        assertTrue(webm, webm.contains("-c:a libopus"))
+        assertFalse("AVI keeps FFmpeg defaults", MorphEngine.buildFFmpegQualityArgs("mp4", "avi", 0, 4_000_000L).contains("-c:v"))
+    }
+
+    @Test
+    fun hardwareBitrateUnderflowIsDetected() {
+        // 30 s at 18.7 Mbps should be ~70 MB; the Redmi driver produced 7.1 MB
+        assertTrue(MorphEngine.isBitrateUnderflow(7_100_000L, 18_683_000L, 30_000L))
+        assertFalse(MorphEngine.isBitrateUnderflow(60_000_000L, 18_683_000L, 30_000L))
+        // Unknown duration or bitrate: never trigger a slow software redo
+        assertFalse(MorphEngine.isBitrateUnderflow(1L, 18_683_000L, 0L))
+        assertFalse(MorphEngine.isBitrateUnderflow(1L, 0L, 30_000L))
+    }
+
+    @Test
+    fun namesWithAnExtensionAreLeftAlone() {
+        // MimeTypeMap is an Android stub in JVM tests, so only the no-op paths are checked here
+        assertEquals("clip.mp4", withExtensionFromMime("clip.mp4", "video/mp4"))
+        assertEquals("IMG-2026", withExtensionFromMime("IMG-2026", null))
+        assertEquals("IMG-2026", withExtensionFromMime("IMG-2026", ""))
+    }
+
+    @Test
+    fun knownBadHardwareIsSkippedOnlyWhereTheGuardApplies() {
+        val hwFirst = listOf("h264_mediacodec", "libopenh264")
+        val swOnly = listOf("libopenh264")
+        // Firmware flagged + High at Original: straight to software, no wasted hardware run
+        assertEquals(swOnly, MorphEngine.h264EncoderOrder(preset = 0, videoResolution = 0, hwIgnoresBitrate = true))
+        // Not flagged: hardware first
+        assertEquals(hwFirst, MorphEngine.h264EncoderOrder(preset = 0, videoResolution = 0, hwIgnoresBitrate = false))
+        // Flagged, but Medium/Low or a downscale isn't guarded: hardware speed still wins there
+        assertEquals(hwFirst, MorphEngine.h264EncoderOrder(preset = 1, videoResolution = 0, hwIgnoresBitrate = true))
+        assertEquals(hwFirst, MorphEngine.h264EncoderOrder(preset = 0, videoResolution = 720, hwIgnoresBitrate = true))
+    }
+
+    @Test
+    fun firmwareIsFlaggedOnlyWhenSoftwareProvesTheDriverWrong() {
+        // Redmi: hardware ~0.19 bytes/ms-scale vs software near target => driver ignored the bitrate
+        assertTrue(MorphEngine.confirmsHwIgnoredBitrate(hwBytesPerMs = 190.0, swBytesPerMs = 2_200.0))
+        // Static screen recording: software is small too => content, not the driver; keep hardware
+        assertFalse(MorphEngine.confirmsHwIgnoredBitrate(hwBytesPerMs = 190.0, swBytesPerMs = 250.0))
+        assertFalse(MorphEngine.confirmsHwIgnoredBitrate(hwBytesPerMs = 0.0, swBytesPerMs = 250.0))
+    }
+
+    @Test
+    fun earlyCheckCatchesTheRedmiCaseAfterFiveSeconds() {
+        // Redmi 15: ~5.8 MB for a ~69 MB target over ~30 s => ~0.19 MB/s instead of ~2.3 MB/s
+        val targetBps = 18_683_000L + 256_000L
+        assertTrue(MorphEngine.isBitrateUnderflow(outputBytes = 970_000L, targetBitsPerSec = targetBps, durationMs = 5_000L))
+        // A healthy hardware encode at 5 s (~11 MB) passes
+        assertFalse(MorphEngine.isBitrateUnderflow(outputBytes = 11_000_000L, targetBitsPerSec = targetBps, durationMs = 5_000L))
+        assertTrue(MorphEngine.needsBitrateGuard(0, 0))
+        assertFalse(MorphEngine.needsBitrateGuard(2, 0))
+    }
+
+    @Test
+    fun instantRulesForPhoneHevcVideo() {
+        // HEVC + AAC can be stream-copied into MP4, MOV and MKV
+        for (target in listOf("mp4", "mov", "mkv")) {
+            assertTrue(target, ConversionCapabilityManager.isStreamCopyCodecCompatible(target, listOf("hevc"), listOf("aac")))
+        }
+        // ...but a rotated (portrait) video copied into MKV/WebM would play sideways
+        assertTrue(ConversionCapabilityManager.rotationBlocksStreamCopy(90, "mkv"))
+        assertTrue(ConversionCapabilityManager.rotationBlocksStreamCopy(270, "WEBM"))
+        assertFalse(ConversionCapabilityManager.rotationBlocksStreamCopy(90, "mp4"))
+        assertFalse(ConversionCapabilityManager.rotationBlocksStreamCopy(0, "mkv"))
+        assertTrue(ConversionCapabilityManager.isLosslessCompatible("mp4", "mkv"))
+    }
+
+    @Test
+    fun jpgAndJpegGroupsCanMergeIntoOnePdf() {
+        val groups = ConversionCapabilityManager.pdfCrossMergeGroups(
+            mapOf("jpg" to "pdf", "jpeg" to "pdf", "mp4" to "mkv")
+        )
+        assertEquals(setOf("jpg", "jpeg"), groups.toSet())
+        // One image group alone: its own merge switch is enough
+        assertTrue(ConversionCapabilityManager.pdfCrossMergeGroups(mapOf("jpg" to "pdf")).isEmpty())
+        // Not targeting PDF: nothing to merge
+        assertTrue(ConversionCapabilityManager.pdfCrossMergeGroups(mapOf("jpg" to "png", "jpeg" to "png")).isEmpty())
+    }
+
+    @Test
+    fun videoExtensionsAreVideoInAnyCase() {
+        for (ext in videoInputs.flatMap { listOf(it, it.uppercase(), it.replaceFirstChar(Char::uppercase)) }) {
+            val category = FileCategoryManager.getCategory(ext)
+            assertEquals(ext, FileCategory.VIDEO, category)
+            assertNotEquals(ext, FileCategory.DOCUMENT, category)
+            assertTrue(FileCategoryManager.isVideo(ext))
+        }
+    }
+
+    @Test
+    fun jpegPdfWriterProducesAValidXrefStructure() {
+        val bytes = ByteArrayOutputStream()
+        JpegPdfWriter(bytes).use { w ->
+            w.addPage(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 1, 2), 100, 141, 595f, 842f)
+            w.addPage(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 3), 141, 100, 842f, 595f)
+        }
+        val pdf = bytes.toByteArray().toString(Charsets.ISO_8859_1)
+        assertTrue(pdf.startsWith("%PDF-1.4"))
+        assertTrue(pdf.contains("/Count 2"))
+        assertEquals(2, Regex("/DCTDecode").findAll(pdf).count())
+        val startXref = Regex("startxref\n(\\d+)").find(pdf)!!.groupValues[1].toInt()
+        assertTrue("startxref must point at the xref table", pdf.startsWith("xref", startXref))
+        // Every xref offset must land on "<id> 0 obj"
+        val entries = Regex("(\\d{10}) 00000 n").findAll(pdf).map { it.groupValues[1].toInt() }.toList()
+        entries.forEachIndexed { i, offset -> assertTrue(pdf.startsWith("${i + 1} 0 obj", offset)) }
+        assertTrue(pdf.trimEnd().endsWith("%%EOF"))
+    }
+}

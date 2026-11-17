@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -37,6 +38,12 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.morph.app.core.AppStrings
+import com.morph.app.core.ConversionQueueManager
+import com.morph.app.core.JobStatus
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.morph.app.core.MorphOutputFile
 import com.morph.app.core.OutputManager
 import com.morph.app.core.SelectedFileItem
 import com.morph.app.core.Strings
@@ -108,6 +115,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AppStrings.init(this)
+        // Leftovers from a conversion killed mid-way (only safe while nothing is queued)
+        if (!ConversionQueueManager.hasActiveOrWaitingJobs()) OutputManager.cleanStaleTempFiles(this)
         ensureLegacyStoragePermission()
         handleIntent(intent)
     }
@@ -121,12 +130,12 @@ class MainActivity : ComponentActivity() {
         val isInitialStandalone = intent.action == Intent.ACTION_MAIN
 
         if (!isInitialStandalone && intent.action == Intent.ACTION_SEND) {
-            val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val uri = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
             } else {
                 @Suppress("DEPRECATION")
                 intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
-            }
+            })?.takeIf { isSharedContentUri(it) }
 
             if (uri != null) {
                 val name = getFileNameFromUri(this, uri)
@@ -150,7 +159,7 @@ class MainActivity : ComponentActivity() {
                 intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
             }
 
-            val validUris = if (!uris.isNullOrEmpty()) {
+            val validUris = (if (!uris.isNullOrEmpty()) {
                 uris.filterNotNull()
             } else {
                 val clipData = intent.clipData
@@ -159,7 +168,7 @@ class MainActivity : ComponentActivity() {
                 } else {
                     emptyList()
                 }
-            }
+            }).filter { isSharedContentUri(it) }
 
             if (validUris.isNotEmpty()) {
                 selectedFilesForConversion = validUris.map { uri ->
@@ -223,14 +232,18 @@ class MainActivity : ComponentActivity() {
             }
 
             // Converted files state
-            var morphFiles by remember { mutableStateOf(getMorphFiles()) }
-            var isRefreshing by remember { mutableStateOf(false) }
+            // History is loaded off the main thread: SAF entries cost one provider query each
+            var morphFiles by remember { mutableStateOf<List<MorphOutputFile>>(emptyList()) }
+            var isRefreshing by remember { mutableStateOf(true) }
+            val uiScope = rememberCoroutineScope()
             var hasNotificationPermission by remember { mutableStateOf(checkNotifPermission(context)) }
 
-            val refreshFiles = {
-                isRefreshing = true
-                morphFiles = getMorphFiles()
-                isRefreshing = false
+            val refreshFiles: () -> Unit = {
+                uiScope.launch {
+                    isRefreshing = true
+                    morphFiles = withContext(Dispatchers.IO) { getMorphFiles(context) }
+                    isRefreshing = false
+                }
             }
 
             DisposableEffect(lifecycleOwner) {
@@ -278,13 +291,20 @@ class MainActivity : ComponentActivity() {
                                     refreshFiles()
                                 }, onViewResult = {
                                     showProgressScreen = false
-                                    refreshFiles()
                                     // Ambil file yang baru saja selesai dikonversi
-                                    val latestFile = getMorphFiles().firstOrNull()
-                                    if (latestFile != null) {
-                                        openFileDirectly(context, latestFile, strings)
-                                    } else {
-                                        Toast.makeText(context, strings.fileNotFoundToast, Toast.LENGTH_SHORT).show()
+                                    uiScope.launch {
+                                        val lastOutput = ConversionQueueManager.queueState.value
+                                            .lastOrNull { it.status == JobStatus.COMPLETED }?.outputFilePath
+                                        val files = withContext(Dispatchers.IO) { getMorphFiles(context) }
+                                        morphFiles = files
+                                        // History order relies on lastModified, which some SAF providers report as 0
+                                        val latestFile = withContext(Dispatchers.IO) { resolveOutputFile(context, lastOutput) }
+                                            ?: files.firstOrNull()
+                                        if (latestFile != null) {
+                                            openFileDirectly(context, latestFile, strings)
+                                        } else {
+                                            Toast.makeText(context, strings.fileNotFoundToast, Toast.LENGTH_SHORT).show()
+                                        }
                                     }
                                 }
                             )
@@ -371,7 +391,9 @@ class MainActivity : ComponentActivity() {
                                             onFileClick = { file -> openFileDirectly(context, file, strings) },
                                             onShareFile = { file -> shareFileDirectly(context, file, strings) },
                                             onDeleteFile = { file ->
-                                                file.delete()
+                                                if (!OutputManager.deleteOutputFile(context, file)) {
+                                                    Toast.makeText(context, strings.deleteFileFailedToast, Toast.LENGTH_SHORT).show()
+                                                }
                                                 refreshFiles()
                                             },
                                             onRetryConversion = { retryUri, retryFormat ->
@@ -493,6 +515,13 @@ class MainActivity : ComponentActivity() {
 }
 
 // --- UTILITY METHODS FOR FILE ACCESS & SHARING ---
+
+/**
+ * Share input must be a content:// URI. A file:// URI is read with Morph's own permissions, so
+ * another app could point it at Morph's private files (prefs, cached user files) and have them
+ * "converted" into public Downloads. Real senders use content URIs (FileProvider, MediaStore).
+ */
+fun isSharedContentUri(uri: Uri): Boolean = uri.scheme.equals(android.content.ContentResolver.SCHEME_CONTENT, ignoreCase = true)
 fun getFileNameFromUri(context: Context, uri: Uri): String {
     var name: String? = null
     try {
@@ -504,7 +533,17 @@ fun getFileNameFromUri(context: Context, uri: Uri): String {
             }
         }
     } catch (_: Exception) {}
-    return name ?: uri.lastPathSegment?.substringAfterLast('/') ?: "File"
+    val base = name ?: uri.lastPathSegment?.substringAfterLast('/') ?: "File"
+    // The engine routes by extension: "IMG-2026" shared without ".jpg" would fall to FFmpeg and fail
+    val mime = try { context.contentResolver.getType(uri) } catch (_: Exception) { null }
+    return withExtensionFromMime(base, mime)
+}
+
+/** Appends the MIME type's extension when [name] has none (e.g. "IMG-2026" + image/jpeg -> "IMG-2026.jpg"). */
+fun withExtensionFromMime(name: String, mimeType: String?): String {
+    if (name.substringAfterLast('.', "").isNotEmpty() || mimeType.isNullOrBlank()) return name
+    val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType.lowercase())
+    return if (ext.isNullOrBlank()) name else "$name.$ext"
 }
 
 fun getFileSizeFromUri(context: Context, uri: Uri): Long {
@@ -527,21 +566,30 @@ fun checkNotifPermission(context: Context): Boolean {
     } else true
 }
 
-fun getMorphFiles(): List<File> {
-    val morphDir = OutputManager.getMorphDirectory()
-    return if (morphDir.exists() && morphDir.isDirectory) {
-        morphDir.listFiles()?.filter { it.isFile }?.sortedByDescending { it.lastModified() } ?: emptyList()
-    } else {
-        emptyList()
-    }
+fun getMorphFiles(context: Context): List<MorphOutputFile> = OutputManager.listOutputFiles(context)
+
+/**
+ * Turns a job's outputFilePath back into a history item: an absolute path (Downloads/Morph) or a
+ * SAF document URI. Anything else (e.g. the "N pages extracted" message of PDF -> images) is null.
+ */
+fun resolveOutputFile(context: Context, outputPath: String?): MorphOutputFile? = when {
+    outputPath == null -> null
+    outputPath.startsWith("content://") -> Uri.parse(outputPath).let { MorphOutputFile(it, getFileNameFromUri(context, it), 0L, 0L) }
+    outputPath.startsWith("/") -> File(outputPath).takeIf { it.isFile }
+        ?.let { MorphOutputFile(Uri.fromFile(it), it.name, it.length(), it.lastModified(), it) }
+    else -> null
 }
 
 fun getExplicitMimeType(extension: String): String =
     OutputManager.getMimeTypeForExtension(extension, fallback = "*/*")
 
-fun openFileDirectly(context: Context, file: File, strings: Strings = AppStrings.get()) {
+/** content:// URI other apps can read: FileProvider for Downloads/Morph files, the SAF document URI otherwise. */
+private fun shareableUri(context: Context, file: MorphOutputFile): Uri =
+    file.file?.let { FileProvider.getUriForFile(context, "${context.packageName}.provider", it) } ?: file.uri
+
+fun openFileDirectly(context: Context, file: MorphOutputFile, strings: Strings = AppStrings.get()) {
     try {
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+        val uri = shareableUri(context, file)
         val mimeType = getExplicitMimeType(file.extension)
 
         val intent = Intent(Intent.ACTION_VIEW).apply {
@@ -556,9 +604,9 @@ fun openFileDirectly(context: Context, file: File, strings: Strings = AppStrings
     }
 }
 
-fun shareFileDirectly(context: Context, file: File, strings: Strings = AppStrings.get()) {
+fun shareFileDirectly(context: Context, file: MorphOutputFile, strings: Strings = AppStrings.get()) {
     try {
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+        val uri = shareableUri(context, file)
         val mimeType = getExplicitMimeType(file.extension)
 
         val intent = Intent(Intent.ACTION_SEND).apply {

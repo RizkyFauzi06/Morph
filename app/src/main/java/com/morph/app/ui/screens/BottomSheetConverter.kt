@@ -24,6 +24,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import com.morph.app.MorphService
 import com.morph.app.core.AppStrings
 import com.morph.app.core.ConversionCapabilityManager
@@ -37,6 +39,11 @@ import com.morph.app.ui.theme.MorphDarkBackground
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.VideoFile
+import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Book
+import com.morph.app.core.FileCategory
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -86,6 +93,15 @@ fun BottomSheetConverter(
             }
         }
     }
+
+    // Cross-group PDF merge (e.g. WhatsApp mixes .jpg and .jpeg): default on, user can turn it off
+    var crossMergePdf by remember(groupedFiles) { mutableStateOf(true) }
+    val crossMergeGroups = ConversionCapabilityManager.pdfCrossMergeGroups(targetFormatPerGroup.toMap())
+    val crossMergeActive = crossMergePdf && crossMergeGroups.isNotEmpty()
+
+    // PBI 5.2: resolusi (sisi pendek, 0 = asli) & FPS (0 = asli) per grup video
+    val resolutionPerGroup = remember(groupedFiles) { mutableStateMapOf<String, Int>() }
+    val fpsPerGroup = remember(groupedFiles) { mutableStateMapOf<String, Int>() }
 
     // Pilihan Gabung/Pisahkan PDF per grup gambar
     val pdfMergeOptionPerGroup = remember(groupedFiles) {
@@ -182,9 +198,17 @@ fun BottomSheetConverter(
                     val isCurrentTargetLossless = remember(srcExt, currentTarget) {
                         ConversionCapabilityManager.isLosslessCompatible(srcExt, currentTarget, sampleFile.mimeType)
                     }
-                    val isImageSource = srcExt in listOf("png", "jpg", "jpeg", "webp", "bmp", "gif")
-                    val categoryLabel = if (isImageSource) strings.categoryImage else strings.categoryDocument
-                    val categoryIcon = if (isImageSource) Icons.Default.Image else Icons.Default.Description
+                    // Was "image or else Document", so video/audio groups showed as Dokumen
+                    val sourceCategory = FileCategoryManager.getCategory(srcExt, sampleFile.mimeType)
+                    val categoryLabel = sourceCategory.getLocalizedName(strings)
+                    val categoryIcon = when (sourceCategory) {
+                        FileCategory.VIDEO -> Icons.Default.VideoFile
+                        FileCategory.AUDIO -> Icons.Default.Audiotrack
+                        FileCategory.IMAGE -> Icons.Default.Image
+                        FileCategory.PDF -> Icons.Default.PictureAsPdf
+                        FileCategory.EBOOK -> Icons.Default.Book
+                        else -> Icons.Default.Description
+                    }
 
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -198,7 +222,7 @@ fun BottomSheetConverter(
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                            val categoryColors = FileCategoryManager.getCategoryColors(
-                                category = FileCategoryManager.getCategory(srcExt),
+                                category = sourceCategory,
                                 isDarkTheme = isDarkTheme
                             )
                             // Category header
@@ -211,7 +235,7 @@ fun BottomSheetConverter(
                                     Box(contentAlignment = Alignment.Center) {
                                         Icon(
                                             imageVector = categoryIcon,
-                                            contentDescription = categoryLabel,
+                                            contentDescription = null, // the label text sits right next to it
                                             modifier = Modifier.size(22.dp),
                                             tint = categoryColors.icon
                                         )
@@ -238,6 +262,14 @@ fun BottomSheetConverter(
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                 }
+                            }
+
+                            if (availableTargets.isEmpty()) {
+                                Text(
+                                    strings.noTargetFormatAvailable,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
                             }
 
                             // Target format chips
@@ -276,7 +308,7 @@ fun BottomSheetConverter(
 
                             // Opsi khusus PNG/Gambar ke PDF: Gabung atau Pisah
                             val isImageToPdf = srcExt in listOf("png", "jpg", "jpeg", "webp") && currentTarget.equals("pdf", ignoreCase = true)
-                            if (isImageToPdf && filesInGroup.size > 1) {
+                            if (isImageToPdf && filesInGroup.size > 1 && !(crossMergeActive && srcExt in crossMergeGroups)) {
                                 val isMerge = pdfMergeOptionPerGroup[srcExt] ?: true
                                 Surface(
                                     modifier = Modifier.fillMaxWidth(),
@@ -348,6 +380,31 @@ fun BottomSheetConverter(
                                 }
                             }
 
+                            // PBI 5.2: Resolusi & FPS (khusus video → video)
+                            val isVideoToVideo = (FileCategoryManager.isVideo(srcExt) || sampleFile.mimeType.startsWith("video/")) &&
+                                currentTarget.lowercase() in VIDEO_TARGETS
+                            if (isVideoToVideo) {
+                                VideoOptionRow(
+                                    title = strings.videoResolutionTitle,
+                                    options = listOf(0 to strings.optionOriginal, 1080 to "1080p", 720 to "720p", 480 to "480p"),
+                                    selected = resolutionPerGroup[srcExt] ?: 0,
+                                    onSelect = { resolutionPerGroup[srcExt] = it }
+                                )
+                                VideoOptionRow(
+                                    title = strings.videoFpsTitle,
+                                    options = listOf(0 to strings.optionOriginal, 60 to "60fps", 30 to "30fps", 24 to "24fps"),
+                                    selected = fpsPerGroup[srcExt] ?: 0,
+                                    onSelect = { fpsPerGroup[srcExt] = it }
+                                )
+                                if (currentQuality == 3 && ((resolutionPerGroup[srcExt] ?: 0) > 0 || (fpsPerGroup[srcExt] ?: 0) > 0)) {
+                                    Text(
+                                        strings.videoOptionsDisableInstant,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+
                             // Info Lossless/Instant
                             if (isCurrentTargetLossless) {
                                 Surface(
@@ -382,8 +439,42 @@ fun BottomSheetConverter(
                 }
             }
 
+            if (crossMergeGroups.isNotEmpty()) {
+                val parts = crossMergeGroups.joinToString(" + ") { "${it.uppercase()} (${groupedFiles[it]?.size ?: 0})" }
+                val totalPages = crossMergeGroups.sumOf { groupedFiles[it]?.size ?: 0 }
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(13.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .toggleable(
+                                value = crossMergePdf,
+                                role = Role.Switch,
+                                onValueChange = { crossMergePdf = it }
+                            )
+                            .padding(start = 11.dp, end = 8.dp, top = 9.dp, bottom = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                            Text(strings.crossMergePdfTitle, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                strings.crossMergePdfDesc(parts, totalPages),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        // The whole row is the toggle target (bigger tap area, one a11y node), so the Switch is passive
+                        Switch(checked = crossMergePdf, onCheckedChange = null)
+                    }
+                }
+            }
+
             // Validasi & CTA
-            val allGroupsConfigured = groupedFiles.keys.all { key ->
+            // Groups with no supported target are skipped, so one .zip doesn't block a whole batch
+            val allGroupsConfigured = groupedFiles.keys.any { key ->
                 !targetFormatPerGroup[key].isNullOrBlank()
             }
 
@@ -405,11 +496,35 @@ fun BottomSheetConverter(
                 onClick = {
                     val requests = mutableListOf<ConversionJobRequest>()
 
+                    if (crossMergeActive) {
+                        // Selection order, not group order, so pages follow the order the user picked
+                        val mergeFiles = selectedFiles.filter {
+                            it.fileName.substringAfterLast('.', "").trim().lowercase() in crossMergeGroups
+                        }
+                        val first = mergeFiles.first()
+                        requests.add(
+                            ConversionJobRequest(
+                                inputUri = first.uri,
+                                originalFileName = first.fileName.substringBeforeLast('.', "morph_merged") + ".pdf",
+                                mimeType = "application/pdf",
+                                targetFormat = "pdf",
+                                qualityPreset = qualityPerGroup[crossMergeGroups.first()] ?: defaultQuality,
+                                extraInputUris = mergeFiles.drop(1).map { it.uri }
+                            )
+                        )
+                    }
+
                     groupedFiles.forEach { (srcExt, filesInGroup) ->
-                        val targetFormat = targetFormatPerGroup[srcExt] ?: "pdf"
+                        if (crossMergeActive && srcExt in crossMergeGroups) return@forEach
+                        val targetFormat = targetFormatPerGroup[srcExt]?.takeIf { it.isNotBlank() } ?: return@forEach
                         val groupQuality = qualityPerGroup[srcExt] ?: defaultQuality
                         val isLossless = ConversionCapabilityManager.isLosslessCompatible(srcExt, targetFormat, filesInGroup.first().mimeType)
-                        val effectiveQuality = if (groupQuality == 3 && !isLossless) 0 else groupQuality
+                        val isVideoToVideo = (FileCategoryManager.isVideo(srcExt) || filesInGroup.first().mimeType.startsWith("video/")) &&
+                            targetFormat.lowercase() in VIDEO_TARGETS
+                        val groupResolution = if (isVideoToVideo) resolutionPerGroup[srcExt] ?: 0 else 0
+                        val groupFps = if (isVideoToVideo) fpsPerGroup[srcExt] ?: 0 else 0
+                        // Resolution/FPS changes need re-encoding, so Instant falls back to High
+                        val effectiveQuality = if (groupQuality == 3 && (!isLossless || groupResolution > 0 || groupFps > 0)) 0 else groupQuality
 
                         val isImageToPdf = srcExt in listOf("png", "jpg", "jpeg", "webp") && targetFormat.equals("pdf", ignoreCase = true)
                         val shouldMerge = isImageToPdf && filesInGroup.size > 1 && (pdfMergeOptionPerGroup[srcExt] ?: true)
@@ -436,7 +551,9 @@ fun BottomSheetConverter(
                                         originalFileName = file.fileName,
                                         mimeType = file.mimeType,
                                         targetFormat = targetFormat,
-                                        qualityPreset = effectiveQuality
+                                        qualityPreset = effectiveQuality,
+                                        videoResolution = groupResolution,
+                                        videoFps = groupFps
                                     )
                                 )
                             }
@@ -471,7 +588,7 @@ fun BottomSheetConverter(
                     disabledElevation = 0.dp
                 )
             ) {
-                val isMergeActive = groupedFiles.any { (srcExt, files) ->
+                val isMergeActive = crossMergeActive || groupedFiles.any { (srcExt, files) ->
                     srcExt in listOf("png", "jpg", "jpeg", "webp") &&
                     (targetFormatPerGroup[srcExt] ?: "").equals("pdf", ignoreCase = true) &&
                     files.size > 1 &&
@@ -487,6 +604,43 @@ fun BottomSheetConverter(
                     Text(text = label, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 }
             }
+            }
+        }
+    }
+}
+
+private val VIDEO_TARGETS = setOf("mp4", "mkv", "mov", "webm", "avi")
+
+/** Compact single-choice chip row for the PBI 5.2 video options. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun VideoOptionRow(
+    title: String,
+    options: List<Pair<Int, String>>,
+    selected: Int,
+    onSelect: (Int) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            options.forEach { (value, label) ->
+                val isSelected = value == selected
+                FilterChip(
+                    selected = isSelected,
+                    onClick = { onSelect(value) },
+                    label = {
+                        Text(label, fontSize = 11.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium)
+                    },
+                    shape = RoundedCornerShape(50)
+                )
             }
         }
     }
