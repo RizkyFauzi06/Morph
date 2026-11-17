@@ -51,11 +51,20 @@ class MorphPrefs(context: Context) {
         get() = prefs.getString("custom_output_tree_uri", null)
         set(value) = prefs.edit().putString("custom_output_tree_uri", value).apply()
 
-    // Build.FINGERPRINT of a firmware whose hardware H.264 encoder ignored the bitrate. A firmware
-    // update changes the fingerprint, so the hardware encoder gets a fresh chance automatically.
-    var hwH264IgnoresBitrateOnBuild: String
-        get() = prefs.getString("hw_h264_ignores_bitrate_build", "") ?: ""
-        set(value) = prefs.edit().putString("hw_h264_ignores_bitrate_build", value).apply()
+    /**
+     * Bitrate (bits/s) a hardware encoder really delivered on this firmware when it ignored -b:v,
+     * stored as "<Build.FINGERPRINT>|<bps>". A firmware update changes the fingerprint, so the
+     * encoder automatically gets a fresh chance.
+     */
+    fun hwEncoderCapBps(encoder: String, firmware: String): Long? {
+        val raw = prefs.getString("hw_cap_$encoder", null) ?: return null
+        val sep = raw.lastIndexOf('|')
+        if (sep <= 0 || raw.substring(0, sep) != firmware) return null
+        return raw.substring(sep + 1).toLongOrNull()
+    }
+
+    fun setHwEncoderCapBps(encoder: String, firmware: String, bps: Long) =
+        prefs.edit().putString("hw_cap_$encoder", "$firmware|$bps").apply()
 
     var autoSubfolderPerFile: Boolean
         get() = prefs.getBoolean("auto_subfolder_per_file", false)

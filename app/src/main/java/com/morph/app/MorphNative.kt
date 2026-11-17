@@ -1,0 +1,89 @@
+package com.morph.app
+
+/*
+ * Copyright (C) 2026 Rizki Fauzi
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+/**
+ * JNI bridge to libmorph-native (x264 with NEON, built from app/src/main/cpp).
+ *
+ * Only the H.264 *encoding* is native: FFmpeg decodes and scales the source into a named pipe,
+ * x264 encodes the raw frames to an Annex-B file, and FFmpeg muxes it with the original audio
+ * (MorphEngine.runNativeX264). Every format, filter and container stays in FFmpeg.
+ */
+object MorphNative {
+
+    /**
+     * False in JVM unit tests, on ABIs the library isn't built for (x86_64 emulators) and on
+     * checkouts without the gitignored x264 source. Callers then use libopenh264.
+     */
+    val isAvailable: Boolean = runCatching { System.loadLibrary("morph-native") }.isSuccess
+
+    const val ERR_CANCELLED = -7L
+
+    /** Opens the pipe (non-blocking read end) and the encoder. Returns a handle > 0 or an error < 0. */
+    @JvmStatic external fun nativeX264Open(
+        pipePath: String,
+        outPath: String,
+        width: Int,
+        height: Int,
+        fpsNum: Int,
+        fpsDen: Int,
+        preset: String,
+        bitrateKbps: Int,
+        keyint: Int
+    ): Long
+
+    /** Blocks until the writer closes the pipe. Returns encoded frames (>= 0) or an error < 0. */
+    @JvmStatic external fun nativeX264Encode(handle: Long): Long
+
+    /** Frees the encoder and closes both files. Call exactly once per successful open. */
+    @JvmStatic external fun nativeX264Close(handle: Long)
+
+    @JvmStatic external fun nativeCancel()
+
+    fun cancel() {
+        if (isAvailable) nativeCancel()
+    }
+
+    /** x264 speed preset per Morph quality preset: fast enough for phones, still sharp at Morph's bitrates. */
+    fun x264PresetFor(qualityPreset: Int): String = when (qualityPreset) {
+        1 -> "superfast"
+        2 -> "ultrafast"
+        else -> "veryfast" // High (Instant never reaches an encoder)
+    }
+
+    /**
+     * Exact output size the native path asks FFmpeg for (x264 needs it before the first frame).
+     * Mirrors MorphEngine.buildVideoFilterArgs: rotation first (autorotate), then the PBI 5.2
+     * short-side target or the Low preset's 854 px long side, then even dimensions.
+     */
+    fun outputSize(width: Int, height: Int, rotationDegrees: Int, qualityPreset: Int, videoResolution: Int): Pair<Int, Int> {
+        val rotated = rotationDegrees % 180 != 0
+        val w = (if (rotated) height else width).coerceAtLeast(2)
+        val h = (if (rotated) width else height).coerceAtLeast(2)
+        val (sw, sh) = when {
+            videoResolution > 0 && minOf(w, h) > videoResolution -> {
+                val scale = videoResolution.toDouble() / minOf(w, h)
+                if (w > h) Math.round(w * scale).toInt() to videoResolution else videoResolution to Math.round(h * scale).toInt()
+            }
+            // Low: same rule as the FFmpeg filter, long side 854 (landscape: width, otherwise height)
+            videoResolution <= 0 && qualityPreset == 2 -> {
+                if (w > h) 854 to Math.round(h * 854.0 / w).toInt() else Math.round(w * 854.0 / h).toInt() to 854
+            }
+            else -> w to h
+        }
+        return (sw / 2 * 2).coerceAtLeast(2) to (sh / 2 * 2).coerceAtLeast(2)
+    }
+
+    /** Parses ffprobe's "30000/1001" style rate. Falls back to 30 fps for "0/0", VFR oddities or junk. */
+    fun frameRate(rate: String?, overrideFps: Int): Pair<Int, Int> {
+        if (overrideFps > 0) return overrideFps to 1
+        val parts = rate?.split('/')
+        val num = parts?.getOrNull(0)?.toIntOrNull() ?: 0
+        val den = parts?.getOrNull(1)?.toIntOrNull() ?: 1
+        val fps = if (den > 0) num.toDouble() / den else 0.0
+        return if (fps in 1.0..240.0) num to den else 30 to 1
+    }
+}

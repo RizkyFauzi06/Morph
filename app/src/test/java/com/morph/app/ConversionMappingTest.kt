@@ -58,11 +58,9 @@ class ConversionMappingTest {
     @Test
     fun videoTargetsOnlyUseEncodersShippedInFfmpegKitFull() {
         // Regression: the LGPL build has no libx264, so asking for it failed every MP4/MKV/MOV encode
-        assertEquals("hardware first, software fallback last",
-            listOf("h264_mediacodec", "libopenh264"), MorphEngine.H264_ENCODERS)
         for (target in listOf("mp4", "mkv", "mov")) {
-            val hw = MorphEngine.buildFFmpegQualityArgs("webm", target, 0, 4_000_000L, h264Encoder = "h264_mediacodec")
-            val sw = MorphEngine.buildFFmpegQualityArgs("webm", target, 0, 4_000_000L, h264Encoder = "libopenh264")
+            val hw = MorphEngine.buildFFmpegQualityArgs("webm", target, 0, 4_000_000L, videoEncoder = "h264_mediacodec")
+            val sw = MorphEngine.buildFFmpegQualityArgs("webm", target, 0, 4_000_000L, videoEncoder = "libopenh264")
             // Each encoder gets only its own flags and pixel format; never libx264
             assertTrue(hw, hw.contains("-c:v h264_mediacodec -bitrate_mode cbr -g 60"))
             assertTrue(hw, hw.contains("format=nv12"))
@@ -71,6 +69,9 @@ class ConversionMappingTest {
             assertTrue(sw, sw.contains("format=yuv420p"))
             assertFalse(sw, sw.contains("nv12") || sw.contains("mediacodec") || sw.contains("bitrate_mode"))
             assertFalse(hw + sw, (hw + sw).contains("libx264"))
+            // Native x264 never reaches an FFmpeg command line: it maps to the FFmpeg software encoder
+            val nativeName = MorphEngine.buildFFmpegQualityArgs("webm", target, 0, 4_000_000L, videoEncoder = MorphEngine.X264_NATIVE)
+            assertEquals(sw, nativeName)
             // Never tagged as RGB ("gbr"): BT.709 tags + matrix conversion inside the filter graph
             for (args in listOf(hw, sw)) {
                 assertTrue(args, args.contains("-colorspace bt709 -color_primaries bt709 -color_trc bt709"))
@@ -79,11 +80,25 @@ class ConversionMappingTest {
                 assertTrue(args, args.contains("scale='trunc(iw/2)*2':'trunc(ih/2)*2'"))
             }
         }
-        val webm = MorphEngine.buildFFmpegQualityArgs("mp4", "webm", 1, 4_000_000L)
-        // Black-screen fix: force VP9 profile 0 (8-bit 4:2:0)
-        assertTrue(webm, webm.contains("-c:v libvpx-vp9 -pix_fmt yuv420p"))
-        assertTrue(webm, webm.contains("-c:a libopus"))
         assertFalse("AVI keeps FFmpeg defaults", MorphEngine.buildFFmpegQualityArgs("mp4", "avi", 0, 4_000_000L).contains("-c:v"))
+    }
+
+    @Test
+    fun webmTriesHardwareVp9ThenFastRealtimeLibvpx() {
+        val hw = MorphEngine.buildFFmpegQualityArgs("mp4", "webm", 1, 4_000_000L, videoEncoder = "vp9_mediacodec")
+        assertTrue(hw, hw.contains("-c:v vp9_mediacodec -bitrate_mode cbr -g 60"))
+        assertTrue(hw, hw.contains("format=nv12"))
+        for (preset in 0..2) {
+            val sw = MorphEngine.buildFFmpegQualityArgs("mp4", "webm", preset, 4_000_000L, videoEncoder = "libvpx-vp9")
+            // Profile 0 (8-bit 4:2:0) avoids the black-screen playback of 10-bit sources
+            assertTrue(sw, sw.contains("format=yuv420p"))
+            // Speed 4 ran at 3.7 fps on the Redmi; realtime >= 5 uses libvpx's fast mode search
+            assertTrue(sw, sw.contains("-deadline realtime -cpu-used ${MorphEngine.vp9Speed(preset)}"))
+            assertTrue(sw, MorphEngine.vp9Speed(preset) >= 5)
+            assertTrue(sw, sw.contains("-row-mt 1 -tile-columns 2 -lag-in-frames 0"))
+            assertFalse("'good' deadline is slower, not faster", sw.contains("-deadline good"))
+            assertTrue(sw, sw.contains("-c:a libopus"))
+        }
     }
 
     @Test
@@ -97,24 +112,52 @@ class ConversionMappingTest {
     }
 
     @Test
+    fun encoderOrderIsHardwareThenNativeX264ThenOpenh264() {
+        val noCap: (String) -> Long? = { null }
+        assertEquals(
+            listOf("h264_mediacodec", MorphEngine.X264_NATIVE, "libopenh264"),
+            MorphEngine.videoEncoderOrder("mp4", 11_000_000L, noCap, nativeX264 = true)
+        )
+        // Without libmorph-native (JVM tests, x86_64, no x264 source): libopenh264 stays the fallback
+        assertEquals(listOf("h264_mediacodec", "libopenh264"), MorphEngine.videoEncoderOrder("mkv", 11_000_000L, noCap, nativeX264 = false))
+        assertEquals(listOf("vp9_mediacodec", "libvpx-vp9"), MorphEngine.videoEncoderOrder("webm", 11_000_000L, noCap, nativeX264 = true))
+        assertEquals(listOf(MorphEngine.DEFAULT_ENCODER), MorphEngine.videoEncoderOrder("gif", 11_000_000L, noCap, nativeX264 = true))
+        assertEquals(listOf(MorphEngine.DEFAULT_ENCODER), MorphEngine.videoEncoderOrder("mp3", 11_000_000L, noCap, nativeX264 = true))
+    }
+
+    @Test
+    fun recordedHardwareCapSkipsHardwareOnlyWhenTheTargetNeedsMore() {
+        // Redmi 15 h264_mediacodec delivered ~1.48 Mbps whatever it was asked for
+        val caps: (String) -> Long? = { if (it == "h264_mediacodec") 1_480_000L else null }
+        // Medium 1080p (11.2 Mbps): hardware would be thrown away anyway, go straight to software
+        assertEquals(
+            listOf(MorphEngine.X264_NATIVE, "libopenh264"),
+            MorphEngine.videoEncoderOrder("mp4", 11_209_000L, caps, nativeX264 = true)
+        )
+        // 480p Low (~1.3 Mbps): the cap is enough, keep the fast hardware encoder
+        assertEquals("h264_mediacodec", MorphEngine.videoEncoderOrder("mp4", 1_300_000L, caps, nativeX264 = true).first())
+        // A cap on H.264 says nothing about the VP9 block
+        assertEquals("vp9_mediacodec", MorphEngine.videoEncoderOrder("webm", 11_209_000L, caps, nativeX264 = true).first())
+    }
+
+    @Test
+    fun noHardwareDecoderIsRequestedAndMkvFlushesClustersOften() {
+        val out = java.io.File("out.mkv")
+        val cmd = MorphEngine.buildFFmpegCommand("saf:7.mp4", out, "mp4", "mkv", 1, 8_000_000L, 0, 0, 0, "h264_mediacodec")
+        // Software decoding: hevc_mediacodec lost the colour range on the Redmi (dark output)
+        assertTrue(cmd, cmd.startsWith("-y -i \"saf:7.mp4\""))
+        assertFalse(cmd, cmd.contains("_mediacodec -i"))
+        // Live size check needs bytes on disk: clusters are written every second, not every 5 s
+        assertTrue(cmd, cmd.contains("-cluster_time_limit 1000"))
+        assertFalse(MorphEngine.buildFFmpegQualityArgs("mp4", "mp4", 0, 8_000_000L).contains("cluster_time_limit"))
+    }
+
+    @Test
     fun namesWithAnExtensionAreLeftAlone() {
         // MimeTypeMap is an Android stub in JVM tests, so only the no-op paths are checked here
         assertEquals("clip.mp4", withExtensionFromMime("clip.mp4", "video/mp4"))
         assertEquals("IMG-2026", withExtensionFromMime("IMG-2026", null))
         assertEquals("IMG-2026", withExtensionFromMime("IMG-2026", ""))
-    }
-
-    @Test
-    fun knownBadHardwareIsSkippedOnlyWhereTheGuardApplies() {
-        val hwFirst = listOf("h264_mediacodec", "libopenh264")
-        val swOnly = listOf("libopenh264")
-        // Firmware flagged + High at Original: straight to software, no wasted hardware run
-        assertEquals(swOnly, MorphEngine.h264EncoderOrder(preset = 0, videoResolution = 0, hwIgnoresBitrate = true))
-        // Not flagged: hardware first
-        assertEquals(hwFirst, MorphEngine.h264EncoderOrder(preset = 0, videoResolution = 0, hwIgnoresBitrate = false))
-        // Flagged, but Medium/Low or a downscale isn't guarded: hardware speed still wins there
-        assertEquals(hwFirst, MorphEngine.h264EncoderOrder(preset = 1, videoResolution = 0, hwIgnoresBitrate = true))
-        assertEquals(hwFirst, MorphEngine.h264EncoderOrder(preset = 0, videoResolution = 720, hwIgnoresBitrate = true))
     }
 
     @Test
@@ -127,14 +170,37 @@ class ConversionMappingTest {
     }
 
     @Test
-    fun earlyCheckCatchesTheRedmiCaseAfterFiveSeconds() {
-        // Redmi 15: ~5.8 MB for a ~69 MB target over ~30 s => ~0.19 MB/s instead of ~2.3 MB/s
-        val targetBps = 18_683_000L + 256_000L
-        assertTrue(MorphEngine.isBitrateUnderflow(outputBytes = 970_000L, targetBitsPerSec = targetBps, durationMs = 5_000L))
-        // A healthy hardware encode at 5 s (~11 MB) passes
-        assertFalse(MorphEngine.isBitrateUnderflow(outputBytes = 11_000_000L, targetBitsPerSec = targetBps, durationMs = 5_000L))
-        assertTrue(MorphEngine.needsBitrateGuard(0, 0))
-        assertFalse(MorphEngine.needsBitrateGuard(2, 0))
+    fun earlyCheckCatchesTheRedmiCaseAtHighAndMedium() {
+        // High: ~5.8 MB for a ~69 MB target over ~30 s
+        val high = 18_683_000L + 256_000L
+        assertTrue(MorphEngine.isBitrateUnderflow(outputBytes = 970_000L, targetBitsPerSec = high, durationMs = 5_000L))
+        assertFalse(MorphEngine.isBitrateUnderflow(outputBytes = 11_000_000L, targetBitsPerSec = high, durationMs = 5_000L))
+        // Medium: 1479 kb/s delivered for an 11.2 Mbps target (79 MB -> 5.5 MB) is now caught too
+        val medium = MorphEngine.videoBitrateForPreset(1, 18_683_000L) + MorphEngine.audioKbpsFor("mp4", 1) * 1000L
+        assertTrue(MorphEngine.isBitrateUnderflow(outputBytes = 1_479_000L / 8 * 5, targetBitsPerSec = medium, durationMs = 5_000L))
+    }
+
+    @Test
+    fun nativeX264PlanMatchesTheFfmpegFilters() {
+        // No .so in a JVM test: the bridge must report "not available" instead of crashing
+        assertFalse(MorphNative.isAvailable)
+        assertEquals("veryfast", MorphNative.x264PresetFor(0))
+        assertEquals("superfast", MorphNative.x264PresetFor(1))
+        assertEquals("ultrafast", MorphNative.x264PresetFor(2))
+        // Portrait phone clip stored 1920x1080 + rotate 90: frames reach x264 upright
+        assertEquals(1080 to 1920, MorphNative.outputSize(1920, 1080, 90, 0, 0))
+        // PBI 5.2 short side, never upscaled
+        assertEquals(1280 to 720, MorphNative.outputSize(1920, 1080, 0, 0, 720))
+        assertEquals(720 to 1280, MorphNative.outputSize(1920, 1080, 270, 0, 720))
+        assertEquals(640 to 480, MorphNative.outputSize(640, 480, 0, 0, 1080))
+        // Low preset: long side 854 like the FFmpeg filter; odd sizes rounded down to even
+        assertEquals(854 to 480, MorphNative.outputSize(1920, 1080, 0, 2, 0))
+        assertEquals(1080 to 1920, MorphNative.outputSize(1081, 1921, 0, 0, 0))
+        // ffprobe rates
+        assertEquals(30000 to 1001, MorphNative.frameRate("30000/1001", 0))
+        assertEquals(30 to 1, MorphNative.frameRate("0/0", 0))
+        assertEquals(30 to 1, MorphNative.frameRate(null, 0))
+        assertEquals(24 to 1, MorphNative.frameRate("30/1", 24))
     }
 
     @Test

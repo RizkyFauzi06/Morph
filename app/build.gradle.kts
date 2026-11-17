@@ -13,6 +13,15 @@ val localProps = Properties().apply {
 android {
     namespace = "com.morph.app"
     compileSdk = 37
+    // Offline toolchain in C:\Android\Sdk (ndk;27.2.12479018, cmake;3.22.1)
+    ndkVersion = "27.2.12479018"
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
 
     defaultConfig {
         applicationId = "com.morph.app"
@@ -20,6 +29,13 @@ android {
         targetSdk = 37
         versionCode = 3
         versionName = "1.1.0"
+
+        externalNativeBuild {
+            cmake {
+                // FFmpegKit ships only arm64-v8a and x86_64; x86_64 (emulators) falls back to libopenh264
+                abiFilters += "arm64-v8a"
+            }
+        }
     }
 
     buildFeatures {

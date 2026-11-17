@@ -291,6 +291,7 @@ cd Morph
   <li><strong>Core Libraries (Third-Party Engines):</strong>
     <ul>
       <li><strong>FFmpegKit Full (8.1.7)</strong> — Audio/video processing (License: <strong>GPL-3.0 / LGPL-3.0</strong>).</li>
+      <li><strong>x264 (build 165)</strong> — Native NEON H.264 software encoder in <code>libmorph-native.so</code> (License: <strong>GPL-2.0-or-later</strong>).</li>
       <li><strong>AndroidSVG (1.4)</strong> by Paul LeBeau — SVG vector graphics rendering (License: <strong>Apache License 2.0</strong>).</li>
       <li><strong>Android Native SDK</strong> — <code>PdfRenderer</code>, <code>PdfDocument</code>, &amp; <code>java.util.zip</code> for PDF rendering, EPUB parsing, and EPUB building.</li>
     </ul>

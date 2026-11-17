@@ -33,57 +33,91 @@ object MorphEngine {
 
     private const val TAG = "MorphEngine"
 
-    /**
-     * H.264 encoders in try order. ffmpeg-kit-full is LGPL, so there is no libx264:
-     * h264_mediacodec = the phone's hardware encoder (fast, cool), libopenh264 = software fallback
-     * that works everywhere. Each gets only its own flags (see h264CodecArgs).
-     */
-    internal val H264_ENCODERS = listOf("h264_mediacodec", "libopenh264")
+    // Encoder names. Hardware ones are FFmpeg's MediaCodec wrappers; X264_NATIVE is x264 (NEON)
+    // through MorphNative and never appears on an FFmpeg command line.
+    private const val HW_H264 = "h264_mediacodec"
+    private const val HW_VP9 = "vp9_mediacodec"
+    internal const val X264_NATIVE = "x264-native"
+    private const val SW_H264 = "libopenh264"
+    private const val SW_VP9 = "libvpx-vp9"
+    /** Stand-in for targets with a single fixed encoder (audio, GIF, AVI) and for Instant copy. */
+    internal const val DEFAULT_ENCODER = "default"
     private val H264_TARGETS = setOf("mp4", "mkv", "mov")
 
+    internal fun isHardwareEncoder(encoder: String) = encoder.endsWith("_mediacodec")
+
     /**
-     * Encoder-only flags. h264_mediacodec: CBR so vendor drivers honour -b:v (VBR undershot to ~10%
-     * on a Redmi), and -g so the i-frame interval is ~2 s instead of FFmpeg's 1-frame default.
-     * BT.709 tags stop the stream being labelled "gbr" (RGB), which the chip also receives.
+     * Encoders to try, fastest first. ffmpeg-kit-full is LGPL (no libx264), so software H.264 is
+     * native x264 when libmorph-native is present, else libopenh264. A hardware encoder whose
+     * firmware already proved it caps the bitrate below what this conversion needs is skipped.
      */
-    internal fun h264CodecArgs(encoder: String): String {
-        val colors = "-colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv"
-        return if (encoder == "h264_mediacodec") {
-            "-c:v h264_mediacodec -bitrate_mode cbr -g 60 $colors"
-        } else {
-            "-c:v $encoder $colors"
+    internal fun videoEncoderOrder(
+        targetExt: String,
+        targetVideoBps: Long,
+        hwCapBps: (String) -> Long?,
+        nativeX264: Boolean
+    ): List<String> {
+        val chain = when (targetExt) {
+            in H264_TARGETS -> listOfNotNull(HW_H264, X264_NATIVE.takeIf { nativeX264 }, SW_H264)
+            "webm" -> listOf(HW_VP9, SW_VP9)
+            else -> return listOf(DEFAULT_ENCODER)
         }
+        return chain.filterNot { isHardwareEncoder(it) && hardwareTooSlowFor(hwCapBps(it), targetVideoBps) }
     }
 
-    /** Pixel format the encoder is fed. Hardware takes NV12; many Qualcomm chips reject planar yuv420p. */
-    internal fun h264PixelFormat(encoder: String): String =
-        if (encoder == "h264_mediacodec") "nv12" else "yuv420p"
+    /** A recorded cap below the underflow line means this hardware run would be thrown away anyway. */
+    internal fun hardwareTooSlowFor(capBps: Long?, targetVideoBps: Long): Boolean =
+        capBps != null && capBps < targetVideoBps * UNDERFLOW_RATIO
+
+    private const val BT709_TAGS = "-colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv"
+
+    /**
+     * Encoder-only flags. MediaCodec: CBR so drivers that honour it hit -b:v, -g for a ~2 s GOP
+     * (FFmpeg's default is 1 frame). libvpx-vp9: realtime speed 6-8 (speed 4 ran at 3.7 fps on a
+     * Redmi 15; >= 5 switches libvpx to its fast non-RD mode search), row-mt + 4 tile columns for
+     * all cores, no lookahead. BT.709 tags so nothing is labelled "gbr" (RGB).
+     */
+    internal fun videoCodecArgs(encoder: String, preset: Int): String = when (encoder) {
+        HW_H264, HW_VP9 -> "-c:v $encoder -bitrate_mode cbr -g 60 $BT709_TAGS"
+        SW_VP9 -> "-c:v $SW_VP9 -deadline realtime -cpu-used ${vp9Speed(preset)} -row-mt 1 -tile-columns 2 -lag-in-frames 0 $BT709_TAGS"
+        else -> "-c:v $encoder $BT709_TAGS"
+    }
+
+    internal fun vp9Speed(preset: Int): Int = when (preset) {
+        1 -> 7
+        2 -> 8
+        else -> 6
+    }
+
+    /** Hardware encoders take NV12 (YUV420SemiPlanar); many Qualcomm chips reject planar yuv420p. */
+    internal fun encoderPixelFormat(encoder: String): String = if (isHardwareEncoder(encoder)) "nv12" else "yuv420p"
+
+    /** Video bitrate per quality preset (High = the source-derived base). */
+    internal fun videoBitrateForPreset(preset: Int, baseBps: Long): Long = when (preset) {
+        1 -> (baseBps * 0.6).toLong()
+        2 -> (baseBps * 0.35).toLong()
+        else -> baseBps
+    }
+
+    internal fun audioKbpsFor(targetExt: String, preset: Int): Int = when {
+        targetExt == "webm" -> when (preset) { 1 -> 128; 2 -> 96; else -> 192 }
+        else -> when (preset) { 1 -> 160; 2 -> 96; else -> 256 }
+    }
 
     /** Media time after which a running hardware encode is checked for an ignored bitrate. */
     private const val EARLY_BITRATE_CHECK_MS = 5_000L
 
-    /** High at Original size is where an ignored bitrate visibly hurts, so only it is guarded. */
-    internal fun needsBitrateGuard(preset: Int, videoResolution: Int): Boolean = preset == 0 && videoResolution == 0
-
-    /**
-     * H.264 encoders to try. When this firmware's hardware encoder is known to ignore the bitrate,
-     * guarded encodes go straight to software instead of losing time on a doomed hardware run.
-     */
-    internal fun h264EncoderOrder(preset: Int, videoResolution: Int, hwIgnoresBitrate: Boolean): List<String> =
-        if (hwIgnoresBitrate && needsBitrateGuard(preset, videoResolution)) H264_ENCODERS.takeLast(1) else H264_ENCODERS
+    /** Output under this share of the target size = the driver ignored -b:v (Redmi 15: ~13%). */
+    private const val UNDERFLOW_RATIO = 0.35
 
     /** Software output at least twice as dense as hardware => the driver, not the content, was the cause. */
     internal fun confirmsHwIgnoredBitrate(hwBytesPerMs: Double, swBytesPerMs: Double): Boolean =
         hwBytesPerMs > 0 && swBytesPerMs >= hwBytesPerMs * 2
 
-    /** Audio bitrate of the High preset, used to estimate the expected output size. */
-    private const val HIGH_AUDIO_BPS = 256_000L
-
-    /** True when the output is under 35% of the size the target bitrate should give. */
     internal fun isBitrateUnderflow(outputBytes: Long, targetBitsPerSec: Long, durationMs: Long): Boolean {
         if (durationMs <= 0 || targetBitsPerSec <= 0) return false
         val expectedBytes = targetBitsPerSec / 8.0 * (durationMs / 1000.0)
-        return outputBytes < expectedBytes * 0.35
+        return outputBytes < expectedBytes * UNDERFLOW_RATIO
     }
 
     /** HFX-4A: longest rendered PDF page edge (~A4 at 300 DPI) to stay clear of OutOfMemoryError. */
@@ -304,67 +338,80 @@ object MorphEngine {
 
             fun failed(r: Pair<ReturnCode?, String>) = !ReturnCode.isSuccess(r.first) && !ReturnCode.isCancel(r.first)
 
-            // Tries each H.264 encoder (hardware first) on the current input. Non-H.264 targets
-            // ignore the encoder, so they get one attempt. Hardware failures are usually instant.
+            // Software decoding only: FFmpeg's MediaCodec decoders lost the colour range on a Redmi 15
+            // (dark output) and gave no measurable speed-up (0.93x -> 0.94x), so they were removed.
             val prefs = MorphPrefs(context)
-            val hwIgnoresBitrate = prefs.hwH264IgnoresBitrateOnBuild == Build.FINGERPRINT
+            val firmware = Build.FINGERPRINT ?: ""
+            val sourceVideo = mediaInfo?.streams
+                ?.firstOrNull { it.type.equals("video", ignoreCase = true) && !isAttachedPicture(it) }
+            val hasAudio = mediaInfo?.streams?.any { it.type.equals("audio", ignoreCase = true) } == true
 
+            // Tries each encoder (hardware first) on the current input. Hardware failures are instant.
             suspend fun encodeWithFallback(preset: Int): Pair<ReturnCode?, String> {
-                val encoders = if (preset != 3 && targetExt in H264_TARGETS) {
-                    h264EncoderOrder(preset, videoResolution, hwIgnoresBitrate)
+                val targetVideoBps = videoBitrateForPreset(preset, videoBitrateBps)
+                val targetBps = targetVideoBps + audioKbpsFor(targetExt, preset) * 1000L
+                val encoders = if (preset == 3) {
+                    listOf(DEFAULT_ENCODER)
                 } else {
-                    H264_ENCODERS.takeLast(1)
+                    videoEncoderOrder(targetExt, targetVideoBps, { prefs.hwEncoderCapBps(it, firmware) }, MorphNative.isAvailable)
                 }
-                val guarded = needsBitrateGuard(preset, videoResolution)
-                val targetBps = videoBitrateBps + HIGH_AUDIO_BPS
                 var result: Pair<ReturnCode?, String> = null to ""
                 // Output rate (bytes per ms) the hardware run had when it was judged too small
                 var hwBytesPerMs: Double? = null
-                for ((attempt, encoder) in encoders.withIndex()) {
-                    if (attempt > 0) {
-                        Log.w(TAG, "${encoders[attempt - 1]} not used (rc=${result.first?.value}), trying $encoder")
+                var hwEncoder: String? = null
+                for ((index, encoder) in encoders.withIndex()) {
+                    if (index > 0) {
+                        Log.w(TAG, "${encoders[index - 1]} not used (rc=${result.first?.value}), trying $encoder")
                         updateProgress(targetExt, strings.enginePreparingMedia, 5, onProgress)
                     }
-                    // Some vendor drivers ignore -b:v even in CBR (79 MB -> 6-7 MB on a Redmi 15). For
-                    // High at Original size that is a visible quality loss, so we redo it in software.
-                    val watchBitrate = guarded && encoder == "h264_mediacodec" && encoder != encoders.last()
+                    // Vendor drivers may ignore -b:v even in CBR (Redmi 15: 79 MB -> 5.5 MB at Medium,
+                    // ~1.5 Mbps whatever the target). Any preset is guarded when software can redo it.
+                    val watchBitrate = isHardwareEncoder(encoder) && index < encoders.lastIndex
                     // Set from FFmpegKit's statistics thread, read here after the session ends
                     val underflow = java.util.concurrent.atomic.AtomicBoolean(false)
                     val rateAtAbort = java.util.concurrent.atomic.AtomicReference<Double>(null)
                     tempOutput.delete()
-                    result = runFFmpeg(
-                        buildFFmpegCommand(inputArg(), tempOutput, inputExt, targetExt, preset, videoBitrateBps, videoRotation, videoResolution, videoFps, encoder),
-                        targetExt, totalDurationMs, onProgress,
-                        // Decide after 5 s of video instead of wasting a whole hardware encode
-                        abortWhen = if (watchBitrate) { bytes, timeMs ->
-                            (timeMs >= EARLY_BITRATE_CHECK_MS && isBitrateUnderflow(bytes, targetBps, timeMs))
-                                .also { if (it) rateAtAbort.set(bytes.toDouble() / timeMs) }
-                        } else null,
-                        onAbort = { underflow.set(true) }
-                    )
+                    result = if (encoder == X264_NATIVE) {
+                        runNativeX264(
+                            context, ::inputArg, tempOutput, targetExt, preset, targetVideoBps, sourceVideo,
+                            videoRotation, videoResolution, videoFps, hasAudio, totalDurationMs, onProgress
+                        )
+                    } else {
+                        runFFmpeg(
+                            buildFFmpegCommand(inputArg(), tempOutput, inputExt, targetExt, preset, videoBitrateBps, videoRotation, videoResolution, videoFps, encoder),
+                            targetExt, totalDurationMs, onProgress,
+                            // Decide after 5 s of video instead of wasting a whole hardware encode
+                            abortWhen = if (watchBitrate) { bytes, timeMs ->
+                                (timeMs >= EARLY_BITRATE_CHECK_MS && isBitrateUnderflow(bytes, targetBps, timeMs))
+                                    .also { if (it) rateAtAbort.set(bytes.toDouble() / timeMs) }
+                            } else null,
+                            onAbort = { underflow.set(true) }
+                        )
+                    }
                     // Clips shorter than the early check are judged on the finished file
                     if (watchBitrate && !underflow.get() && !failed(result) && !ReturnCode.isCancel(result.first)) {
                         underflow.set(isBitrateUnderflow(tempOutput.length(), targetBps, totalDurationMs))
                         if (underflow.get()) rateAtAbort.set(tempOutput.length().toDouble() / totalDurationMs)
                     }
                     if (underflow.get()) {
-                        Log.w(TAG, "h264_mediacodec output far below target, redoing in software")
+                        Log.w(TAG, "$encoder output far below target, redoing in software")
                         hwBytesPerMs = rateAtAbort.get()
+                        hwEncoder = encoder
                         continue
                     }
                     if (!failed(result)) {
-                        // Only remember the firmware when software proves the content needed the bits.
-                        // A static screen recording is small in software too, so it must not flag the device.
+                        // Remember the cap only when software proves the content needed the bits.
+                        // A static screen recording is small in software too and must not flag the device.
                         val hwRate = hwBytesPerMs
-                        if (hwRate != null && !ReturnCode.isCancel(result.first) && totalDurationMs > 0 &&
+                        val hwName = hwEncoder
+                        if (hwRate != null && hwName != null && !ReturnCode.isCancel(result.first) && totalDurationMs > 0 &&
                             confirmsHwIgnoredBitrate(hwRate, tempOutput.length().toDouble() / totalDurationMs)
                         ) {
-                            Log.w(TAG, "h264_mediacodec ignores the bitrate on this firmware, using software from now on")
-                            prefs.hwH264IgnoresBitrateOnBuild = Build.FINGERPRINT
+                            val capBps = (hwRate * 8000).toLong()
+                            Log.w(TAG, "$hwName caps the bitrate near $capBps bps on this firmware; skipping it when a target needs more")
+                            prefs.setHwEncoderCapBps(hwName, firmware, capBps)
                         }
-                        if (targetExt in H264_TARGETS && preset != 3 && !ReturnCode.isCancel(result.first)) {
-                            Log.i(TAG, "H.264 encoded with $encoder")
-                        }
+                        if (!ReturnCode.isCancel(result.first)) Log.i(TAG, "Video done: encode=$encoder")
                         break
                     }
                 }
@@ -480,7 +527,7 @@ object MorphEngine {
         return "${formatFileSize(beforeBytes)} → ${formatFileSize(afterBytes)} ($sign$pct%)"
     }
 
-    private fun buildFFmpegCommand(
+    internal fun buildFFmpegCommand(
         inputArg: String,
         tempOutput: File,
         inputExt: String,
@@ -490,10 +537,94 @@ object MorphEngine {
         videoRotation: Int,
         videoResolution: Int,
         videoFps: Int,
-        h264Encoder: String
+        videoEncoder: String
     ): String {
-        val qualityArgs = buildFFmpegQualityArgs(inputExt, targetExt, preset, videoBitrateBps, videoRotation, videoResolution, videoFps, h264Encoder)
+        val qualityArgs = buildFFmpegQualityArgs(inputExt, targetExt, preset, videoBitrateBps, videoRotation, videoResolution, videoFps, videoEncoder)
         return "-y -i \"$inputArg\" $qualityArgs \"${tempOutput.absolutePath}\""
+    }
+
+    /**
+     * Software H.264 through native x264 (NEON): FFmpeg decodes + scales the source into a named
+     * pipe as raw I420 at a constant frame rate, x264 encodes that to an Annex-B file, then FFmpeg
+     * muxes it with the source audio. Same (ReturnCode, logs) shape as runFFmpeg.
+     */
+    private suspend fun runNativeX264(
+        context: Context,
+        inputArg: () -> String,
+        tempOutput: File,
+        targetExt: String,
+        preset: Int,
+        targetVideoBps: Long,
+        source: com.arthenica.ffmpegkit.StreamInformation?,
+        rotation: Int,
+        videoResolution: Int,
+        videoFps: Int,
+        hasAudio: Boolean,
+        totalDurationMs: Long,
+        onProgress: (String, Int) -> Unit
+    ): Pair<ReturnCode?, String> {
+        val width = source?.width?.toInt() ?: 0
+        val height = source?.height?.toInt() ?: 0
+        val streamIndex = source?.index
+        if (width <= 0 || height <= 0 || streamIndex == null) return ReturnCode(1) to "x264: unknown source size"
+
+        val (outW, outH) = MorphNative.outputSize(width, height, rotation, preset, videoResolution)
+        val (fpsNum, fpsDen) = MorphNative.frameRate(source.averageFrameRate, videoFps)
+        val kbps = (targetVideoBps / 1000).toInt().coerceAtLeast(100)
+        val keyint = Math.round(fpsNum.toDouble() / fpsDen * 2).toInt().coerceAtLeast(1)
+
+        // Never call FFmpegKitConfig.ignoreSignal(SIGPIPE) here: that flag makes FFmpegKit SKIP its own
+        // signal(SIGPIPE, SIG_IGN) (verified in libffmpegkit.so term_init). nativeX264Open sets SIG_IGN.
+        val pipe = FFmpegKitConfig.registerNewFFmpegPipe(context)
+        val elementary = OutputManager.createTempFile(context, "x264_es", "h264")
+        try {
+            val handle = MorphNative.nativeX264Open(
+                pipe, elementary.absolutePath, outW, outH, fpsNum, fpsDen, MorphNative.x264PresetFor(preset), kbps, keyint
+            )
+            if (handle <= 0) return ReturnCode(1) to "x264 open failed ($handle)"
+
+            // shortcut: a user cancel in the first ~0.5 s, before FFmpeg opens the pipe, can leave that
+            // FFmpeg thread blocked in open(); the conversion still cancels, only the thread leaks.
+            val (decode, frames) = try {
+                coroutineScope {
+                    val encoded = async(Dispatchers.IO) { MorphNative.nativeX264Encode(handle) }
+                    val decode = runFFmpeg(
+                        "-y -i \"${inputArg()}\" -map 0:$streamIndex -an -sn -dn " +
+                            "-vf \"scale=$outW:$outH:out_color_matrix=bt709:out_range=tv,format=yuv420p\" " +
+                            "-fps_mode cfr -r $fpsNum/$fpsDen -f rawvideo -pix_fmt yuv420p \"$pipe\"",
+                        targetExt, totalDurationMs, onProgress
+                    )
+                    // FFmpeg failed before or while writing: release the reader instead of waiting
+                    if (!ReturnCode.isSuccess(decode.first)) MorphNative.cancel()
+                    decode to encoded.await()
+                }
+            } finally {
+                MorphNative.nativeX264Close(handle) // after the encode call returned (structured scope)
+            }
+            // Order matters: a failed decode also cancels the reader (ERR_CANCELLED), but that must
+            // stay a failure so the next encoder (libopenh264) gets its turn, not a user cancel
+            if (ReturnCode.isCancel(decode.first)) return ReturnCode(ReturnCode.CANCEL) to decode.second
+            if (!ReturnCode.isSuccess(decode.first)) return decode
+            if (frames == MorphNative.ERR_CANCELLED) return ReturnCode(ReturnCode.CANCEL) to decode.second
+            if (frames <= 0) return ReturnCode(1) to "x264 encode failed ($frames)\n${decode.second}"
+
+            // Constant-rate video from the pipe + original audio; x264 already wrote BT.709 VUI
+            val audioIn = if (hasAudio) "-i \"${inputArg()}\" " else ""
+            val audioOut = if (hasAudio) "-map 1:a:0 -c:a aac -b:a ${audioKbpsFor(targetExt, preset)}k " else ""
+            val container = when (targetExt) {
+                "mp4", "mov" -> "-movflags +faststart "
+                else -> ""
+            }
+            return runFFmpeg(
+                "-y -f h264 -framerate $fpsNum/$fpsDen -i \"${elementary.absolutePath}\" $audioIn" +
+                    "-map 0:v:0 -c:v copy $audioOut$container\"${tempOutput.absolutePath}\"",
+                // The mux is a quick copy: keep the bar where the decode left it instead of resetting it
+                targetExt, totalDurationMs, onProgress = { _, _ -> }
+            )
+        } finally {
+            FFmpegKitConfig.closeFFmpegPipe(pipe)
+            elementary.delete()
+        }
     }
 
     /** Runs one FFmpeg command and reports progress. Returns the return code and the full log. */
@@ -610,7 +741,7 @@ object MorphEngine {
         videoRotation: Int = 0,
         videoResolution: Int = 0,
         videoFps: Int = 0,
-        h264Encoder: String = H264_ENCODERS.first()
+        videoEncoder: String = DEFAULT_ENCODER
     ): String {
         // Stream Copy (Lossless Remuxing)
         if (preset == 3) {
@@ -643,35 +774,36 @@ object MorphEngine {
         val rotateArg = if (videoRotation != 0) "-metadata:s:v rotate=0 " else ""
         val videoArgs = buildVideoFilterArgs(preset, videoResolution, videoFps)
 
-        // Target: WebM
+        // Target: WebM (vp9_mediacodec, else libvpx-vp9)
         if (targetExt == "webm") {
-            val (bv, ba) = when (preset) {
-                0 -> videoBitrateBps to "192k"
-                1 -> (videoBitrateBps * 0.6).toLong() to "128k"
-                2 -> (videoBitrateBps * 0.35).toLong() to "96k"
-                else -> videoBitrateBps to "128k"
-            }
-            // -pix_fmt yuv420p forces VP9 profile 0: 10-bit phone videos otherwise become profile 2,
-            // which many Android players render as a black screen. -row-mt uses all cores.
-            return "$videoArgs-c:v libvpx-vp9 -pix_fmt yuv420p -b:v $bv -deadline realtime -cpu-used 4 -row-mt 1 -c:a libopus -b:a $ba $rotateArg"
+            val encoder = if (videoEncoder == HW_VP9) HW_VP9 else SW_VP9
+            val filters = buildVideoFilterArgs(preset, videoResolution, videoFps, encoderPixelFormat(encoder))
+            val bv = videoBitrateForPreset(preset, videoBitrateBps)
+            // yuv420p (format= in the filter) keeps VP9 at profile 0: 10-bit sources would become
+            // profile 2, which many Android players render as a black screen
+            return "$filters${videoCodecArgs(encoder, preset)} -b:v $bv -c:a libopus -b:a ${audioKbpsFor(targetExt, preset)}k $rotateArg"
         }
 
         // Target: Standard Video Containers (MP4, MKV, MOV, AVI)
         if (targetExt in listOf("mp4", "mkv", "mov", "avi")) {
-            val fastStartArg = if (targetExt in listOf("mp4", "mov")) "-movflags +faststart " else ""
-            // This FFmpegKit build is LGPL ("full"): libx264 is NOT compiled in, so asking for it made
-            // every MP4/MKV/MOV encode fail. libopenh264 (BSD) is the H.264 encoder that ships with it.
-            // AVI keeps FFmpeg's default MPEG-4 Part 2 + MP3 encoders, which are already fast.
-            val codecArg = if (targetExt == "avi") "" else "${h264CodecArgs(h264Encoder)} -c:a aac "
-            val h264VideoArgs = if (targetExt == "avi") videoArgs
-                else buildVideoFilterArgs(preset, videoResolution, videoFps, h264PixelFormat(h264Encoder))
-            val (bv, ba) = when (preset) {
-                0 -> videoBitrateBps to "256k"
-                1 -> (videoBitrateBps * 0.6).toLong() to "160k"
-                2 -> (videoBitrateBps * 0.35).toLong() to "96k"
-                else -> videoBitrateBps to "256k"
+            val fastStartArg = when (targetExt) {
+                "mp4", "mov" -> "-movflags +faststart "
+                // Matroska holds a whole cluster (up to 5 s / 5 MB) in memory before writing it, so the
+                // live size check could see ~0 bytes and wrongly abort a healthy hardware encode.
+                "mkv" -> "-cluster_time_limit 1000 "
+                else -> ""
             }
-            return "$codecArg$fastStartArg$h264VideoArgs-b:v $bv -b:a $ba $rotateArg"
+            val bv = videoBitrateForPreset(preset, videoBitrateBps)
+            val ba = "${audioKbpsFor(targetExt, preset)}k"
+            // AVI keeps FFmpeg's default MPEG-4 Part 2 + MP3 encoders, which are already fast
+            if (targetExt == "avi") {
+                return "$fastStartArg$videoArgs-b:v $bv -b:a $ba $rotateArg"
+            }
+            // ffmpeg-kit-full is LGPL: no libx264 (asking for it failed every encode in v1.0.2).
+            // Here: h264_mediacodec or libopenh264; native x264 runs outside this command.
+            val encoder = if (videoEncoder == HW_H264) HW_H264 else SW_H264
+            val filters = buildVideoFilterArgs(preset, videoResolution, videoFps, encoderPixelFormat(encoder))
+            return "${videoCodecArgs(encoder, preset)} -c:a aac $fastStartArg$filters-b:v $bv -b:a $ba $rotateArg"
         }
 
         // Target: Audio Formats
@@ -1274,6 +1406,7 @@ object MorphEngine {
     }
 
     fun cancelCurrentConversion() {
+        MorphNative.cancel()
         activeJob?.cancel()
         activeJob = null
         FFmpegKit.cancel()

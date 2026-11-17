@@ -17,6 +17,12 @@ Morph incorporates third-party open-source libraries. Their respective copyright
 - **Copyright:** Copyright JetBrains s.r.o. and The Android Open Source Project
 - **License:** Apache License 2.0
 
+## 4. x264
+- **Version:** build 165 (8-bit, compiled into `libmorph-native.so` for arm64-v8a)
+- **Copyright:** Copyright (C) 2003-2025 x264 project (VideoLAN)
+- **License:** GNU General Public License v2.0 or later (compatible with Morph's GPL-3.0)
+- **Source:** https://code.videolan.org/videolan/x264 (placed in `app/src/main/cpp/third_party/x264` when building)
+
 ---
 
 ### Apache License, Version 2.0 (Summary Notice)

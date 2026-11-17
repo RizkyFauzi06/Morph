@@ -543,7 +543,7 @@ fun getFileNameFromUri(context: Context, uri: Uri): String {
 fun withExtensionFromMime(name: String, mimeType: String?): String {
     if (name.substringAfterLast('.', "").isNotEmpty() || mimeType.isNullOrBlank()) return name
     val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType.lowercase())
-    return if (ext.isNullOrBlank()) name else "$name.$ext"
+    return if (ext.isNullOrBlank()) name else "${name.trimEnd('.')}.$ext"
 }
 
 fun getFileSizeFromUri(context: Context, uri: Uri): Long {

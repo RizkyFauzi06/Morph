@@ -291,6 +291,7 @@ cd Morph
   <li><strong>Pustaka Inti (Mesin Pihak Ketiga):</strong>
     <ul>
       <li><strong>FFmpegKit Full (8.1.7)</strong> — Pemrosesan audio/video (Lisensi: <strong>GPL-3.0 / LGPL-3.0</strong>).</li>
+      <li><strong>x264 (build 165)</strong> — Encoder H.264 software native (NEON) di <code>libmorph-native.so</code> (Lisensi: <strong>GPL-2.0-or-later</strong>).</li>
       <li><strong>AndroidSVG (1.4)</strong> oleh Paul LeBeau — Rendering grafik vektor SVG (Lisensi: <strong>Apache License 2.0</strong>).</li>
       <li><strong>Android Native SDK</strong> — <code>PdfRenderer</code>, <code>PdfDocument</code>, &amp; <code>java.util.zip</code> untuk rendering PDF, penguraian EPUB, dan pembuatan EPUB.</li>
     </ul>

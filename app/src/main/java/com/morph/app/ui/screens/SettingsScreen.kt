@@ -640,6 +640,12 @@ private fun OpenSourceLicensesDialog(onDismiss: () -> Unit) {
                 )
 
                 LicenseItemCard(
+                    name = "x264 (build 165, native H.264 encoder)",
+                    license = "GNU General Public License v2.0 or later (GPL-2.0-or-later)",
+                    copyright = "Copyright (C) 2003-2025 x264 project (VideoLAN)"
+                )
+
+                LicenseItemCard(
                     name = "AndroidSVG (v1.4)",
                     license = "Apache License, Version 2.0",
                     copyright = "Copyright 2013–2019 Paul LeBeau, Cave Rock Software Ltd."
