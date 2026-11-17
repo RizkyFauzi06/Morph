@@ -97,6 +97,39 @@ class ConversionMappingTest {
     }
 
     @Test
+    fun hardwareDecodeIsTriedFirstThenSoftwarePerEncoder() {
+        assertEquals("hevc_mediacodec", MorphEngine.hardwareDecoderFor("HEVC"))
+        assertEquals("mpeg2_mediacodec", MorphEngine.hardwareDecoderFor("mpeg2video"))
+        assertEquals(null, MorphEngine.hardwareDecoderFor("prores"))
+        assertEquals(null, MorphEngine.hardwareDecoderFor(null))
+
+        val attempts = MorphEngine.encodeAttempts(MorphEngine.H264_ENCODERS, "hevc_mediacodec")
+        assertEquals(
+            listOf(
+                MorphEngine.EncodeAttempt("hevc_mediacodec", "h264_mediacodec"),
+                MorphEngine.EncodeAttempt(null, "h264_mediacodec"),
+                MorphEngine.EncodeAttempt("hevc_mediacodec", "libopenh264"),
+                MorphEngine.EncodeAttempt(null, "libopenh264")
+            ),
+            attempts
+        )
+        // No hardware decoder (or Instant copy): one software-decode attempt per encoder
+        assertEquals(listOf(MorphEngine.EncodeAttempt(null, "libopenh264")), MorphEngine.encodeAttempts(listOf("libopenh264"), null))
+    }
+
+    @Test
+    fun decoderIsAnInputOptionAndMkvFlushesClustersOften() {
+        val out = java.io.File("out.mkv")
+        val withHw = MorphEngine.buildFFmpegCommand("saf:7.mp4", out, "mp4", "mkv", 0, 8_000_000L, 0, 0, 0, "h264_mediacodec", "hevc_mediacodec")
+        assertTrue(withHw, withHw.startsWith("-y -c:v hevc_mediacodec -i \"saf:7.mp4\""))
+        // Live size check needs bytes on disk: clusters are written every second, not every 5 s
+        assertTrue(withHw, withHw.contains("-cluster_time_limit 1000"))
+        val softwareDecode = MorphEngine.buildFFmpegCommand("saf:7.mp4", out, "mp4", "mkv", 0, 8_000_000L, 0, 0, 0, "libopenh264", null)
+        assertTrue(softwareDecode, softwareDecode.startsWith("-y -i \"saf:7.mp4\""))
+        assertFalse(MorphEngine.buildFFmpegQualityArgs("mp4", "mp4", 0, 8_000_000L).contains("cluster_time_limit"))
+    }
+
+    @Test
     fun namesWithAnExtensionAreLeftAlone() {
         // MimeTypeMap is an Android stub in JVM tests, so only the no-op paths are checked here
         assertEquals("clip.mp4", withExtensionFromMime("clip.mp4", "video/mp4"))
