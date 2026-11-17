@@ -49,7 +49,7 @@ object EpubBuilder {
         } catch (_: Exception) {
             String(bytes, Charset.forName("windows-1252"))
         }
-        return text.removePrefix("﻿")
+        return text.removePrefix("\uFEFF")
     }
 
     /** Splits text into chapters: by heading lines when there are 2+, otherwise by size. */

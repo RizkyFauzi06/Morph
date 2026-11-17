@@ -50,7 +50,7 @@ object OutputManager {
         val suffix = if (ext.isNotEmpty()) ".$ext" else ""
         val uniqueId = UUID.randomUUID().toString().take(8)
         val safePrefix = prefix.replace(Regex("[^a-zA-Z0-9_]"), "_")
-        return File(context.cacheDir, "${safePrefix}_${uniqueId}$suffix")
+        return File(tempDir(context), "${safePrefix}_${uniqueId}$suffix")
     }
 
     /**
@@ -559,10 +559,26 @@ object OutputManager {
      * (app killed mid-job). Call only while no conversion is queued or running.
      */
     fun cleanStaleTempFiles(context: Context) {
-        context.cacheDir.listFiles()?.forEach { f ->
-            if (f.isFile && tempNameRegex.matches(f.name)) f.delete()
-        }
+        // cacheDir too: versions before 1.1.0 kept their temp files there
+        deleteStaleTempFiles(listOf(tempDir(context), context.cacheDir))
     }
+
+    /** Deletes only names createTempFile produces; anything else in [dirs] is left alone. */
+    internal fun deleteStaleTempFiles(dirs: List<File>): Int {
+        var deleted = 0
+        dirs.forEach { dir ->
+            dir.listFiles()?.forEach { f ->
+                if (f.isFile && tempNameRegex.matches(f.name) && f.delete()) deleted++
+            }
+        }
+        return deleted
+    }
+
+    /**
+     * Work files live in filesDir, not cacheDir: Android 8+ may delete cache files at any time when
+     * storage runs low (e.g. while the Play Store installs an update), even mid-conversion.
+     */
+    private fun tempDir(context: Context): File = File(context.filesDir, "morph_tmp").apply { mkdirs() }
 
     fun cleanTempFiles(vararg files: File?) {
         for (f in files) {

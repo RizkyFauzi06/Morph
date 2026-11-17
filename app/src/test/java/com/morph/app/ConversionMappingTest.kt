@@ -181,6 +181,19 @@ class ConversionMappingTest {
     }
 
     @Test
+    fun taggedHeapPointerIsAValidNativeHandle() {
+        // Redmi 15 bug: Android 11+ arm64 tags heap pointers in the top byte (Scudo, 0xB4), so a
+        // real Session* is a NEGATIVE jlong. The old "handle <= 0" check called it a failure.
+        val tagged = 0xB400007BF8A12345UL.toLong()
+        assertTrue("sanity: tagged pointer is negative", tagged < 0)
+        assertFalse(MorphNative.isOpenError(tagged))
+        assertFalse(MorphNative.isOpenError(0x00000077A1B2C3D0L)) // untagged pointer
+        // Real errors are the small codes from morph_native.cpp (-1..-8) and 0
+        for (code in -8L..-1L) assertTrue("code $code", MorphNative.isOpenError(code))
+        assertTrue(MorphNative.isOpenError(0L))
+    }
+
+    @Test
     fun nativeX264PlanMatchesTheFfmpegFilters() {
         // No .so in a JVM test: the bridge must report "not available" instead of crashing
         assertFalse(MorphNative.isAvailable)

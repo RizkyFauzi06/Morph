@@ -25,6 +25,29 @@ class OutputManagerTest {
     }
 
     @Test
+    fun staleTempCleanupOnlyDeletesMorphWorkFiles() {
+        val tmp = tempFolder.newFolder("morph_tmp")
+        val cache = tempFolder.newFolder("cache")
+        val leftovers = listOf(
+            java.io.File(tmp, "in_media_ab12cd34.mp4"),
+            java.io.File(tmp, "x264_es_0f1e2d3c.h264"),
+            java.io.File(cache, "pdf_page_3_deadbeef.png") // pre-1.1.0 location
+        )
+        val keep = listOf(
+            java.io.File(cache, "notes.txt"),                 // not ours
+            java.io.File(cache, "in_media_ABCDEFGH.mp4"),     // not an 8-hex id
+            java.io.File(tmp, "My Video_ab12cd34.mp4")        // space: never produced by createTempFile
+        )
+        (leftovers + keep).forEach { it.writeText("x") }
+        java.io.File(cache, "pipes").mkdirs() // FFmpegKit's pipe folder must survive
+
+        assertEquals(3, OutputManager.deleteStaleTempFiles(listOf(tmp, cache)))
+        leftovers.forEach { assertFalse(it.name, it.exists()) }
+        keep.forEach { assertTrue(it.name, it.exists()) }
+        assertTrue(java.io.File(cache, "pipes").isDirectory)
+    }
+
+    @Test
     fun testValidationForEmptyAndNonExistentFiles() {
         val nonExistent = tempFolder.root.resolve("does_not_exist.mp4")
         val result1 = ConversionValidator.validateFile(nonExistent, "mp4")

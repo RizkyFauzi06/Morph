@@ -22,7 +22,20 @@ object MorphNative {
 
     const val ERR_CANCELLED = -7L
 
-    /** Opens the pipe (non-blocking read end) and the encoder. Returns a handle > 0 or an error < 0. */
+    /** morph_native.cpp's error codes are -1..-8; -64..0 is reserved for them. */
+    private const val ERR_MIN = -64L
+
+    /**
+     * True for nativeX264Open's error results. Never test the handle's sign: on Android 11+ arm64
+     * the heap tags pointers in the top byte (Scudo, usually 0xB4), so a valid Session* is a
+     * NEGATIVE jlong. "handle <= 0" rejected every open on a Redmi 15 (rc=1 within 1 ms).
+     */
+    fun isOpenError(handle: Long): Boolean = handle in ERR_MIN..0L
+
+    /**
+     * Opens the pipe (non-blocking read end) and the encoder. Returns an opaque handle (may be
+     * negative, see isOpenError) or an error code -1..-8.
+     */
     @JvmStatic external fun nativeX264Open(
         pipePath: String,
         outPath: String,

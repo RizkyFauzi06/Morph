@@ -361,7 +361,7 @@ object MorphEngine {
                 var hwEncoder: String? = null
                 for ((index, encoder) in encoders.withIndex()) {
                     if (index > 0) {
-                        Log.w(TAG, "${encoders[index - 1]} not used (rc=${result.first?.value}), trying $encoder")
+                        Log.w(TAG, "${encoders[index - 1]} not used (rc=${result.first?.value}): ${result.second.takeLast(300).trim()}; trying $encoder")
                         updateProgress(targetExt, strings.enginePreparingMedia, 5, onProgress)
                     }
                     // Vendor drivers may ignore -b:v even in CBR (Redmi 15: 79 MB -> 5.5 MB at Medium,
@@ -581,7 +581,7 @@ object MorphEngine {
             val handle = MorphNative.nativeX264Open(
                 pipe, elementary.absolutePath, outW, outH, fpsNum, fpsDen, MorphNative.x264PresetFor(preset), kbps, keyint
             )
-            if (handle <= 0) return ReturnCode(1) to "x264 open failed ($handle)"
+            if (MorphNative.isOpenError(handle)) return ReturnCode(1) to "x264 open failed ($handle)"
 
             // shortcut: a user cancel in the first ~0.5 s, before FFmpeg opens the pipe, can leave that
             // FFmpeg thread blocked in open(); the conversion still cancels, only the thread leaks.

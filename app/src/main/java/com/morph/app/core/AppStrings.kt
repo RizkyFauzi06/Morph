@@ -270,6 +270,10 @@ interface Strings {
     val engineBuildingPdfPages: String
     val engineErrOutOfMemory: String
     val engineErrNoAudioTrack: String
+    val engineErrServiceTimeLimit: String
+    val storagePermissionSettingsTitle: String
+    val storagePermissionSettingsMessage: String
+    val btnOpenAppSettings: String
     fun instantSkippedRotation(target: String): String
     fun instantSkippedCodec(target: String): String
     val instantSkippedGeneric: String
@@ -578,6 +582,10 @@ object IndonesianStrings : Strings {
     override val engineBuildingPdfPages = "Menyusun lembar PDF..."
     override val engineErrOutOfMemory = "Memori tidak cukup untuk memproses file ini. Coba kualitas lebih rendah atau file yang lebih kecil."
     override val engineErrNoAudioTrack = "File ini tidak memiliki trek audio, jadi tidak bisa diubah ke format audio."
+    override val engineErrServiceTimeLimit = "Android menghentikan konversi karena batas waktu harian proses latar belakang tercapai. Coba lagi nanti dengan tombol Ulangi."
+    override val storagePermissionSettingsTitle = "Izin penyimpanan dimatikan"
+    override val storagePermissionSettingsMessage = "Tanpa izin ini Morph tidak bisa menyimpan hasil ke Downloads/Morph. Buka Pengaturan, pilih Izin, lalu aktifkan Penyimpanan. Atau pilih folder output sendiri di Pengaturan Morph."
+    override val btnOpenAppSettings = "Buka Pengaturan"
     override fun instantSkippedRotation(target: String) = "Mode Instan tidak dipakai: video ini direkam dengan rotasi (misalnya potret), dan $target tidak menyimpan rotasi sehingga hasil salinan akan miring. Video di-encode ulang. Pilih MP4 atau MOV untuk mode Instan."
     override fun instantSkippedCodec(target: String) = "Mode Instan tidak dipakai: codec video atau audio file ini tidak didukung $target, jadi video di-encode ulang."
     override val instantSkippedGeneric = "Mode Instan tidak bisa dipakai untuk file ini, jadi video di-encode ulang."
@@ -883,6 +891,10 @@ object EnglishStrings : Strings {
     override val engineBuildingPdfPages = "Building PDF pages..."
     override val engineErrOutOfMemory = "Not enough memory to process this file. Try a lower quality or a smaller file."
     override val engineErrNoAudioTrack = "This file has no audio track, so it can't be converted to an audio format."
+    override val engineErrServiceTimeLimit = "Android stopped the conversion because the daily background time limit was reached. Try again later with Retry."
+    override val storagePermissionSettingsTitle = "Storage permission is off"
+    override val storagePermissionSettingsMessage = "Without it Morph can't save results to Downloads/Morph. Open Settings, choose Permissions and turn on Storage. Or choose your own output folder in Morph's Settings."
+    override val btnOpenAppSettings = "Open Settings"
     override fun instantSkippedRotation(target: String) = "Instant mode was not used: this video was recorded rotated (for example portrait), and $target can't store rotation, so a copy would play sideways. It was re-encoded instead. Choose MP4 or MOV for Instant."
     override fun instantSkippedCodec(target: String) = "Instant mode was not used: this file's video or audio codec isn't supported by $target, so it was re-encoded."
     override val instantSkippedGeneric = "Instant mode couldn't be used for this file, so it was re-encoded."

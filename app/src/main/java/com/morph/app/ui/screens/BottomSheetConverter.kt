@@ -565,11 +565,7 @@ fun BottomSheetConverter(
                     val serviceIntent = Intent(context, MorphService::class.java).apply {
                         action = MorphService.ACTION_START_QUEUE
                     }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        context.startForegroundService(serviceIntent)
-                    } else {
-                        context.startService(serviceIntent)
-                    }
+                    context.startForegroundService(serviceIntent)
 
                     onConvertStarted()
                 },

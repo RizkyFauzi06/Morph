@@ -11,7 +11,7 @@
 
   <p>
     <a href="https://github.com/RizkyFauzi06/Morph/releases"><img src="https://img.shields.io/badge/Download-APK-7952E8?style=flat-square&logo=android&logoColor=white" alt="Download APK" /></a>
-    <img src="https://img.shields.io/badge/Android-8.0%2B%20(API%2026%2B)-249B69?style=flat-square&logo=android&logoColor=white" alt="Android 8.0+" />
+    <img src="https://img.shields.io/badge/Android-8.0%2B%20(API%2026%2B%2C%2064--bit)-249B69?style=flat-square&logo=android&logoColor=white" alt="Android 8.0+ (64-bit)" />
     <img src="https://img.shields.io/badge/Kotlin-100%25-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Kotlin" />
     <img src="https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white" alt="Jetpack Compose" />
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-555555?style=flat-square" alt="License GPL-3.0" /></a>
@@ -186,7 +186,7 @@
 <ol>
   <li>Go to the <a href="https://github.com/RizkyFauzi06/Morph/releases"><strong>Releases</strong></a> section of this repository.</li>
   <li>Download the latest <code>Morph-v*.apk</code> from <a href="https://github.com/RizkyFauzi06/Morph/releases/latest">GitHub Releases</a>.</li>
-  <li>Open the downloaded APK on your Android device (Android 8.0 or newer) and allow installation from your browser or file manager if prompted.</li>
+  <li>Open the downloaded APK on your Android device (Android 8.0 or newer, <strong>64-bit</strong>) and allow installation from your browser or file manager if prompted. Phones running a 32-bit Android (common on Android Go and some budget models) are not supported, because the FFmpeg engine ships only 64-bit libraries.</li>
 </ol>
 
 <h3>Option 2: Build from Source</h3>

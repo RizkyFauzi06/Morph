@@ -11,7 +11,10 @@ import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
+import android.content.pm.ServiceInfo
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
+import androidx.core.content.IntentCompat
 import com.morph.app.core.AppStrings
 import com.morph.app.core.ConversionJob
 import com.morph.app.core.ConversionQueueManager
@@ -68,12 +71,7 @@ class MorphService : Service() {
         isCancelled = false
 
         // Dukungan kompatibilitas backward jika intent membawa file tunggal
-        val inputUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            intent?.getParcelableExtra("INPUT_URI", Uri::class.java)
-        } else {
-            @Suppress("DEPRECATION")
-            intent?.getParcelableExtra<Uri>("INPUT_URI")
-        }
+        val inputUri = intent?.let { IntentCompat.getParcelableExtra(it, "INPUT_URI", Uri::class.java) }
         val targetFormat = intent?.getStringExtra("TARGET_FORMAT") ?: ""
         val qualityPreset = intent?.getIntExtra("QUALITY_PRESET", 0) ?: 0
 
@@ -98,7 +96,14 @@ class MorphService : Service() {
                 isProcessing = true,
                 progress = 0
             )
-            startForeground(NOTIFICATION_ID, initialNotif)
+            // Android 15 added the mediaProcessing type for transcoding; dataSync is slated for
+            // deprecation. Older versions keep dataSync (the type is ignored before Android 10).
+            val fgsType = when {
+                Build.VERSION.SDK_INT >= 35 -> ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                else -> 0 // Android 8-9 have no service types
+            }
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, initialNotif, fgsType)
             processQueue()
         } else {
             stopForegroundAndService()
@@ -157,7 +162,11 @@ class MorphService : Service() {
 
                     ConversionQueueManager.updateJobStatus(job.id, JobStatus.COMPLETED, filePath = finalPath, detail = resultDetail)
                 } catch (e: CancellationException) {
-                    ConversionQueueManager.updateJobStatus(job.id, JobStatus.CANCELLED)
+                    // Keep a FAILED set by onTimeout instead of overwriting it with "cancelled"
+                    val current = ConversionQueueManager.queueState.value.find { it.id == job.id }
+                    if (current?.status == JobStatus.PROCESSING) {
+                        ConversionQueueManager.updateJobStatus(job.id, JobStatus.CANCELLED)
+                    }
                     if (isCancelled || !ConversionQueueManager.hasActiveOrWaitingJobs()) break
                 } catch (e: OutOfMemoryError) {
                     // An Error, not an Exception: uncaught it would kill the app and the whole batch
@@ -198,12 +207,7 @@ class MorphService : Service() {
     }
 
     private fun handleQueueCompleted() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-        } else {
-            @Suppress("DEPRECATION")
-            stopForeground(true)
-        }
+        stopForeground(STOP_FOREGROUND_REMOVE)
 
         val summary = ConversionQueueManager.getQueueSummary()
         val manager = getSystemService(NotificationManager::class.java)
@@ -236,12 +240,7 @@ class MorphService : Service() {
     }
 
     private fun stopForegroundAndService() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-        } else {
-            @Suppress("DEPRECATION")
-            stopForeground(true)
-        }
+        stopForeground(STOP_FOREGROUND_REMOVE)
         val manager = getSystemService(NotificationManager::class.java)
         manager.cancel(NOTIFICATION_ID)
         manager.cancel(SUMMARY_NOTIFICATION_ID)
@@ -289,15 +288,8 @@ class MorphService : Service() {
     }
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Morph Conversions",
-                NotificationManager.IMPORTANCE_LOW
-            )
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
-        }
+        val channel = NotificationChannel(CHANNEL_ID, "Morph Conversions", NotificationManager.IMPORTANCE_LOW)
+        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
     // Android 15+: dataSync services get ~6h per 24h. The system calls onTimeout and kills
@@ -309,7 +301,8 @@ class MorphService : Service() {
     private fun stopOnTimeout() {
         Log.w("MorphService", "Foreground service time limit reached, cancelling queue")
         isCancelled = true
-        ConversionQueueManager.cancelAllJobs()
+        // The user didn't cancel: show why and that Retry works later, instead of "Cancelled"
+        ConversionQueueManager.failUnfinishedJobs(AppStrings.get().engineErrServiceTimeLimit)
         stopForegroundAndService()
     }
 

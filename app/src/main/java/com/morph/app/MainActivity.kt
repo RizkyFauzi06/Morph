@@ -34,6 +34,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -83,7 +84,16 @@ class MainActivity : ComponentActivity() {
     private val storagePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
-        if (!isGranted) {
+        if (isGranted) return@registerForActivityResult
+        val permission = legacyStoragePermission() ?: return@registerForActivityResult
+        // After "Don't ask again" Android 8-10 never shows the dialog again (rationale stays false).
+        // On 8-9 that makes every save fail, unless a custom SAF folder is set (it needs no permission).
+        val permanentlyDenied = !shouldShowRequestPermissionRationale(permission)
+        if (permanentlyDenied && Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
+            OutputManager.validCustomTreeUri(this) == null
+        ) {
+            showStorageSettingsDialog()
+        } else {
             Toast.makeText(this, AppStrings.get().storagePermissionRequiredToast, Toast.LENGTH_LONG).show()
         }
     }
@@ -130,12 +140,9 @@ class MainActivity : ComponentActivity() {
         val isInitialStandalone = intent.action == Intent.ACTION_MAIN
 
         if (!isInitialStandalone && intent.action == Intent.ACTION_SEND) {
-            val uri = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
-            })?.takeIf { isSharedContentUri(it) }
+            // IntentCompat skips the type-safe getParcelableExtra on Android 13, where it is buggy
+            val uri = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+                ?.takeIf { isSharedContentUri(it) }
 
             if (uri != null) {
                 val name = getFileNameFromUri(this, uri)
@@ -152,12 +159,7 @@ class MainActivity : ComponentActivity() {
                 isStandaloneMode = true
             }
         } else if (!isInitialStandalone && intent.action == Intent.ACTION_SEND_MULTIPLE) {
-            val uris: ArrayList<Uri>? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
-            }
+            val uris: ArrayList<Uri>? = IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
 
             val validUris = (if (!uris.isNullOrEmpty()) {
                 uris.filterNotNull()
@@ -402,11 +404,7 @@ class MainActivity : ComponentActivity() {
                                                     putExtra("TARGET_FORMAT", retryFormat)
                                                     putExtra("QUALITY_PRESET", prefs.qualityPreset)
                                                 }
-                                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                                    context.startForegroundService(serviceIntent)
-                                                } else {
-                                                    context.startService(serviceIntent)
-                                                }
+                                                context.startForegroundService(serviceIntent)
                                             },
                                             onBannerClick = { showProgressScreen = true }
                                         )
@@ -502,15 +500,28 @@ class MainActivity : ComponentActivity() {
      * WRITE_EXTERNAL_STORAGE. Android 10 saves via MediaStore (no permission) but lists
      * history through file paths in legacy mode, which needs READ_EXTERNAL_STORAGE.
      */
+    private fun legacyStoragePermission(): String? = when {
+        Build.VERSION.SDK_INT <= Build.VERSION_CODES.P -> Manifest.permission.WRITE_EXTERNAL_STORAGE
+        Build.VERSION.SDK_INT == Build.VERSION_CODES.Q -> Manifest.permission.READ_EXTERNAL_STORAGE
+        else -> null
+    }
+
     private fun ensureLegacyStoragePermission() {
-        val permission = when {
-            Build.VERSION.SDK_INT <= Build.VERSION_CODES.P -> Manifest.permission.WRITE_EXTERNAL_STORAGE
-            Build.VERSION.SDK_INT == Build.VERSION_CODES.Q -> Manifest.permission.READ_EXTERNAL_STORAGE
-            else -> return
-        }
+        val permission = legacyStoragePermission() ?: return
         if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
             storagePermissionLauncher.launch(permission)
         }
+    }
+
+    /** Only path back after a permanent denial: the permission switch in App info. */
+    private fun showStorageSettingsDialog() {
+        val strings = AppStrings.get()
+        android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Light_Dialog_Alert)
+            .setTitle(strings.storagePermissionSettingsTitle)
+            .setMessage(strings.storagePermissionSettingsMessage)
+            .setPositiveButton(strings.btnOpenAppSettings) { _, _ -> openAppBatterySettings(this, strings) }
+            .setNegativeButton(strings.btnCancel, null)
+            .show()
     }
 }
 

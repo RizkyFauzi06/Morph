@@ -218,6 +218,14 @@ object ConversionQueueManager {
         }
     }
 
+    /** Marks waiting/running jobs as FAILED with [message] and stops the running conversion. */
+    fun failUnfinishedJobs(message: String) {
+        val hadProcessing = _queueState.value.any { it.status == JobStatus.PROCESSING }
+        _queueState.value.filter { it.status == JobStatus.WAITING || it.status == JobStatus.PROCESSING }
+            .forEach { updateJobStatus(it.id, JobStatus.FAILED, error = message) }
+        if (hadProcessing) onCancelActiveConversion?.invoke()
+    }
+
     // Bersihkan daftar yang sudah selesai/gagal/batal
     fun clearCompletedJobs() {
         _queueState.update { currentList ->

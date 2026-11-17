@@ -11,7 +11,7 @@
 
   <p>
     <a href="https://github.com/RizkyFauzi06/Morph/releases"><img src="https://img.shields.io/badge/Download-APK-7952E8?style=flat-square&logo=android&logoColor=white" alt="Download APK" /></a>
-    <img src="https://img.shields.io/badge/Android-8.0%2B%20(API%2026%2B)-249B69?style=flat-square&logo=android&logoColor=white" alt="Android 8.0+" />
+    <img src="https://img.shields.io/badge/Android-8.0%2B%20(API%2026%2B%2C%2064--bit)-249B69?style=flat-square&logo=android&logoColor=white" alt="Android 8.0+ (64-bit)" />
     <img src="https://img.shields.io/badge/Kotlin-100%25-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Kotlin" />
     <img src="https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white" alt="Jetpack Compose" />
     <a href="../LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-555555?style=flat-square" alt="Lisensi GPL-3.0" /></a>
@@ -186,7 +186,7 @@
 <ol>
   <li>Buka bagian <a href="https://github.com/RizkyFauzi06/Morph/releases"><strong>Releases</strong></a> pada repositori ini.</li>
   <li>Unduh file <code>Morph-v*.apk</code> terbaru dari <a href="https://github.com/RizkyFauzi06/Morph/releases/latest">GitHub Releases</a>.</li>
-  <li>Buka file APK yang telah diunduh di perangkat Android Anda (Android 8.0 atau lebih baru) dan izinkan instalasi dari browser atau file manager jika diminta.</li>
+  <li>Buka file APK yang telah diunduh di perangkat Android Anda (Android 8.0 atau lebih baru, <strong>64-bit</strong>) dan izinkan instalasi dari browser atau file manager jika diminta. HP dengan Android 32-bit (umum di Android Go dan sebagian model murah) belum didukung, karena engine FFmpeg hanya menyediakan library 64-bit.</li>
 </ol>
 
 <h3>Opsi 2: Build dari Source Code</h3>
