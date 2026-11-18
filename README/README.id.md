@@ -126,27 +126,27 @@
   <tbody>
     <tr>
       <td><strong>Video Conversion</strong></td>
-      <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>AVI</code></td>
-      <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>GIF</code></td>
-      <td>Mendukung <em>stream copy</em> lossless <strong>Instant</strong> bila codec sumber cocok dengan kontainer tujuan (jika tidak, otomatis di-<em>encode</em> ulang), encoding H.264 cepat, opsi resolusi (1080p/720p/480p) dan frame rate (60/30/24 fps), encoding VP8/Opus untuk WebM (bisa diputar di semua versi Android), serta ekspor GIF animasi dengan rasio aspek terjaga.</td>
+      <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>AVI</code>, <code>FLV</code>, <code>WMV</code>, <code>3GP</code>, <code>M4V</code>, <code>TS</code>, <code>OGV</code></td>
+      <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>AVI</code>, <code>GIF</code></td>
+      <td>Mendukung <em>stream copy</em> lossless <strong>Instant</strong> bila codec sumber cocok dengan kontainer tujuan (jika tidak, otomatis di-<em>encode</em> ulang), encoding H.264 cepat (hardware bila menaati bitrate, jika tidak memakai mesin x264 bawaan), opsi resolusi (1080p/720p/480p) dan frame rate (60/30/24 fps; video yang lebih kecil tidak pernah diperbesar), encoding VP8/Opus untuk WebM (bisa diputar di semua versi Android), serta ekspor GIF animasi dengan rasio aspek terjaga. Trek audio yang cocok dipertahankan apa adanya. <em>Kompres</em> (format sama) tersedia untuk MP4, MKV, MOV, WebM, dan AVI.</td>
     </tr>
     <tr>
       <td><strong>Video to Audio Extraction</strong></td>
-      <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>AVI</code></td>
+      <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>AVI</code>, <code>FLV</code>, <code>WMV</code>, <code>3GP</code>, <code>M4V</code>, <code>TS</code>, <code>OGV</code></td>
       <td><code>MP3</code>, <code>M4A</code>, <code>WAV</code>, <code>FLAC</code>, <code>OGG</code>, <code>OPUS</code></td>
-      <td>Mengekstrak jalur audio langsung dari file video dengan pilihan preset kualitas.</td>
+      <td>Mengekstrak jalur audio langsung dari file video dengan pilihan preset kualitas. Video tanpa trek audio mendapat pesan yang jelas, bukan file kosong.</td>
     </tr>
     <tr>
       <td><strong>Audio Conversion</strong></td>
-      <td><code>MP3</code>, <code>WAV</code>, <code>FLAC</code>, <code>AAC</code>, <code>M4A</code>, <code>OGG</code>, <code>OPUS</code></td>
+      <td><code>MP3</code>, <code>WAV</code>, <code>FLAC</code>, <code>AAC</code>, <code>M4A</code>, <code>OGG</code>, <code>OPUS</code>, <code>WMA</code>, <code>AIFF</code>, <code>AMR</code></td>
       <td><code>MP3</code>, <code>WAV</code>, <code>AAC</code>, <code>FLAC</code>, <code>M4A</code>, <code>OGG</code>, <code>OPUS</code></td>
-      <td>Mendukung PCM WAV tanpa kompresi, FLAC lossless, MP3/AAC bitrate tinggi, serta <em>stream copy</em> <strong>Instant</strong> bila codec audio sumber sudah sesuai dengan format tujuan.</td>
+      <td>Mendukung PCM WAV tanpa kompresi, FLAC lossless, MP3/AAC bitrate tinggi, OGG Vorbis juga untuk rekaman mono dan suara, serta <em>stream copy</em> <strong>Instant</strong> bila codec audio sumber sudah sesuai dengan format tujuan (High juga mempertahankan trek yang cocok apa adanya).</td>
     </tr>
     <tr>
       <td><strong>Image Conversion</strong></td>
-      <td><code>PNG</code>, <code>JPG</code>, <code>JPEG</code>, <code>WEBP</code>, <code>BMP</code></td>
+      <td><code>PNG</code>, <code>JPG</code>, <code>JPEG</code>, <code>WEBP</code>, <code>BMP</code>, <code>GIF</code>, <code>HEIC</code>, <code>HEIF</code>, <code>ICO</code></td>
       <td><code>PNG</code>, <code>JPG</code>, <code>WEBP</code>, <code>BMP</code>, <code>PDF</code></td>
-      <td>Pengisian latar belakang putih otomatis saat mengonversi gambar transparan ke JPG. Banyak gambar dapat digabung menjadi satu file PDF atau diekspor terpisah.</td>
+      <td>Pengisian latar belakang putih otomatis saat mengonversi gambar transparan ke JPG/BMP. Banyak gambar dapat digabung menjadi satu PDF yang ringkas (halaman JPEG) atau diekspor terpisah. GIF memakai frame pertamanya; HEIC/HEIF butuh Android 9+. TIFF tidak didukung (Android tidak punya decoder TIFF).</td>
     </tr>
     <tr>
       <td><strong>SVG Conversion</strong></td>
@@ -262,8 +262,8 @@ cd Morph
       <td align="center">Opsional</td>
     </tr>
     <tr>
-      <td><code>FOREGROUND_SERVICE</code> &amp; <code>FOREGROUND_SERVICE_DATA_SYNC</code></td>
-      <td>Menjaga proses konversi lokal tetap berjalan lancar saat Anda berpindah aplikasi atau mengunci layar.</td>
+      <td><code>FOREGROUND_SERVICE</code>, <code>FOREGROUND_SERVICE_DATA_SYNC</code> &amp; <code>FOREGROUND_SERVICE_MEDIA_PROCESSING</code></td>
+      <td>Menjaga proses konversi lokal tetap berjalan lancar saat Anda berpindah aplikasi atau mengunci layar (tipe media-processing di Android 15+, data-sync sebelumnya).</td>
       <td align="center">Wajib</td>
     </tr>
     <tr>

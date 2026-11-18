@@ -126,27 +126,27 @@
   <tbody>
     <tr>
       <td><strong>Video Conversion</strong></td>
-      <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>AVI</code></td>
-      <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>GIF</code></td>
-      <td>Supports <strong>Instant</strong> lossless stream copy when the source codecs fit the target container (otherwise it re-encodes automatically), fast H.264 encoding, optional resolution (1080p/720p/480p) and frame rate (60/30/24 fps), VP8/Opus encoding for WebM (plays on every Android version), and aspect-ratio preserved animated GIF export.</td>
+      <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>AVI</code>, <code>FLV</code>, <code>WMV</code>, <code>3GP</code>, <code>M4V</code>, <code>TS</code>, <code>OGV</code></td>
+      <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>AVI</code>, <code>GIF</code></td>
+      <td>Supports <strong>Instant</strong> lossless stream copy when the source codecs fit the target container (otherwise it re-encodes automatically), fast H.264 encoding (hardware when it honours the bitrate, otherwise the built-in x264 engine), optional resolution (1080p/720p/480p) and frame rate (60/30/24 fps; smaller videos are never upscaled), VP8/Opus encoding for WebM (plays on every Android version), and aspect-ratio preserved animated GIF export. A compatible audio track is kept as it is. <em>Compress</em> (same format) is available for MP4, MKV, MOV, WebM and AVI.</td>
     </tr>
     <tr>
       <td><strong>Video to Audio Extraction</strong></td>
-      <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>AVI</code></td>
+      <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>AVI</code>, <code>FLV</code>, <code>WMV</code>, <code>3GP</code>, <code>M4V</code>, <code>TS</code>, <code>OGV</code></td>
       <td><code>MP3</code>, <code>M4A</code>, <code>WAV</code>, <code>FLAC</code>, <code>OGG</code>, <code>OPUS</code></td>
-      <td>Extracts audio tracks directly from video files with configurable quality presets.</td>
+      <td>Extracts audio tracks directly from video files with configurable quality presets. A video without an audio track gets a clear message instead of an empty file.</td>
     </tr>
     <tr>
       <td><strong>Audio Conversion</strong></td>
-      <td><code>MP3</code>, <code>WAV</code>, <code>FLAC</code>, <code>AAC</code>, <code>M4A</code>, <code>OGG</code>, <code>OPUS</code></td>
+      <td><code>MP3</code>, <code>WAV</code>, <code>FLAC</code>, <code>AAC</code>, <code>M4A</code>, <code>OGG</code>, <code>OPUS</code>, <code>WMA</code>, <code>AIFF</code>, <code>AMR</code></td>
       <td><code>MP3</code>, <code>WAV</code>, <code>AAC</code>, <code>FLAC</code>, <code>M4A</code>, <code>OGG</code>, <code>OPUS</code></td>
-      <td>Uncompressed PCM WAV, lossless FLAC, high-bitrate MP3/AAC, and <strong>Instant</strong> stream copy when the source audio codec already matches the target.</td>
+      <td>Uncompressed PCM WAV, lossless FLAC, high-bitrate MP3/AAC, OGG Vorbis for mono and voice recordings too, and <strong>Instant</strong> stream copy when the source audio codec already matches the target (High keeps a matching track as it is as well).</td>
     </tr>
     <tr>
       <td><strong>Image Conversion</strong></td>
-      <td><code>PNG</code>, <code>JPG</code>, <code>JPEG</code>, <code>WEBP</code>, <code>BMP</code></td>
+      <td><code>PNG</code>, <code>JPG</code>, <code>JPEG</code>, <code>WEBP</code>, <code>BMP</code>, <code>GIF</code>, <code>HEIC</code>, <code>HEIF</code>, <code>ICO</code></td>
       <td><code>PNG</code>, <code>JPG</code>, <code>WEBP</code>, <code>BMP</code>, <code>PDF</code></td>
-      <td>Automatic white canvas compositing when converting transparent images to JPG. Multiple images can be merged into a single PDF or exported separately.</td>
+      <td>Automatic white canvas compositing when converting transparent images to JPG/BMP. Multiple images can be merged into a single, compact PDF (JPEG pages) or exported separately. GIF uses its first frame; HEIC/HEIF needs Android 9+. TIFF is not supported (Android has no TIFF decoder).</td>
     </tr>
     <tr>
       <td><strong>SVG Conversion</strong></td>
@@ -262,8 +262,8 @@ cd Morph
       <td align="center">Optional</td>
     </tr>
     <tr>
-      <td><code>FOREGROUND_SERVICE</code> &amp; <code>FOREGROUND_SERVICE_DATA_SYNC</code></td>
-      <td>Keeps active local conversions running smoothly when you switch apps or lock your screen.</td>
+      <td><code>FOREGROUND_SERVICE</code>, <code>FOREGROUND_SERVICE_DATA_SYNC</code> &amp; <code>FOREGROUND_SERVICE_MEDIA_PROCESSING</code></td>
+      <td>Keeps active local conversions running smoothly when you switch apps or lock your screen (media-processing type on Android 15+, data-sync before).</td>
       <td align="center">Required</td>
     </tr>
     <tr>
