@@ -99,9 +99,32 @@ object MorphEngine {
         else -> baseBps
     }
 
-    internal fun audioKbpsFor(targetExt: String, preset: Int): Int = when {
-        targetExt == "webm" -> when (preset) { 1 -> 128; 2 -> 96; else -> 192 }
-        else -> when (preset) { 1 -> 160; 2 -> 96; else -> 256 }
+    /** Audio bitrate per target and quality preset (0 High, 1 Medium, 2 Low). Lossless targets ignore it. */
+    internal fun audioKbpsFor(targetExt: String, preset: Int): Int {
+        val (high, medium, low) = when (targetExt) {
+            "webm" -> Triple(192, 128, 96)
+            "mp3" -> Triple(320, 192, 128)
+            "aac", "m4a" -> Triple(256, 192, 128)
+            "opus" -> Triple(160, 128, 96)
+            "ogg" -> Triple(256, 160, 112)
+            else -> Triple(256, 160, 96) // mp4, mkv, mov, avi
+        }
+        return when (preset) { 1 -> medium; 2 -> low; else -> high }
+    }
+
+    /**
+     * Keep the source audio (-c:a copy) instead of re-encoding it. High: whenever the target holds
+     * the codec (no quality loss, no AAC encode time). Medium/Low: only when the source is already at
+     * or under that preset's bitrate, since re-encoding would grow the file and still lose quality.
+     * Exactly one audio stream: FFmpeg's default pick and the x264 mux's 1:a:0 must be the same one.
+     */
+    internal fun shouldCopyAudio(targetExt: String, preset: Int, audioCodecs: List<String>, sourceAudioBps: Long?): Boolean {
+        if (preset == 3) return false // Instant copies every stream on its own
+        val codec = audioCodecs.singleOrNull() ?: return false
+        if (!ConversionCapabilityManager.canKeepAudioCodec(targetExt, codec)) return false
+        if (preset == 0) return true
+        val bps = sourceAudioBps ?: return false
+        return bps in 1..audioKbpsFor(targetExt, preset) * 1000L
     }
 
     /** Media time after which a running hardware encode is checked for an ignored bitrate. */
@@ -344,12 +367,21 @@ object MorphEngine {
             val firmware = Build.FINGERPRINT ?: ""
             val sourceVideo = mediaInfo?.streams
                 ?.firstOrNull { it.type.equals("video", ignoreCase = true) && !isAttachedPicture(it) }
-            val hasAudio = mediaInfo?.streams?.any { it.type.equals("audio", ignoreCase = true) } == true
+            val audioStreams = mediaInfo?.streams?.filter { it.type.equals("audio", ignoreCase = true) }.orEmpty()
+            val hasAudio = audioStreams.isNotEmpty()
+            val sourceAudioBps = audioStreams.singleOrNull()?.bitrate?.toLongOrNull()
+            // Turned off once a run that kept the source audio failed, so a bad track can't fail the job
+            var keepAudio = true
+            var lastRunCopiedAudio = false
 
             // Tries each encoder (hardware first) on the current input. Hardware failures are instant.
             suspend fun encodeWithFallback(preset: Int): Pair<ReturnCode?, String> {
                 val targetVideoBps = videoBitrateForPreset(preset, videoBitrateBps)
-                val targetBps = targetVideoBps + audioKbpsFor(targetExt, preset) * 1000L
+                val copyAudio = keepAudio && shouldCopyAudio(targetExt, preset, audioStreams.map { it.codec ?: "" }, sourceAudioBps)
+                lastRunCopiedAudio = copyAudio
+                // A kept track brings its own bitrate into the size the bitrate guard expects
+                val audioBps = sourceAudioBps.takeIf { copyAudio } ?: (audioKbpsFor(targetExt, preset) * 1000L)
+                val targetBps = targetVideoBps + audioBps
                 val encoders = if (preset == 3) {
                     listOf(DEFAULT_ENCODER)
                 } else {
@@ -374,11 +406,11 @@ object MorphEngine {
                     result = if (encoder == X264_NATIVE) {
                         runNativeX264(
                             context, ::inputArg, tempOutput, targetExt, preset, targetVideoBps, sourceVideo,
-                            videoRotation, videoResolution, videoFps, hasAudio, totalDurationMs, onProgress
+                            videoRotation, videoResolution, videoFps, hasAudio, copyAudio, totalDurationMs, onProgress
                         )
                     } else {
                         runFFmpeg(
-                            buildFFmpegCommand(inputArg(), tempOutput, inputExt, targetExt, preset, videoBitrateBps, videoRotation, videoResolution, videoFps, encoder),
+                            buildFFmpegCommand(inputArg(), tempOutput, inputExt, targetExt, preset, videoBitrateBps, videoRotation, videoResolution, videoFps, encoder, copyAudio),
                             targetExt, totalDurationMs, onProgress,
                             // Decide after 5 s of video instead of wasting a whole hardware encode
                             abortWhen = if (watchBitrate) { bytes, timeMs ->
@@ -426,6 +458,14 @@ object MorphEngine {
                 Log.w(TAG, "Stream copy failed (${ffmpegResult.first?.value}), retrying with re-encode")
                 instantNote = strings.instantSkippedGeneric
                 usedPreset = 0
+                updateProgress(targetExt, strings.enginePreparingMedia, 5, onProgress)
+                ffmpegResult = encodeWithFallback(usedPreset)
+            }
+
+            // A kept source track the muxer rejects (or a damaged one) must not fail the job: encode it instead
+            if (lastRunCopiedAudio && failed(ffmpegResult)) {
+                Log.w(TAG, "Failed with the source audio kept (${ffmpegResult.first?.value}), retrying with re-encoded audio")
+                keepAudio = false
                 updateProgress(targetExt, strings.enginePreparingMedia, 5, onProgress)
                 ffmpegResult = encodeWithFallback(usedPreset)
             }
@@ -537,9 +577,10 @@ object MorphEngine {
         videoRotation: Int,
         videoResolution: Int,
         videoFps: Int,
-        videoEncoder: String
+        videoEncoder: String,
+        copyAudio: Boolean = false
     ): String {
-        val qualityArgs = buildFFmpegQualityArgs(inputExt, targetExt, preset, videoBitrateBps, videoRotation, videoResolution, videoFps, videoEncoder)
+        val qualityArgs = buildFFmpegQualityArgs(inputExt, targetExt, preset, videoBitrateBps, videoRotation, videoResolution, videoFps, videoEncoder, copyAudio)
         return "-y -i \"$inputArg\" $qualityArgs \"${tempOutput.absolutePath}\""
     }
 
@@ -560,6 +601,7 @@ object MorphEngine {
         videoResolution: Int,
         videoFps: Int,
         hasAudio: Boolean,
+        copyAudio: Boolean,
         totalDurationMs: Long,
         onProgress: (String, Int) -> Unit
     ): Pair<ReturnCode?, String> {
@@ -568,7 +610,7 @@ object MorphEngine {
         val streamIndex = source?.index
         if (width <= 0 || height <= 0 || streamIndex == null) return ReturnCode(1) to "x264: unknown source size"
 
-        val (outW, outH) = MorphNative.outputSize(width, height, rotation, preset, videoResolution)
+        val (outW, outH) = MorphNative.outputSize(width, height, rotation, preset, videoResolution, source.sampleAspectRatio)
         val (fpsNum, fpsDen) = MorphNative.frameRate(source.averageFrameRate, videoFps)
         val kbps = (targetVideoBps / 1000).toInt().coerceAtLeast(100)
         val keyint = Math.round(fpsNum.toDouble() / fpsDen * 2).toInt().coerceAtLeast(1)
@@ -610,7 +652,8 @@ object MorphEngine {
 
             // Constant-rate video from the pipe + original audio; x264 already wrote BT.709 VUI
             val audioIn = if (hasAudio) "-i \"${inputArg()}\" " else ""
-            val audioOut = if (hasAudio) "-map 1:a:0 -c:a aac -b:a ${audioKbpsFor(targetExt, preset)}k " else ""
+            val audioCodec = if (copyAudio) "-c:a copy" else "-c:a aac -b:a ${audioKbpsFor(targetExt, preset)}k"
+            val audioOut = if (hasAudio) "-map 1:a:0 $audioCodec " else ""
             val container = when (targetExt) {
                 "mp4", "mov" -> "-movflags +faststart "
                 else -> ""
@@ -741,8 +784,15 @@ object MorphEngine {
         videoRotation: Int = 0,
         videoResolution: Int = 0,
         videoFps: Int = 0,
-        videoEncoder: String = DEFAULT_ENCODER
+        videoEncoder: String = DEFAULT_ENCODER,
+        copyAudio: Boolean = false // shouldCopyAudio: keep the source track instead of [encoder]
     ): String {
+        fun audioArgs(encoder: String): String = when {
+            copyAudio -> "-c:a copy"
+            encoder == "pcm_s16le" || encoder == "flac" -> "-c:a $encoder" // lossless: no bitrate
+            else -> "-c:a $encoder -b:a ${audioKbpsFor(targetExt, preset)}k"
+        }
+
         // Stream Copy (Lossless Remuxing)
         if (preset == 3) {
             return when (targetExt) {
@@ -781,7 +831,7 @@ object MorphEngine {
             val bv = videoBitrateForPreset(preset, videoBitrateBps)
             // yuv420p (format= in the filter) keeps VP9 at profile 0: 10-bit sources would become
             // profile 2, which many Android players render as a black screen
-            return "$filters${videoCodecArgs(encoder, preset)} -b:v $bv -c:a libopus -b:a ${audioKbpsFor(targetExt, preset)}k $rotateArg"
+            return "$filters${videoCodecArgs(encoder, preset)} -b:v $bv ${audioArgs("libopus")} $rotateArg"
         }
 
         // Target: Standard Video Containers (MP4, MKV, MOV, AVI)
@@ -803,53 +853,22 @@ object MorphEngine {
             // Here: h264_mediacodec or libopenh264; native x264 runs outside this command.
             val encoder = if (videoEncoder == HW_H264) HW_H264 else SW_H264
             val filters = buildVideoFilterArgs(preset, videoResolution, videoFps, encoderPixelFormat(encoder))
-            return "${videoCodecArgs(encoder, preset)} -c:a aac $fastStartArg$filters-b:v $bv -b:a $ba $rotateArg"
+            return "${videoCodecArgs(encoder, preset)} ${audioArgs("aac")} $fastStartArg$filters-b:v $bv $rotateArg"
         }
 
-        // Target: Audio Formats
+        // Target: Audio Formats (bitrates in audioKbpsFor)
         val audioCommon = "-vn -sn -dn"
-        return when (targetExt) {
-            "wav" -> "$audioCommon -c:a pcm_s16le"
-            "flac" -> "$audioCommon -c:a flac"
-            "mp3" -> {
-                val b = when (preset) {
-                    0 -> "320k"
-                    1 -> "192k"
-                    2 -> "128k"
-                    else -> "256k"
-                }
-                "$audioCommon -c:a libmp3lame -b:a $b"
-            }
-            "aac", "m4a" -> {
-                val b = when (preset) {
-                    0 -> "256k"
-                    1 -> "192k"
-                    2 -> "128k"
-                    else -> "192k"
-                }
-                val faststart = if (targetExt == "m4a") " -movflags +faststart" else ""
-                "$audioCommon -c:a aac -b:a $b$faststart"
-            }
-            "opus" -> {
-                val b = when (preset) {
-                    0 -> "160k"
-                    1 -> "128k"
-                    2 -> "96k"
-                    else -> "128k"
-                }
-                "$audioCommon -c:a libopus -b:a $b"
-            }
-            "ogg" -> {
-                val b = when (preset) {
-                    0 -> "256k"
-                    1 -> "160k"
-                    2 -> "112k"
-                    else -> "160k"
-                }
-                "$audioCommon -c:a libvorbis -b:a $b"
-            }
-            else -> audioCommon
+        val audioEncoder = when (targetExt) {
+            "wav" -> "pcm_s16le"
+            "flac" -> "flac"
+            "mp3" -> "libmp3lame"
+            "aac", "m4a" -> "aac"
+            "opus" -> "libopus"
+            "ogg" -> "libvorbis"
+            else -> return audioCommon
         }
+        val faststart = if (targetExt == "m4a") " -movflags +faststart" else ""
+        return "$audioCommon ${audioArgs(audioEncoder)}$faststart"
     }
 
     // --- 2. PDF TO IMAGES ---

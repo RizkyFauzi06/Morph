@@ -60,22 +60,31 @@ object MorphNative {
         if (isAvailable) nativeCancel()
     }
 
-    /** x264 speed preset per Morph quality preset: fast enough for phones, still sharp at Morph's bitrates. */
+    /**
+     * x264 speed preset per Morph quality preset. High and Medium share superfast: on a Redmi 15
+     * veryfast managed 14.3 fps on 1080p against 19.2 fps, and at Morph's bitrates (High ~18 Mbps
+     * for 1080p) the picture difference is hard to see. Quality comes from the bitrate. Low uses
+     * ultrafast, which also turns off CABAC, so old and cheap decoders play it.
+     */
     fun x264PresetFor(qualityPreset: Int): String = when (qualityPreset) {
-        1 -> "superfast"
         2 -> "ultrafast"
-        else -> "veryfast" // High (Instant never reaches an encoder)
+        else -> "superfast" // High and Medium (Instant never reaches an encoder)
     }
 
     /**
      * Exact output size the native path asks FFmpeg for (x264 needs it before the first frame).
      * Mirrors MorphEngine.buildVideoFilterArgs: rotation first (autorotate), then the PBI 5.2
      * short-side target or the Low preset's 854 px long side, then even dimensions.
+     * [sar] is ffprobe's sample aspect ratio ("32:27"). The raw pipe can't carry it, so non-square
+     * pixels (DVD, HDV) are resized to their display shape here instead of playing squashed.
      */
-    fun outputSize(width: Int, height: Int, rotationDegrees: Int, qualityPreset: Int, videoResolution: Int): Pair<Int, Int> {
+    fun outputSize(
+        width: Int, height: Int, rotationDegrees: Int, qualityPreset: Int, videoResolution: Int, sar: String? = null
+    ): Pair<Int, Int> {
+        val displayWidth = Math.round(width * sampleAspect(sar)).toInt() // SAR applies before the turn
         val rotated = rotationDegrees % 180 != 0
-        val w = (if (rotated) height else width).coerceAtLeast(2)
-        val h = (if (rotated) width else height).coerceAtLeast(2)
+        val w = (if (rotated) height else displayWidth).coerceAtLeast(2)
+        val h = (if (rotated) displayWidth else height).coerceAtLeast(2)
         val (sw, sh) = when {
             videoResolution > 0 && minOf(w, h) > videoResolution -> {
                 val scale = videoResolution.toDouble() / minOf(w, h)
@@ -88,6 +97,15 @@ object MorphNative {
             else -> w to h
         }
         return (sw / 2 * 2).coerceAtLeast(2) to (sh / 2 * 2).coerceAtLeast(2)
+    }
+
+    /** "32:27" -> 1.185. Square, unknown ("0:1", "N/A") or absurd ratios count as 1. */
+    private fun sampleAspect(sar: String?): Double {
+        val parts = sar?.split(':') ?: return 1.0
+        val num = parts.getOrNull(0)?.toDoubleOrNull() ?: return 1.0
+        val den = parts.getOrNull(1)?.toDoubleOrNull() ?: return 1.0
+        if (num <= 0 || den <= 0) return 1.0
+        return (num / den).takeIf { it in 0.25..4.0 } ?: 1.0
     }
 
     /** Parses ffprobe's "30000/1001" style rate. Falls back to 30 fps for "0/0", VFR oddities or junk. */

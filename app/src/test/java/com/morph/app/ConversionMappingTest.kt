@@ -56,6 +56,66 @@ class ConversionMappingTest {
     }
 
     @Test
+    fun audioBitratePerTargetAndPreset() {
+        // Pinned when audioKbpsFor took over the audio-only tables: these values must not move
+        val expected = mapOf(
+            "mp3" to listOf(320, 192, 128), "m4a" to listOf(256, 192, 128), "aac" to listOf(256, 192, 128),
+            "opus" to listOf(160, 128, 96), "ogg" to listOf(256, 160, 112), "webm" to listOf(192, 128, 96),
+            "mp4" to listOf(256, 160, 96), "mkv" to listOf(256, 160, 96), "mov" to listOf(256, 160, 96)
+        )
+        for ((target, kbps) in expected) {
+            for (preset in 0..2) {
+                assertEquals("$target/$preset", kbps[preset], MorphEngine.audioKbpsFor(target, preset))
+                if (ConversionCapabilityManager.isAudioOnlyTarget(target)) {
+                    val args = MorphEngine.buildFFmpegQualityArgs("mp4", target, preset, 4_000_000L)
+                    assertTrue("$target/$preset: $args", args.contains("-b:a ${kbps[preset]}k"))
+                }
+            }
+        }
+    }
+
+    @Test
+    fun sourceAudioIsKeptWhenTheTargetHoldsIt() {
+        // High keeps any phone-playable track the target holds: no quality loss, no AAC encode time
+        assertTrue(MorphEngine.shouldCopyAudio("mp4", 0, listOf("aac"), 320_000L))
+        assertTrue(MorphEngine.shouldCopyAudio("mkv", 0, listOf("aac"), null)) // MKV sources often lack a stream bitrate
+        assertTrue(MorphEngine.shouldCopyAudio("webm", 0, listOf("opus"), null))
+        assertTrue(MorphEngine.shouldCopyAudio("m4a", 0, listOf("aac"), 320_000L))
+        // Medium/Low keep it only when it is already at or under their bitrate
+        assertFalse(MorphEngine.shouldCopyAudio("mp4", 1, listOf("aac"), 320_000L))
+        assertTrue(MorphEngine.shouldCopyAudio("mp4", 1, listOf("aac"), 128_000L))
+        assertFalse(MorphEngine.shouldCopyAudio("mp4", 2, listOf("aac"), null))
+        assertFalse(MorphEngine.shouldCopyAudio("mp4", 3, listOf("aac"), 128_000L)) // Instant decides on its own
+        // Codecs the container can't hold, or that many phones can't play, are re-encoded
+        assertFalse(MorphEngine.shouldCopyAudio("mp4", 0, listOf("opus"), 128_000L))
+        assertFalse(MorphEngine.shouldCopyAudio("mkv", 0, listOf("dts"), 1_500_000L))
+        assertFalse(MorphEngine.shouldCopyAudio("webm", 0, listOf("aac"), 128_000L))
+        assertFalse(MorphEngine.shouldCopyAudio("avi", 0, listOf("mp3"), 128_000L))
+        assertFalse(MorphEngine.shouldCopyAudio("mp3", 0, listOf("aac"), 128_000L))
+        assertFalse(MorphEngine.shouldCopyAudio("gif", 0, listOf("aac"), 128_000L))
+        assertFalse(MorphEngine.shouldCopyAudio("m4a", 0, listOf("alac"), 900_000L))
+        assertFalse(MorphEngine.shouldCopyAudio("ogg", 0, listOf("flac"), 900_000L))
+        assertTrue(MorphEngine.shouldCopyAudio("flac", 0, listOf("flac"), 900_000L))
+        assertTrue(MorphEngine.shouldCopyAudio("wav", 0, listOf("pcm_s16le"), 1_411_000L))
+        // No track, or several: the FFmpeg path and the x264 mux (1:a:0) must use the same one
+        assertFalse(MorphEngine.shouldCopyAudio("mp4", 0, emptyList(), null))
+        assertFalse(MorphEngine.shouldCopyAudio("mp4", 0, listOf("aac", "aac"), 128_000L))
+
+        // The command copies instead of encoding
+        for (target in listOf("mp4", "mkv", "mov")) {
+            val args = MorphEngine.buildFFmpegQualityArgs("mp4", target, 0, 4_000_000L, videoEncoder = "libopenh264", copyAudio = true)
+            assertTrue(args, args.contains("-c:a copy"))
+            assertFalse(args, args.contains("-b:a"))
+        }
+        val webm = MorphEngine.buildFFmpegQualityArgs("mkv", "webm", 0, 4_000_000L, videoEncoder = "libvpx-vp9", copyAudio = true)
+        assertTrue(webm, webm.contains("-c:a copy") && !webm.contains("libopus"))
+        val m4a = MorphEngine.buildFFmpegQualityArgs("mp4", "m4a", 0, 4_000_000L, copyAudio = true)
+        assertTrue(m4a, m4a.contains("-vn") && m4a.contains("-c:a copy") && m4a.contains("+faststart") && !m4a.contains("-b:a"))
+        // Without copyAudio nothing changes
+        assertTrue(MorphEngine.buildFFmpegQualityArgs("mp4", "mp4", 0, 4_000_000L, videoEncoder = "libopenh264").contains("-c:a aac"))
+    }
+
+    @Test
     fun videoTargetsOnlyUseEncodersShippedInFfmpegKitFull() {
         // Regression: the LGPL build has no libx264, so asking for it failed every MP4/MKV/MOV encode
         for (target in listOf("mp4", "mkv", "mov")) {
@@ -197,7 +257,8 @@ class ConversionMappingTest {
     fun nativeX264PlanMatchesTheFfmpegFilters() {
         // No .so in a JVM test: the bridge must report "not available" instead of crashing
         assertFalse(MorphNative.isAvailable)
-        assertEquals("veryfast", MorphNative.x264PresetFor(0))
+        // High = superfast too: veryfast ran at 14.3 fps vs 19.2 fps on a Redmi 15 (1080p HEVC source)
+        assertEquals("superfast", MorphNative.x264PresetFor(0))
         assertEquals("superfast", MorphNative.x264PresetFor(1))
         assertEquals("ultrafast", MorphNative.x264PresetFor(2))
         // Portrait phone clip stored 1920x1080 + rotate 90: frames reach x264 upright
@@ -214,6 +275,20 @@ class ConversionMappingTest {
         assertEquals(30 to 1, MorphNative.frameRate("0/0", 0))
         assertEquals(30 to 1, MorphNative.frameRate(null, 0))
         assertEquals(24 to 1, MorphNative.frameRate("30/1", 24))
+    }
+
+    @Test
+    fun anamorphicSourcesReachX264AsSquarePixels() {
+        // The raw pipe carries no aspect ratio, so non-square pixels must be resized to their display shape
+        assertEquals(1920 to 1080, MorphNative.outputSize(1440, 1080, 0, 0, 0, "4:3")) // HDV
+        assertEquals(852 to 480, MorphNative.outputSize(720, 480, 0, 0, 0, "32:27")) // NTSC DVD 16:9
+        assertEquals(1080 to 1920, MorphNative.outputSize(1440, 1080, 90, 0, 0, "4:3")) // rotated: SAR applies before the turn
+        assertEquals(1280 to 720, MorphNative.outputSize(1440, 1080, 0, 0, 720, "4:3"))
+        assertEquals(854 to 480, MorphNative.outputSize(720, 480, 0, 2, 0, "32:27"))
+        // Square, unknown or nonsense ratios leave phone recordings untouched
+        for (sar in listOf(null, "1:1", "0:1", "N/A", "1:0", "100:1", "")) {
+            assertEquals("sar=$sar", 1920 to 1080, MorphNative.outputSize(1920, 1080, 0, 0, 0, sar))
+        }
     }
 
     @Test

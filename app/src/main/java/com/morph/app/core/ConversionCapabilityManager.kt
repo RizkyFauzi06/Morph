@@ -50,6 +50,24 @@ object ConversionCapabilityManager {
     fun isAudioOnlyTarget(targetExt: String): Boolean =
         targetExt.trim().removePrefix(".").lowercase() in audioOnlyTargets
 
+    /**
+     * Whether a re-encode into [targetExt] may keep the source audio as-is (-c:a copy).
+     * Audio targets: the codecs Instant accepts. Video files: only codecs the container holds AND
+     * every Android phone decodes, so a copy never swaps a playable AAC track for a silent DTS/AC3 one.
+     */
+    fun canKeepAudioCodec(targetExt: String, codec: String): Boolean {
+        val tgt = targetExt.trim().removePrefix(".").lowercase()
+        val c = codec.lowercase()
+        // ALAC in M4A and FLAC in Ogg don't play on every Android version: only FLAC -> FLAC keeps them
+        if (tgt in audioOnlyTargets) return c in audioCopyCodecs(tgt) && (c !in setOf("alac", "flac") || tgt == "flac")
+        return c in when (tgt) {
+            "mp4", "mov" -> setOf("aac", "mp3")
+            "mkv" -> setOf("aac", "mp3", "opus", "vorbis")
+            "webm" -> setOf("opus", "vorbis")
+            else -> emptySet()
+        }
+    }
+
     /** Image sources whose groups can be merged into one PDF across groups. */
     private val pdfMergeImageSources = setOf("png", "jpg", "jpeg", "webp")
 
