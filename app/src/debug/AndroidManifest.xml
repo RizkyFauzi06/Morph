@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!--
+            Debug builds only: on-device stress run of every conversion route.
+            adb shell am start -n com.morph.app/.StressRunActivity
+            DUMP is held by adb's shell user, never by third-party apps, so only adb can start it.
+        -->
+        <activity
+            android:name=".StressRunActivity"
+            android:exported="true"
+            android:permission="android.permission.DUMP"
+            android:theme="@android:style/Theme.DeviceDefault" />
+    </application>
+</manifest>

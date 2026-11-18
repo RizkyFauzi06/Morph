@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.pdf.PdfDocument
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.Build
@@ -36,10 +35,16 @@ object MorphEngine {
     // Encoder names. Hardware ones are FFmpeg's MediaCodec wrappers; X264_NATIVE is x264 (NEON)
     // through MorphNative and never appears on an FFmpeg command line.
     private const val HW_H264 = "h264_mediacodec"
-    private const val HW_VP9 = "vp9_mediacodec"
     internal const val X264_NATIVE = "x264-native"
     private const val SW_H264 = "libopenh264"
-    private const val SW_VP9 = "libvpx-vp9"
+    /**
+     * WebM is always VP8 in software. Both VP9 encoders failed frame-counted checks on a Redmi 15:
+     * libvpx-vp9 (ffmpeg-kit 8.1.7) writes VP9 that no decoder reads (FFmpeg, libvpx, MediaCodec; WebM
+     * or IVF; any thread/alt-ref/lossless/CRF setting), and vp9_mediacodec loses its last 30-60 frames
+     * (a 1 s clip decodes to nothing). VP8 was complete, faster than vp8_mediacodec (1080p 10 s:
+     * 7.4 s vs 12.7 s) and plays on every Android version.
+     */
+    private const val SW_WEBM = "libvpx"
     /** Stand-in for targets with a single fixed encoder (audio, GIF, AVI) and for Instant copy. */
     internal const val DEFAULT_ENCODER = "default"
     private val H264_TARGETS = setOf("mp4", "mkv", "mov")
@@ -59,7 +64,7 @@ object MorphEngine {
     ): List<String> {
         val chain = when (targetExt) {
             in H264_TARGETS -> listOfNotNull(HW_H264, X264_NATIVE.takeIf { nativeX264 }, SW_H264)
-            "webm" -> listOf(HW_VP9, SW_VP9)
+            "webm" -> listOf(SW_WEBM)
             else -> return listOf(DEFAULT_ENCODER)
         }
         return chain.filterNot { isHardwareEncoder(it) && hardwareTooSlowFor(hwCapBps(it), targetVideoBps) }
@@ -73,17 +78,16 @@ object MorphEngine {
 
     /**
      * Encoder-only flags. MediaCodec: CBR so drivers that honour it hit -b:v, -g for a ~2 s GOP
-     * (FFmpeg's default is 1 frame). libvpx-vp9: realtime speed 6-8 (speed 4 ran at 3.7 fps on a
-     * Redmi 15; >= 5 switches libvpx to its fast non-RD mode search), row-mt + 4 tile columns for
-     * all cores, no lookahead. BT.709 tags so nothing is labelled "gbr" (RGB).
+     * (FFmpeg's default is 1 frame). VP8 (libvpx): realtime speed 6-8, no lookahead; VP9-only options
+     * (-row-mt, -tile-columns) must not be passed to it. BT.709 tags so nothing is labelled "gbr" (RGB).
      */
     internal fun videoCodecArgs(encoder: String, preset: Int): String = when (encoder) {
-        HW_H264, HW_VP9 -> "-c:v $encoder -bitrate_mode cbr -g 60 $BT709_TAGS"
-        SW_VP9 -> "-c:v $SW_VP9 -deadline realtime -cpu-used ${vp9Speed(preset)} -row-mt 1 -tile-columns 2 -lag-in-frames 0 $BT709_TAGS"
+        HW_H264 -> "-c:v $encoder -bitrate_mode cbr -g 60 $BT709_TAGS"
+        SW_WEBM -> "-c:v $SW_WEBM -deadline realtime -cpu-used ${vpxSpeed(preset)} -lag-in-frames 0 $BT709_TAGS"
         else -> "-c:v $encoder $BT709_TAGS"
     }
 
-    internal fun vp9Speed(preset: Int): Int = when (preset) {
+    internal fun vpxSpeed(preset: Int): Int = when (preset) {
         1 -> 7
         2 -> 8
         else -> 6
@@ -146,6 +150,25 @@ object MorphEngine {
     /** HFX-4A: longest rendered PDF page edge (~A4 at 300 DPI) to stay clear of OutOfMemoryError. */
     private const val MAX_PDF_RENDER_EDGE_PX = 2480f
 
+    /** Which converter handles a conversion. Pure, so the whole offered matrix is unit-tested. */
+    internal enum class Route { PDF_TO_IMAGES, PDF_COMPRESS, IMAGES_TO_PDF, SVG_TO_IMAGE, EPUB_TO_TXT, TXT_TO_EPUB, IMAGE, MEDIA }
+
+    /** Images Android decodes (decodeBitmap). SVG has its own route; TIFF has no Android decoder. */
+    internal fun isDecodableImage(ext: String): Boolean =
+        FileCategoryManager.getCategory(ext) == FileCategory.IMAGE && ext !in setOf("svg", "tiff", "tif")
+
+    internal fun routeFor(inputExt: String, targetExt: String): Route = when {
+        inputExt == "pdf" && targetExt in listOf("jpg", "jpeg", "png", "webp") -> Route.PDF_TO_IMAGES
+        inputExt == "pdf" && targetExt == "pdf" -> Route.PDF_COMPRESS
+        // GIF, ICO and HEIC/HEIF used to fall through to FFmpeg, whose audio recipe ("-vn") always failed
+        targetExt == "pdf" && isDecodableImage(inputExt) -> Route.IMAGES_TO_PDF
+        inputExt == "svg" && targetExt in listOf("png", "jpg", "jpeg", "webp") -> Route.SVG_TO_IMAGE
+        inputExt == "epub" && targetExt == "txt" -> Route.EPUB_TO_TXT
+        inputExt == "txt" && targetExt == "epub" -> Route.TXT_TO_EPUB
+        isDecodableImage(inputExt) && targetExt in listOf("png", "jpg", "jpeg", "webp", "bmp") -> Route.IMAGE
+        else -> Route.MEDIA // video and audio through FFmpeg
+    }
+
     sealed class ConvertState {
         object Idle : ConvertState()
         data class Converting(val format: String, val progress: Int) : ConvertState()
@@ -175,63 +198,49 @@ object MorphEngine {
         val resultDeferred = CompletableDeferred<String>()
 
         try {
-            when {
-                // Route 1: PDF Document Input
-                inputExt == "pdf" && targetExt in listOf("jpg", "jpeg", "png", "webp") -> {
+            when (routeFor(inputExt, targetExt)) {
+                Route.PDF_TO_IMAGES -> {
                     convertPdfToImages(context, inputUri, targetExt, originalFileName, qualityPreset, onProgress,
                         { path -> resultDeferred.complete(path) },
                         { err -> resultDeferred.completeExceptionally(IOException(err)) }
                     )
                 }
-                inputExt == "pdf" && targetExt == "pdf" -> {
+                Route.PDF_COMPRESS -> {
                     compressPdf(context, inputUri, originalFileName, qualityPreset, onProgress, onResultDetail,
                         { path -> resultDeferred.complete(path) },
                         { err -> resultDeferred.completeExceptionally(IOException(err)) }
                     )
                 }
-
-                // Route 2: Image to PDF
-                targetExt == "pdf" && inputExt in listOf("jpg", "jpeg", "png", "webp", "bmp", "heic", "heif") -> {
+                Route.IMAGES_TO_PDF -> {
                     resultDeferred.complete(
                         mergeImagesToPdf(context, listOf(inputUri), originalFileName, onProgress = onProgress)
                     )
                 }
-
-                // Route 3: Vector SVG to Bitmap Image
-                inputExt == "svg" && targetExt in listOf("png", "jpg", "jpeg", "webp") -> {
+                Route.SVG_TO_IMAGE -> {
                     convertSvgToImage(context, inputUri, targetExt, originalFileName, qualityPreset, onProgress,
                         { path -> resultDeferred.complete(path) },
                         { err -> resultDeferred.completeExceptionally(IOException(err)) }
                     )
                 }
-
-                // Route 4: E-Book EPUB to TXT
-                inputExt == "epub" && targetExt == "txt" -> {
+                Route.EPUB_TO_TXT -> {
                     convertEpubToTxt(context, inputUri, originalFileName, onProgress,
                         { path -> resultDeferred.complete(path) },
                         { err -> resultDeferred.completeExceptionally(IOException(err)) }
                     )
                 }
-
-                // Route 4b: Plain text TXT to EPUB (PBI 5.4)
-                inputExt == "txt" && targetExt == "epub" -> {
+                Route.TXT_TO_EPUB -> {
                     convertTxtToEpub(context, inputUri, originalFileName, onProgress,
                         { path -> resultDeferred.complete(path) },
                         { err -> resultDeferred.completeExceptionally(IOException(err)) }
                     )
                 }
-
-                // Route 5: Native Raster Image Converter
-                inputExt in listOf("png", "jpg", "jpeg", "webp", "bmp") &&
-                    targetExt in listOf("png", "jpg", "jpeg", "webp", "bmp") -> {
+                Route.IMAGE -> {
                     convertImageNatively(context, inputUri, targetExt, originalFileName, qualityPreset, onProgress,
                         { path -> resultDeferred.complete(path) },
                         { err -> resultDeferred.completeExceptionally(IOException(err)) }
                     )
                 }
-
-                // Route 6: Multimedia (Video & Audio) via FFmpeg Engine
-                else -> {
+                Route.MEDIA -> {
                     convertMediaWithFFmpeg(context, inputUri, inputExt, targetExt, originalFileName, qualityPreset, videoResolution, videoFps, onProgress, onResultDetail,
                         { path -> resultDeferred.complete(path) },
                         { err -> resultDeferred.completeExceptionally(IOException(err)) }
@@ -548,7 +557,8 @@ object MorphEngine {
         when {
             // Scale the short side to the target, never upscale, keep aspect ratio
             videoResolution > 0 -> filters += "scale='if(gt(iw,ih),-2,min($videoResolution,iw))':'if(gt(iw,ih),min($videoResolution,ih),-2)'"
-            preset == 2 -> filters += "scale='if(gt(iw,ih),854,-2)':'if(gt(iw,ih),-2,854)'"
+            // Low: long side 854 at most; smaller clips keep their size (upscaling only cost time and bytes)
+            preset == 2 -> filters += "scale='if(gt(iw,ih),min(854,iw),-2)':'if(gt(iw,ih),-2,min(854,ih))'"
         }
         // With an explicit output format, convert once here (BT.709 matrix) so swscale doesn't detour via RGB
         filters += if (outPixFmt != null) {
@@ -790,6 +800,9 @@ object MorphEngine {
         fun audioArgs(encoder: String): String = when {
             copyAudio -> "-c:a copy"
             encoder == "pcm_s16le" || encoder == "flac" -> "-c:a $encoder" // lossless: no bitrate
+            // libvorbis rejects bitrates above its per-channel limit (mono 256k, 112k at 8 kHz). Quality
+            // q8/q5/q3 is ~256/160/112 kbps stereo and valid for any channel count or sample rate.
+            encoder == "libvorbis" -> "-c:a libvorbis -q:a ${when (preset) { 1 -> 5; 2 -> 3; else -> 8 }}"
             else -> "-c:a $encoder -b:a ${audioKbpsFor(targetExt, preset)}k"
         }
 
@@ -817,20 +830,19 @@ object MorphEngine {
                 else -> 240
             }
             val rotateArg = if (videoRotation != 0) "-metadata:s:v rotate=0 " else ""
-            val filterGraph = "fps=$fps,scale='if(gt(iw,ih),$maxDim,-2)':'if(gt(iw,ih),-2,$maxDim)':flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse"
+            val filterGraph = "fps=$fps,scale='if(gt(iw,ih),min($maxDim,iw),-2)':'if(gt(iw,ih),-2,min($maxDim,ih))':flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse"
             return "-an -sn -dn $rotateArg-vf \"$filterGraph\""
         }
 
         val rotateArg = if (videoRotation != 0) "-metadata:s:v rotate=0 " else ""
         val videoArgs = buildVideoFilterArgs(preset, videoResolution, videoFps)
 
-        // Target: WebM (vp9_mediacodec, else libvpx-vp9)
+        // Target: WebM (always VP8 libvpx, see SW_WEBM)
         if (targetExt == "webm") {
-            val encoder = if (videoEncoder == HW_VP9) HW_VP9 else SW_VP9
+            val encoder = SW_WEBM
             val filters = buildVideoFilterArgs(preset, videoResolution, videoFps, encoderPixelFormat(encoder))
             val bv = videoBitrateForPreset(preset, videoBitrateBps)
-            // yuv420p (format= in the filter) keeps VP9 at profile 0: 10-bit sources would become
-            // profile 2, which many Android players render as a black screen
+            // yuv420p (format= in the filter): VP8 only takes 8-bit 4:2:0, so 10-bit sources are converted
             return "$filters${videoCodecArgs(encoder, preset)} -b:v $bv ${audioArgs("libopus")} $rotateArg"
         }
 
@@ -1110,31 +1122,32 @@ object MorphEngine {
     ): String = withContext(Dispatchers.IO) {
         val strings = AppStrings.get()
         val tempOutput = OutputManager.createTempFile(context, "img_merge_pdf", "pdf")
-        val pdfDocument = PdfDocument()
         activeJob = coroutineContext[Job] // so cancelCurrentConversion() can stop a merge too
+        // JPEG pages via JpegPdfWriter, not PdfDocument: Skia stores bitmaps as raw Flate pixels, which
+        // made 30 photos (2.9 MB) a 13.5 MB PDF on a Redmi 15. Page size stays 1 px = 1 pt as before.
+        val jpegQuality = when (qualityPreset) {
+            1 -> 85 // Medium
+            2 -> 75 // Low
+            else -> 92 // High
+        }
 
         try {
             val total = inputUris.size
-            for ((index, uri) in inputUris.withIndex()) {
-                currentCoroutineContext().ensureActive()
-                val percent = ((index.toFloat() / total) * 85).toInt() + 5
-                updateProgress("pdf", strings.engineBuildingPdfPage(index + 1, total), percent, onProgress)
+            FileOutputStream(tempOutput).buffered().use { out ->
+                JpegPdfWriter(out).use { writer ->
+                    for ((index, uri) in inputUris.withIndex()) {
+                        currentCoroutineContext().ensureActive()
+                        val percent = ((index.toFloat() / total) * 85).toInt() + 5
+                        updateProgress("pdf", strings.engineBuildingPdfPage(index + 1, total), percent, onProgress)
 
-                val bitmap = decodeBitmap(context, uri)
-
-                val pageInfo = PdfDocument.PageInfo.Builder(bitmap.width, bitmap.height, index + 1).create()
-                val page = pdfDocument.startPage(pageInfo)
-                page.canvas.drawBitmap(bitmap, 0f, 0f, null)
-                pdfDocument.finishPage(page)
-                bitmap.recycle()
+                        val bitmap = opaqueOnWhite(decodeBitmap(context, uri))
+                        val jpeg = ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality, it) }.toByteArray()
+                        writer.addPage(jpeg, bitmap.width, bitmap.height, bitmap.width.toFloat(), bitmap.height.toFloat())
+                        bitmap.recycle()
+                    }
+                    updateProgress("pdf", strings.engineSavingPdfDoc, 95, onProgress)
+                }
             }
-
-            updateProgress("pdf", strings.engineSavingPdfDoc, 95, onProgress)
-
-            FileOutputStream(tempOutput).use { fos ->
-                pdfDocument.writeTo(fos)
-            }
-            pdfDocument.close()
 
             val finalPath = OutputManager.finalizeOutput(context, tempOutput, originalFileName, "pdf")
             OutputManager.cleanTempFiles(tempOutput)
@@ -1148,9 +1161,6 @@ object MorphEngine {
                 throw IOException(strings.engineErrSaveMergedPdf)
             }
         } catch (e: Exception) {
-            try {
-                pdfDocument.close()
-            } catch (_: Exception) {}
             OutputManager.cleanTempFiles(tempOutput)
             withContext(Dispatchers.Main) {
                 val errMsg = strings.engineErrMergePdf(e.message ?: "")
@@ -1183,17 +1193,7 @@ object MorphEngine {
             updateProgress(targetExt, strings.engineCompressingImage, 70, onProgress)
 
             // JPG and 24-bit BMP have no alpha: composite on white, or transparent pixels turn black
-            val needsOpaque = targetExt in listOf("jpg", "jpeg", "bmp")
-            val finalBitmap = if (needsOpaque && bitmap.hasAlpha()) {
-                val opaqueBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
-                val canvas = Canvas(opaqueBitmap)
-                canvas.drawColor(Color.WHITE)
-                canvas.drawBitmap(bitmap, 0f, 0f, null)
-                bitmap.recycle()
-                opaqueBitmap
-            } else {
-                bitmap
-            }
+            val finalBitmap = if (targetExt in listOf("jpg", "jpeg", "bmp")) opaqueOnWhite(bitmap) else bitmap
 
             if (targetExt == "bmp") {
                 BmpWriter.writeBitmapAsBmp(finalBitmap, tempOutput)
@@ -1378,6 +1378,18 @@ object MorphEngine {
     private const val MAX_IMAGE_EDGE_PX = 8192
 
     /** Decodes an image URI as a software bitmap, downscaled so its longest edge fits MAX_IMAGE_EDGE_PX. */
+    /** [bitmap] itself when it has no alpha, else a copy on white (the original is recycled). */
+    private fun opaqueOnWhite(bitmap: Bitmap): Bitmap {
+        if (!bitmap.hasAlpha()) return bitmap
+        val opaque = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+        Canvas(opaque).apply {
+            drawColor(Color.WHITE)
+            drawBitmap(bitmap, 0f, 0f, null)
+        }
+        bitmap.recycle()
+        return opaque
+    }
+
     internal fun decodeBitmap(context: Context, uri: Uri): Bitmap {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val source = android.graphics.ImageDecoder.createSource(context.contentResolver, uri)

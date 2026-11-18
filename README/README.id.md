@@ -128,7 +128,7 @@
       <td><strong>Video Conversion</strong></td>
       <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>AVI</code></td>
       <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>GIF</code></td>
-      <td>Mendukung <em>stream copy</em> lossless <strong>Instant</strong> bila codec sumber cocok dengan kontainer tujuan (jika tidak, otomatis di-<em>encode</em> ulang), encoding H.264 cepat, opsi resolusi (1080p/720p/480p) dan frame rate (60/30/24 fps), encoding VP9/Opus untuk WebM, serta ekspor GIF animasi dengan rasio aspek terjaga.</td>
+      <td>Mendukung <em>stream copy</em> lossless <strong>Instant</strong> bila codec sumber cocok dengan kontainer tujuan (jika tidak, otomatis di-<em>encode</em> ulang), encoding H.264 cepat, opsi resolusi (1080p/720p/480p) dan frame rate (60/30/24 fps), encoding VP8/Opus untuk WebM (bisa diputar di semua versi Android), serta ekspor GIF animasi dengan rasio aspek terjaga.</td>
     </tr>
     <tr>
       <td><strong>Video to Audio Extraction</strong></td>
@@ -293,7 +293,7 @@ cd Morph
       <li><strong>FFmpegKit Full (8.1.7)</strong> — Pemrosesan audio/video (Lisensi: <strong>GPL-3.0 / LGPL-3.0</strong>).</li>
       <li><strong>x264 (build 165)</strong> — Encoder H.264 software native (NEON) di <code>libmorph-native.so</code> (Lisensi: <strong>GPL-2.0-or-later</strong>).</li>
       <li><strong>AndroidSVG (1.4)</strong> oleh Paul LeBeau — Rendering grafik vektor SVG (Lisensi: <strong>Apache License 2.0</strong>).</li>
-      <li><strong>Android Native SDK</strong> — <code>PdfRenderer</code>, <code>PdfDocument</code>, &amp; <code>java.util.zip</code> untuk rendering PDF, penguraian EPUB, dan pembuatan EPUB.</li>
+      <li><strong>Android Native SDK</strong> — <code>PdfRenderer</code>, penulis PDF halaman-JPEG kecil, &amp; <code>java.util.zip</code> untuk rendering dan penulisan PDF, penguraian EPUB, dan pembuatan EPUB.</li>
     </ul>
   </li>
   <li><strong>Lisensi Proyek Morph:</strong> Didistribusikan di bawah <a href="../LICENSE"><strong>GNU General Public License v3.0 (GPL-3.0)</strong></a>.</li>

@@ -150,7 +150,8 @@ object ConversionCapabilityManager {
             category == FileCategory.AUDIO -> {
                 targets.addAll(listOf("mp3", "wav", "flac", "aac", "m4a", "ogg", "opus"))
             }
-            category == FileCategory.IMAGE -> {
+            // Android has no TIFF decoder, so every TIFF conversion failed: offer none
+            category == FileCategory.IMAGE && originalExt !in setOf("tiff", "tif") -> {
                 targets.addAll(listOf("png", "jpg", "webp", "bmp", "pdf"))
             }
             category == FileCategory.DOCUMENT -> {
@@ -165,8 +166,9 @@ object ConversionCapabilityManager {
             else -> {}
         }
 
-        // Allow compression in same format where supported (video, raster image, pdf)
-        val isCompressible = category == FileCategory.VIDEO ||
+        // Allow compression in same format where the engine can write it. FLV/WMV/3GP/M4V/TS/OGV
+        // have no FFmpeg recipe ("-vn" fallback, always failed); ".m4v" is even a raw MPEG-4 muxer.
+        val isCompressible = (category == FileCategory.VIDEO && originalExt in setOf("mp4", "mkv", "mov", "webm", "avi")) ||
                 (category == FileCategory.IMAGE && originalExt in setOf("jpg", "jpeg", "png", "webp")) ||
                 originalExt == "pdf"
 

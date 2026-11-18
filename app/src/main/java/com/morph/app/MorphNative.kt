@@ -90,8 +90,8 @@ object MorphNative {
                 val scale = videoResolution.toDouble() / minOf(w, h)
                 if (w > h) Math.round(w * scale).toInt() to videoResolution else videoResolution to Math.round(h * scale).toInt()
             }
-            // Low: same rule as the FFmpeg filter, long side 854 (landscape: width, otherwise height)
-            videoResolution <= 0 && qualityPreset == 2 -> {
+            // Low: same rule as the FFmpeg filter, long side 854 at most (landscape: width, otherwise height)
+            videoResolution <= 0 && qualityPreset == 2 && maxOf(w, h) > 854 -> {
                 if (w > h) 854 to Math.round(h * 854.0 / w).toInt() else Math.round(w * 854.0 / h).toInt() to 854
             }
             else -> w to h

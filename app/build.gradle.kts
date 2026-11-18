@@ -36,6 +36,13 @@ android {
                 abiFilters += "arm64-v8a"
             }
         }
+
+        // Package only what FFmpegKit supports. Compose's libandroidx.graphics.path.so also comes for
+        // armeabi-v7a/x86, which made the APK installable on 32-bit phones where FFmpegKit can't load
+        // and the first video or audio conversion would crash. 32-bit phones now refuse the install.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
     }
 
     buildFeatures {

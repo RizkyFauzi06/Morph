@@ -37,7 +37,8 @@ object EpubBuilder {
 
     /**
      * Decodes TXT bytes as UTF-8 (BOM stripped) and falls back to Windows-1252 for legacy
-     * ANSI files instead of producing U+FFFD garbage.
+     * ANSI files instead of producing U+FFFD garbage. A UTF-8 file with a few damaged bytes
+     * (e.g. cut mid-character) stays UTF-8: only those bytes become U+FFFD, not the whole book.
      */
     fun decodeText(bytes: ByteArray): String {
         val text = try {
@@ -47,7 +48,11 @@ object EpubBuilder {
                 .decode(ByteBuffer.wrap(bytes))
                 .toString()
         } catch (_: Exception) {
-            String(bytes, Charset.forName("windows-1252"))
+            val lenient = String(bytes, Charsets.UTF_8)
+            val broken = lenient.count { it == '\uFFFD' }
+            val validNonAscii = lenient.count { it.code >= 0x80 } - broken
+            // Mostly valid multi-byte text = damaged UTF-8; mostly broken = a legacy ANSI file
+            if (validNonAscii > broken * 10) lenient else String(bytes, Charset.forName("windows-1252"))
         }
         return text.removePrefix("\uFEFF")
     }

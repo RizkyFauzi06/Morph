@@ -66,10 +66,22 @@ class ConversionMappingTest {
         for ((target, kbps) in expected) {
             for (preset in 0..2) {
                 assertEquals("$target/$preset", kbps[preset], MorphEngine.audioKbpsFor(target, preset))
-                if (ConversionCapabilityManager.isAudioOnlyTarget(target)) {
+                if (ConversionCapabilityManager.isAudioOnlyTarget(target) && target != "ogg") {
                     val args = MorphEngine.buildFFmpegQualityArgs("mp4", target, preset, 4_000_000L)
                     assertTrue("$target/$preset: $args", args.contains("-b:a ${kbps[preset]}k"))
                 }
+            }
+        }
+    }
+
+    @Test
+    fun vorbisUsesQualityModeSoMonoAndLowRatesWork() {
+        // libvorbis rejects -b:a 256k for mono and 112k at 8 kHz (Redmi 15: every mono -> OGG failed).
+        // Its quality scale has no such limits; q8/q5/q3 are ~256/160/112 kbps for stereo.
+        for ((preset, q) in listOf(0 to 8, 1 to 5, 2 to 3)) {
+            for (source in listOf("mp4", "mp3", "amr", "wav")) {
+                val args = MorphEngine.buildFFmpegQualityArgs(source, "ogg", preset, 4_000_000L)
+                assertTrue(args, args.contains("-c:a libvorbis -q:a $q") && !args.contains("-b:a"))
             }
         }
     }
@@ -107,7 +119,7 @@ class ConversionMappingTest {
             assertTrue(args, args.contains("-c:a copy"))
             assertFalse(args, args.contains("-b:a"))
         }
-        val webm = MorphEngine.buildFFmpegQualityArgs("mkv", "webm", 0, 4_000_000L, videoEncoder = "libvpx-vp9", copyAudio = true)
+        val webm = MorphEngine.buildFFmpegQualityArgs("mkv", "webm", 0, 4_000_000L, videoEncoder = "libvpx", copyAudio = true)
         assertTrue(webm, webm.contains("-c:a copy") && !webm.contains("libopus"))
         val m4a = MorphEngine.buildFFmpegQualityArgs("mp4", "m4a", 0, 4_000_000L, copyAudio = true)
         assertTrue(m4a, m4a.contains("-vn") && m4a.contains("-c:a copy") && m4a.contains("+faststart") && !m4a.contains("-b:a"))
@@ -144,19 +156,22 @@ class ConversionMappingTest {
     }
 
     @Test
-    fun webmTriesHardwareVp9ThenFastRealtimeLibvpx() {
-        val hw = MorphEngine.buildFFmpegQualityArgs("mp4", "webm", 1, 4_000_000L, videoEncoder = "vp9_mediacodec")
-        assertTrue(hw, hw.contains("-c:v vp9_mediacodec -bitrate_mode cbr -g 60"))
-        assertTrue(hw, hw.contains("format=nv12"))
+    fun webmIsAlwaysSoftwareVp8() {
+        // Both VP9 encoders were broken on a Redmi 15 (frame-counted): libvpx-vp9 output never decodes,
+        // vp9_mediacodec loses its last 30-60 frames (a 1 s clip decodes to nothing). VP8 was complete
+        // and faster than VP8 hardware (1080p 10 s: 7.4 s vs 12.7 s).
+        for (asked in listOf("vp9_mediacodec", "libvpx-vp9", "libvpx", MorphEngine.DEFAULT_ENCODER)) {
+            val args = MorphEngine.buildFFmpegQualityArgs("mp4", "webm", 1, 4_000_000L, videoEncoder = asked)
+            assertTrue(args, args.contains("-c:v libvpx ") && !args.contains("vp9"))
+        }
         for (preset in 0..2) {
-            val sw = MorphEngine.buildFFmpegQualityArgs("mp4", "webm", preset, 4_000_000L, videoEncoder = "libvpx-vp9")
-            // Profile 0 (8-bit 4:2:0) avoids the black-screen playback of 10-bit sources
+            val sw = MorphEngine.buildFFmpegQualityArgs("mp4", "webm", preset, 4_000_000L, videoEncoder = "libvpx")
+            assertTrue(sw, sw.contains("-c:v libvpx ") && !sw.contains("libvpx-vp9"))
             assertTrue(sw, sw.contains("format=yuv420p"))
-            // Speed 4 ran at 3.7 fps on the Redmi; realtime >= 5 uses libvpx's fast mode search
-            assertTrue(sw, sw.contains("-deadline realtime -cpu-used ${MorphEngine.vp9Speed(preset)}"))
-            assertTrue(sw, MorphEngine.vp9Speed(preset) >= 5)
-            assertTrue(sw, sw.contains("-row-mt 1 -tile-columns 2 -lag-in-frames 0"))
-            assertFalse("'good' deadline is slower, not faster", sw.contains("-deadline good"))
+            assertTrue(sw, sw.contains("-deadline realtime -cpu-used ${MorphEngine.vpxSpeed(preset)}"))
+            assertTrue(sw, sw.contains("-lag-in-frames 0"))
+            // VP9-only options would make FFmpeg reject the VP8 encoder
+            assertFalse(sw, sw.contains("-row-mt") || sw.contains("-tile-columns"))
             assertTrue(sw, sw.contains("-c:a libopus"))
         }
     }
@@ -180,7 +195,7 @@ class ConversionMappingTest {
         )
         // Without libmorph-native (JVM tests, x86_64, no x264 source): libopenh264 stays the fallback
         assertEquals(listOf("h264_mediacodec", "libopenh264"), MorphEngine.videoEncoderOrder("mkv", 11_000_000L, noCap, nativeX264 = false))
-        assertEquals(listOf("vp9_mediacodec", "libvpx-vp9"), MorphEngine.videoEncoderOrder("webm", 11_000_000L, noCap, nativeX264 = true))
+        assertEquals(listOf("libvpx"), MorphEngine.videoEncoderOrder("webm", 11_000_000L, noCap, nativeX264 = true))
         assertEquals(listOf(MorphEngine.DEFAULT_ENCODER), MorphEngine.videoEncoderOrder("gif", 11_000_000L, noCap, nativeX264 = true))
         assertEquals(listOf(MorphEngine.DEFAULT_ENCODER), MorphEngine.videoEncoderOrder("mp3", 11_000_000L, noCap, nativeX264 = true))
     }
@@ -196,8 +211,8 @@ class ConversionMappingTest {
         )
         // 480p Low (~1.3 Mbps): the cap is enough, keep the fast hardware encoder
         assertEquals("h264_mediacodec", MorphEngine.videoEncoderOrder("mp4", 1_300_000L, caps, nativeX264 = true).first())
-        // A cap on H.264 says nothing about the VP9 block
-        assertEquals("vp9_mediacodec", MorphEngine.videoEncoderOrder("webm", 11_209_000L, caps, nativeX264 = true).first())
+        // WebM has no hardware step, so an H.264 cap never touches it
+        assertEquals(listOf("libvpx"), MorphEngine.videoEncoderOrder("webm", 11_209_000L, caps, nativeX264 = true))
     }
 
     @Test
@@ -284,7 +299,7 @@ class ConversionMappingTest {
         assertEquals(852 to 480, MorphNative.outputSize(720, 480, 0, 0, 0, "32:27")) // NTSC DVD 16:9
         assertEquals(1080 to 1920, MorphNative.outputSize(1440, 1080, 90, 0, 0, "4:3")) // rotated: SAR applies before the turn
         assertEquals(1280 to 720, MorphNative.outputSize(1440, 1080, 0, 0, 720, "4:3"))
-        assertEquals(854 to 480, MorphNative.outputSize(720, 480, 0, 2, 0, "32:27"))
+        assertEquals(852 to 480, MorphNative.outputSize(720, 480, 0, 2, 0, "32:27")) // Low: already under 854, no upscale
         // Square, unknown or nonsense ratios leave phone recordings untouched
         for (sar in listOf(null, "1:1", "0:1", "N/A", "1:0", "100:1", "")) {
             assertEquals("sar=$sar", 1920 to 1080, MorphNative.outputSize(1920, 1080, 0, 0, 0, sar))

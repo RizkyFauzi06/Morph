@@ -658,7 +658,7 @@ private fun OpenSourceLicensesDialog(onDismiss: () -> Unit) {
                 )
 
                 LicenseItemCard(
-                    name = "Android Native SDK (PdfRenderer, PdfDocument, java.util.zip)",
+                    name = "Android Native SDK (PdfRenderer, ImageDecoder, java.util.zip)",
                     license = "Apache License, Version 2.0",
                     copyright = "Copyright The Android Open Source Project"
                 )

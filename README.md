@@ -128,7 +128,7 @@
       <td><strong>Video Conversion</strong></td>
       <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>AVI</code></td>
       <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>GIF</code></td>
-      <td>Supports <strong>Instant</strong> lossless stream copy when the source codecs fit the target container (otherwise it re-encodes automatically), fast H.264 encoding, optional resolution (1080p/720p/480p) and frame rate (60/30/24 fps), VP9/Opus encoding for WebM, and aspect-ratio preserved animated GIF export.</td>
+      <td>Supports <strong>Instant</strong> lossless stream copy when the source codecs fit the target container (otherwise it re-encodes automatically), fast H.264 encoding, optional resolution (1080p/720p/480p) and frame rate (60/30/24 fps), VP8/Opus encoding for WebM (plays on every Android version), and aspect-ratio preserved animated GIF export.</td>
     </tr>
     <tr>
       <td><strong>Video to Audio Extraction</strong></td>
@@ -293,7 +293,7 @@ cd Morph
       <li><strong>FFmpegKit Full (8.1.7)</strong> — Audio/video processing (License: <strong>GPL-3.0 / LGPL-3.0</strong>).</li>
       <li><strong>x264 (build 165)</strong> — Native NEON H.264 software encoder in <code>libmorph-native.so</code> (License: <strong>GPL-2.0-or-later</strong>).</li>
       <li><strong>AndroidSVG (1.4)</strong> by Paul LeBeau — SVG vector graphics rendering (License: <strong>Apache License 2.0</strong>).</li>
-      <li><strong>Android Native SDK</strong> — <code>PdfRenderer</code>, <code>PdfDocument</code>, &amp; <code>java.util.zip</code> for PDF rendering, EPUB parsing, and EPUB building.</li>
+      <li><strong>Android Native SDK</strong> — <code>PdfRenderer</code>, a small JPEG-page PDF writer, &amp; <code>java.util.zip</code> for PDF rendering and writing, EPUB parsing, and EPUB building.</li>
     </ul>
   </li>
   <li><strong>Morph Project License:</strong> Distributed under the <a href="LICENSE"><strong>GNU General Public License v3.0 (GPL-3.0)</strong></a>.</li>
