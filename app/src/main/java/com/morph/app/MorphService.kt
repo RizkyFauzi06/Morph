@@ -1,5 +1,6 @@
 package com.morph.app
 
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -13,7 +14,6 @@ import android.os.IBinder
 import android.util.Log
 import android.content.pm.ServiceInfo
 import androidx.core.app.NotificationCompat
-import androidx.core.app.ServiceCompat
 import androidx.core.content.IntentCompat
 import com.morph.app.core.AppStrings
 import com.morph.app.core.ConversionJob
@@ -36,6 +36,21 @@ class MorphService : Service() {
         const val ACTION_CANCEL_CONVERSION = "ACTION_CANCEL_CONVERSION"
         const val ACTION_CANCEL_SINGLE_JOB = "com.morph.app.ACTION_CANCEL_SINGLE_JOB"
         const val EXTRA_JOB_ID = "EXTRA_JOB_ID"
+
+        /** The type every tested device accepts; used if the system rejects the preferred one. */
+        @SuppressLint("InlinedApi") // compile-time int, only passed on Android 10+
+        internal const val FALLBACK_FOREGROUND_SERVICE_TYPE = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+
+        /**
+         * mediaProcessing on Android 15+ (the type meant for transcoding), dataSync on 10-14,
+         * none before 10. Never 0 from Android 10: targetSdk 34+ throws on "type none".
+         */
+        @SuppressLint("InlinedApi") // compile-time ints; [sdk] picks one the device knows
+        internal fun foregroundServiceType(sdk: Int): Int = when {
+            sdk >= 35 -> ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
+            sdk >= 29 -> FALLBACK_FOREGROUND_SERVICE_TYPE
+            else -> 0
+        }
     }
 
     override fun onCreate() {
@@ -96,20 +111,33 @@ class MorphService : Service() {
                 isProcessing = true,
                 progress = 0
             )
-            // Android 15 added the mediaProcessing type for transcoding; dataSync is slated for
-            // deprecation. Older versions keep dataSync (the type is ignored before Android 10).
-            val fgsType = when {
-                Build.VERSION.SDK_INT >= 35 -> ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-                else -> 0 // Android 8-9 have no service types
-            }
-            ServiceCompat.startForeground(this, NOTIFICATION_ID, initialNotif, fgsType)
+            enterForeground(initialNotif)
             processQueue()
         } else {
             stopForegroundAndService()
         }
 
         return START_NOT_STICKY
+    }
+
+    /**
+     * Platform call, not ServiceCompat: androidx.core 1.18 ANDs the type with 0x40000FFF, which
+     * turns mediaProcessing (0x2000) into 0 = "type none" and crashes on targetSdk 34+.
+     */
+    private fun enterForeground(notification: Notification) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID, notification) // no service types before Android 10
+            return
+        }
+        val type = foregroundServiceType(Build.VERSION.SDK_INT)
+        try {
+            startForeground(NOTIFICATION_ID, notification, type)
+        } catch (e: RuntimeException) {
+            // Type-specific rejections are fixed by dataSync; anything else fails the retry the same way
+            if (type == FALLBACK_FOREGROUND_SERVICE_TYPE) throw e
+            Log.w("MorphService", "Foreground type $type rejected, retrying with dataSync", e)
+            startForeground(NOTIFICATION_ID, notification, FALLBACK_FOREGROUND_SERVICE_TYPE)
+        }
     }
 
     private fun processQueue() {
@@ -292,8 +320,8 @@ class MorphService : Service() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
-    // Android 15+: dataSync services get ~6h per 24h. The system calls onTimeout and kills
-    // the app if the service is still running a few seconds later, so stop cleanly.
+    // Android 15+: dataSync and mediaProcessing services each get ~6h per 24h. The system calls
+    // onTimeout and kills the app if the service is still running a few seconds later, so stop cleanly.
     override fun onTimeout(startId: Int) = stopOnTimeout()
 
     override fun onTimeout(startId: Int, fgsType: Int) = stopOnTimeout()
