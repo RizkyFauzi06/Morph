@@ -31,40 +31,40 @@
 <hr />
 
 <p>
-  <strong>Morph</strong> adalah aplikasi konverter file lokal (<em>offline-first</em>) untuk Android yang dibangun dengan Kotlin dan Jetpack Compose. Aplikasi ini memungkinkan Anda mengonversi video, trek audio, gambar raster, grafik vektor, dokumen PDF, dan e-book langsung di perangkat—tanpa unggahan cloud, tanpa akun, dan tanpa pelacakan.
+  <strong>Morph</strong> adalah aplikasi konverter file 100% lokal (<em>offline-first</em>) untuk Android yang dibangun dengan Kotlin dan Jetpack Compose. Ubah format video, audio, gambar (raster maupun vektor), dokumen PDF, hingga e-book langsung di HP Anda—tanpa unggahan cloud, tanpa akun, dan tanpa pelacakan data.
 </p>
 
-<h2 id="fitur">Fitur</h2>
+<h2 id="fitur">Fitur Utama</h2>
 
 <table>
   <tr>
     <td width="50%" valign="top">
-      <h3>Offline Engine &amp; Private</h3>
-      <p>Seluruh proses konversi, ekstraksi audio, dan pengolahan dokumen berjalan 100% secara lokal di perangkat Anda, memastikan file tidak pernah keluar dari ponsel. Akses internet minimal hanya digunakan untuk memeriksa pembaruan rilis di GitHub (opsional).</p>
+      <h3>100% Offline &amp; Privat</h3>
+      <p>Seluruh proses konversi, ekstraksi suara, dan pengolahan dokumen berjalan sepenuhnya di dalam HP Anda—file tidak pernah dikirim ke server mana pun. Akses internet hanya dipakai seperlunya untuk mengecek rilis versi baru di GitHub (bisa dimatikan kapan saja).</p>
     </td>
     <td width="50%" valign="top">
-      <h3>Batch Conversion</h3>
-      <p>Pilih banyak file dengan berbagai format sekaligus dalam satu sesi. Morph otomatis mengelompokkan file berdasarkan format asalnya sehingga Anda dapat menentukan format tujuan dan preset kualitas secara terpisah untuk tiap kelompok.</p>
+      <h3>Batch Conversion (Konversi Massal)</h3>
+      <p>Pilih banyak file dengan berbagai format sekaligus dalam satu waktu. Morph otomatis mengelompokkannya berdasarkan format asal, sehingga Anda bisa menentukan format tujuan dan preset kualitas yang berbeda untuk tiap kelompok.</p>
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
       <h3>Share to Morph</h3>
-      <p>Kirim satu atau beberapa file langsung dari Galeri, File Manager, atau browser melalui menu <strong>Share</strong> bawaan Android tanpa perlu membuka aplikasi utamanya—dilengkapi opsi tutup otomatis (<em>Auto-Close</em>).</p>
+      <p>Kirim satu atau banyak file langsung dari Galeri, File Manager, atau browser lewat menu <strong>Bagikan (Share)</strong> bawaan Android tanpa harus membuka aplikasi Morph terlebih dahulu—lengkap dengan opsi tutup otomatis (<em>Auto-Close</em>) setelah selesai.</p>
     </td>
     <td width="50%" valign="top">
-      <h3>Background Queue &amp; Notifications</h3>
-      <p>Didukung antrean konversi berurutan dan <em>Foreground Service</em> Android. Proses konversi tetap berjalan lancar saat aplikasi diminimalkan atau layar mati, lengkap dengan notifikasi progres <em>real-time</em>.</p>
+      <h3>Antrean Latar Belakang &amp; Notifikasi</h3>
+      <p>Didukung antrean berurutan dan <em>Foreground Service</em> Android. Proses konversi tetap berjalan aman di latar belakang meski Anda berpindah aplikasi atau mematikan layar, lengkap dengan notifikasi progres secara <em>real-time</em>.</p>
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <h3>Folder Output Kustom <sup>v1.1.0</sup></h3>
-      <p>Simpan hasil ke folder mana pun yang Anda pilih (memori internal atau kartu SD) lewat pemilih folder Android, dengan mode opsional <strong>Subfolder per File</strong> (<code>Buku.pdf</code> &rarr; <code>Buku/</code>). Jika akses folder dicabut, Morph kembali ke <code>Downloads/Morph</code> dengan aman.</p>
+      <h3>Bebas Pilih Folder Simpan <sup>v1.1.0</sup></h3>
+      <p>Simpan hasil konversi ke folder mana saja (memori internal maupun kartu SD) lewat pemilih folder Android, lengkap dengan mode opsional <strong>Subfolder per File</strong> (<code>Buku.pdf</code> &rarr; <code>Buku/</code>). Jika folder dihapus atau izinnya dicabut, penyimpanan otomatis kembali ke <code>Downloads/Morph</code>.</p>
     </td>
     <td width="50%" valign="top">
-      <h3>Resolusi &amp; Frame Rate Video <sup>v1.1.0</sup></h3>
-      <p>Perkecil video secara opsional ke <strong>1080p</strong>, <strong>720p</strong>, atau <strong>480p</strong> (rasio aspek terjaga) dan ubah frame rate ke <strong>60</strong>, <strong>30</strong>, atau <strong>24 fps</strong>.</p>
+      <h3>Atur Resolusi &amp; Frame Rate Video <sup>v1.1.0</sup></h3>
+      <p>Perkecil ukuran video secara opsional ke <strong>1080p</strong>, <strong>720p</strong>, atau <strong>480p</strong> (proporsi layar tetap terjaga) serta ubah kelancaran gerak (<em>frame rate</em>) ke <strong>60</strong>, <strong>30</strong>, atau <strong>24 fps</strong> sesuai kebutuhan.</p>
     </td>
   </tr>
 </table>
@@ -79,14 +79,14 @@
         <br /><br />
         <strong>Homescreen &amp; File History</strong>
         <br />
-        <sub>Pemilih file cepat, filter kategori (Dokumen, Gambar, Video, Audio), dan pengelolaan riwayat konversi lokal.</sub>
+        <sub>Pilih file dengan cepat, saring berdasarkan kategori (Dokumen, Gambar, Video, Audio), dan kelola riwayat file hasil konversi.</sub>
       </td>
       <td width="50%" align="center" valign="top">
         <img src="../assets/Share%20To%20Convert.jpg" alt="Share to Morph" width="260" />
         <br /><br />
         <strong>Share to Morph</strong>
         <br />
-        <sub>Mulai konversi langsung dari Galeri, File Manager, atau aplikasi lain melalui menu Share bawaan Android.</sub>
+        <sub>Konversi file langsung dari Galeri, File Manager, atau aplikasi lain cukup lewat menu Share bawaan Android.</sub>
       </td>
     </tr>
     <tr>
@@ -95,14 +95,14 @@
         <br /><br />
         <strong>Direct Web Format Conversion</strong>
         <br />
-        <sub>Bagikan gambar langsung dari Google/browser ("Bagikan gambar" / "Share image") atau konversi format web (WebP, WebM, SVG) menjadi file standar siap offline tanpa perlu mengunduhnya terlebih dahulu.</sub>
+        <sub>Kirim gambar langsung dari Google atau browser (<em>"Bagikan gambar"</em> / <em>"Share image"</em>), atau ubah format web (WebP, WebM, SVG) menjadi file standar siap offline tanpa perlu mengunduhnya dulu.</sub>
       </td>
       <td width="50%" align="center" valign="top">
         <img src="../assets/Batch%20Processing.jpg" alt="Batch Conversion" width="260" />
         <br /><br />
         <strong>Batch Conversion</strong>
         <br />
-        <sub>Mengelompokkan beberapa file terpilih secara otomatis berdasarkan ekstensi sumber dengan format tujuan dan preset kualitas masing-masing.</sub>
+        <sub>Mengelompokkan banyak file terpilih secara otomatis berdasarkan format asalnya, dengan pengaturan format tujuan dan preset kualitas masing-masing.</sub>
       </td>
     </tr>
   </table>
@@ -111,98 +111,127 @@
 <h2 id="format-yang-didukung">Format yang Didukung</h2>
 
 <p>
-  Hasil konversi disimpan ke <code>Downloads/Morph</code> secara bawaan, atau ke folder pilihan Anda (<strong>Pengaturan &rarr; Folder Output</strong>), dengan opsi mempertahankan nama file asli dan mengelompokkan hasil ke subfolder per file.
+  Secara bawaan, hasil konversi disimpan ke folder <code>Downloads/Morph</code> atau ke lokasi pilihan Anda (<strong>Pengaturan &rarr; Folder Output</strong>), lengkap dengan opsi mempertahankan nama file asli dan mengelompokkan hasil ke dalam subfolder per file.
 </p>
 
 <table>
   <thead>
     <tr>
-      <th align="left">Alat / Kategori</th>
-      <th align="left">Format Input</th>
-      <th align="left">Format Output</th>
+      <th align="left">Kategori</th>
+      <th align="left">Format Asal</th>
+      <th align="left">Format Tujuan</th>
       <th align="left">Kemampuan &amp; Catatan</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td><strong>Video Conversion</strong></td>
+      <td><strong>Konversi Video</strong></td>
       <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>AVI</code>, <code>FLV</code>, <code>WMV</code>, <code>3GP</code>, <code>M4V</code>, <code>TS</code>, <code>OGV</code></td>
       <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>AVI</code>, <code>GIF</code></td>
-      <td>Mendukung <em>stream copy</em> lossless <strong>Instant</strong> bila codec sumber cocok dengan kontainer tujuan (jika tidak, otomatis di-<em>encode</em> ulang), encoding H.264 cepat (hardware bila menaati bitrate, jika tidak memakai mesin x264 bawaan), opsi resolusi (1080p/720p/480p) dan frame rate (60/30/24 fps; video yang lebih kecil tidak pernah diperbesar), encoding VP8/Opus untuk WebM (bisa diputar di semua versi Android), serta ekspor GIF animasi dengan rasio aspek terjaga. Trek audio yang cocok dipertahankan apa adanya. <em>Kompres</em> (format sama) tersedia untuk MP4, MKV, MOV, WebM, dan AVI.</td>
+      <td>
+        <ul>
+          <li>Mode <strong>Instant</strong> (<em>stream copy</em> tanpa kompresi ulang) bila codec asal cocok dengan wadah tujuan; jika tidak, otomatis di-<em>encode</em> ulang.</li>
+          <li>Encoding H.264 cepat (memakai akselerasi <em>hardware</em> HP bila menaati target bitrate, atau otomatis memakai mesin <strong>x264</strong> bawaan agar kualitas tetap tajam).</li>
+          <li>Opsi resolusi (<strong>1080p / 720p / 480p</strong>) dan <em>frame rate</em> (<strong>60 / 30 / 24 fps</strong>)—video yang sudah kecil tidak pernah dipaksa membesar.</li>
+          <li>Encoding <strong>VP8/Opus</strong> untuk WebM agar lancar diputar di semua versi Android, serta ekspor <strong>GIF animasi</strong> dengan proporsi layar terjaga.</li>
+          <li>Trek audio yang sudah kompatibel dipertahankan apa adanya. Opsi <em>Kompres</em> (format sama) tersedia untuk <code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WebM</code>, dan <code>AVI</code>.</li>
+        </ul>
+      </td>
     </tr>
     <tr>
-      <td><strong>Video to Audio Extraction</strong></td>
+      <td><strong>Ekstrak Audio dari Video</strong></td>
       <td><code>MP4</code>, <code>MKV</code>, <code>MOV</code>, <code>WEBM</code>, <code>AVI</code>, <code>FLV</code>, <code>WMV</code>, <code>3GP</code>, <code>M4V</code>, <code>TS</code>, <code>OGV</code></td>
       <td><code>MP3</code>, <code>M4A</code>, <code>WAV</code>, <code>FLAC</code>, <code>OGG</code>, <code>OPUS</code></td>
-      <td>Mengekstrak jalur audio langsung dari file video dengan pilihan preset kualitas. Video tanpa trek audio mendapat pesan yang jelas, bukan file kosong.</td>
+      <td>Mengambil jalur suara langsung dari file video dengan pilihan preset kualitas. Jika video tidak memiliki trek suara (bisu), aplikasi memberi pesan yang jelas alih-alih menghasilkan file kosong.</td>
     </tr>
     <tr>
-      <td><strong>Audio Conversion</strong></td>
+      <td><strong>Konversi Audio</strong></td>
       <td><code>MP3</code>, <code>WAV</code>, <code>FLAC</code>, <code>AAC</code>, <code>M4A</code>, <code>OGG</code>, <code>OPUS</code>, <code>WMA</code>, <code>AIFF</code>, <code>AMR</code></td>
       <td><code>MP3</code>, <code>WAV</code>, <code>AAC</code>, <code>FLAC</code>, <code>M4A</code>, <code>OGG</code>, <code>OPUS</code></td>
-      <td>Mendukung PCM WAV tanpa kompresi, FLAC lossless, MP3/AAC bitrate tinggi, OGG Vorbis juga untuk rekaman mono dan suara, serta <em>stream copy</em> <strong>Instant</strong> bila codec audio sumber sudah sesuai dengan format tujuan (High juga mempertahankan trek yang cocok apa adanya).</td>
+      <td>
+        <ul>
+          <li>Mendukung PCM <code>WAV</code> tanpa kompresi, <code>FLAC</code> <em>lossless</em>, <code>MP3</code>/<code>AAC</code> bitrate tinggi, serta <code>OGG</code> Vorbis (termasuk untuk rekaman mono dan suara).</li>
+          <li>Mendukung <em>stream copy</em> <strong>Instant</strong> bila codec audio asal sudah sesuai dengan format tujuan (preset <strong>High</strong> juga mempertahankan trek yang cocok apa adanya).</li>
+        </ul>
+      </td>
     </tr>
     <tr>
-      <td><strong>Image Conversion</strong></td>
+      <td><strong>Konversi Gambar</strong></td>
       <td><code>PNG</code>, <code>JPG</code>, <code>JPEG</code>, <code>WEBP</code>, <code>BMP</code>, <code>GIF</code>, <code>HEIC</code>, <code>HEIF</code>, <code>ICO</code></td>
       <td><code>PNG</code>, <code>JPG</code>, <code>WEBP</code>, <code>BMP</code>, <code>PDF</code></td>
-      <td>Pengisian latar belakang putih otomatis saat mengonversi gambar transparan ke JPG/BMP. Banyak gambar dapat digabung menjadi satu PDF yang ringkas (halaman JPEG) atau diekspor terpisah. GIF memakai frame pertamanya; HEIC/HEIF butuh Android 9+. TIFF tidak didukung (Android tidak punya decoder TIFF).</td>
+      <td>
+        <ul>
+          <li>Otomatis memberi latar belakang putih saat mengubah gambar transparan ke <code>JPG</code> atau <code>BMP</code>.</li>
+          <li>Banyak foto sekaligus (termasuk campuran <code>.jpg</code> dan <code>.jpeg</code>) bisa digabung menjadi satu PDF ringkas (halaman JPEG) atau disimpan terpisah.</li>
+          <li><code>GIF</code> mengambil frame pertamanya; <code>HEIC</code>/<code>HEIF</code> membutuhkan Android 9 ke atas; <code>TIFF</code> tidak didukung karena Android tidak memiliki <em>decoder</em> bawaan untuk format ini.</li>
+        </ul>
+      </td>
     </tr>
     <tr>
-      <td><strong>SVG Conversion</strong></td>
+      <td><strong>Konversi SVG</strong></td>
       <td><code>SVG</code></td>
       <td><code>PNG</code>, <code>JPG</code>, <code>WEBP</code></td>
-      <td>Rasterisasi vektor resolusi tinggi menggunakan AndroidSVG dengan mempertahankan transparansi penuh pada PNG.</td>
+      <td>Mengubah grafik vektor menjadi gambar resolusi tinggi menggunakan AndroidSVG dengan mempertahankan transparansi penuh pada <code>PNG</code>.</td>
     </tr>
     <tr>
-      <td><strong>PDF Toolkit</strong></td>
+      <td><strong>Pengolah PDF</strong></td>
       <td><code>PDF</code></td>
       <td><code>JPG</code>, <code>PNG</code>, <code>PDF</code></td>
-      <td>Merender halaman PDF menjadi gambar resolusi tinggi terpisah (aman memori untuk halaman besar) atau mengompres PDF, lengkap dengan hasil ukuran aktual saat selesai (misalnya <code>2.4 MB &rarr; 850 KB (-65%)</code>).</td>
+      <td>
+        <ul>
+          <li>Mengubah setiap halaman PDF menjadi gambar resolusi tinggi secara terpisah (aman di memori meski halaman berukuran besar).</li>
+          <li>Mengompres ukuran PDF dan menampilkan perbandingan ukuran sebelum dan sesudah selesai (misalnya <code>2.4 MB &rarr; 850 KB (-65%)</code>).</li>
+        </ul>
+      </td>
     </tr>
     <tr>
       <td><strong>EPUB &hArr; TXT</strong></td>
       <td><code>EPUB</code>, <code>TXT</code></td>
       <td><code>TXT</code>, <code>EPUB</code></td>
-      <td>Mengurai <em>spine</em> OPF untuk mengekstrak teks polos yang bersih dari buku EPUB, serta menyusun buku EPUB standar dari file TXT dengan deteksi bab otomatis (<em>Bab 1</em>, <em>Chapter 2</em>, &hellip;) dan daftar isi.</td>
+      <td>
+        <ul>
+          <li><strong>EPUB &rarr; TXT:</strong> Membaca urutan bab (<em>spine</em> OPF) untuk mengekstrak teks polos yang bersih dari buku digital.</li>
+          <li><strong>TXT &rarr; EPUB:</strong> Menyusun file teks biasa menjadi e-book EPUB standar lengkap dengan deteksi bab otomatis (<em>Bab 1</em>, <em>Chapter 2</em>, dst.) dan daftar isi.</li>
+        </ul>
+      </td>
     </tr>
   </tbody>
 </table>
 
-<h3>Quality Presets (Preset Kualitas)</h3>
+<h3>Preset Kualitas</h3>
 <ul>
-  <li><strong>High:</strong> Mempertahankan resolusi maksimal dan bitrate asli dengan kompresi minimal.</li>
-  <li><strong>Medium:</strong> Kualitas output seimbang dengan pengurangan ukuran file (~50%).</li>
-  <li><strong>Low:</strong> Kompresi agresif dan penyesuaian skala untuk menghemat ruang penyimpanan.</li>
-  <li><strong>Instant:</strong> Melakukan <em>remux</em> pada kontainer media yang kompatibel tanpa <em>re-encode</em> untuk proses hampir instan dan kualitas 100% utuh tanpa penurunan.</li>
+  <li><strong>High:</strong> Mempertahankan resolusi maksimal dan bitrate asli dengan kompresi seminimal mungkin.</li>
+  <li><strong>Medium:</strong> Menyeimbangkan kualitas hasil dengan penghematan ukuran file (~50%).</li>
+  <li><strong>Low:</strong> Kompresi tinggi dan penyesuaian skala untuk menghemat ruang penyimpanan secara maksimal.</li>
+  <li><strong>Instant:</strong> Memindahkan isi media ke wadah baru (<em>remux</em>) tanpa kompresi ulang—selesai dalam hitungan detik dengan kualitas 100% utuh seperti aslinya.</li>
 </ul>
 
 <h2 id="instalasi">Instalasi</h2>
 
-<h3>Opsi 1: Pasang APK (Direkomendasikan)</h3>
+<h3>Opsi 1: Pasang Langsung via APK (Direkomendasikan)</h3>
 <p>
-  Anda tidak perlu melakukan clone atau build kode sumber untuk menggunakan Morph:
+  Anda tidak perlu mengunduh atau mengompilasi kode sumber untuk langsung menggunakan Morph:
 </p>
 <ol>
-  <li>Buka bagian <a href="https://github.com/RizkyFauzi06/Morph/releases"><strong>Releases</strong></a> pada repositori ini.</li>
+  <li>Buka halaman <a href="https://github.com/RizkyFauzi06/Morph/releases"><strong>Releases</strong></a> pada repositori ini.</li>
   <li>Unduh file <code>Morph-v*.apk</code> terbaru dari <a href="https://github.com/RizkyFauzi06/Morph/releases/latest">GitHub Releases</a>.</li>
-  <li>Buka file APK yang telah diunduh di perangkat Android Anda (Android 8.0 atau lebih baru, <strong>64-bit</strong>) dan izinkan instalasi dari browser atau file manager jika diminta. HP dengan Android 32-bit (umum di Android Go dan sebagian model murah) belum didukung, karena engine FFmpeg hanya menyediakan library 64-bit.</li>
+  <li>Buka file APK tersebut di HP Android Anda (minimal <strong>Android 8.0</strong>, arsitektur <strong>64-bit</strong>) dan izinkan instalasi dari browser atau file manager jika diminta. <em>(Catatan: HP dengan Android 32-bit—umumnya Android Go dan beberapa model lama—belum didukung karena mesin FFmpeg hanya menyediakan library 64-bit).</em></li>
 </ol>
 
 <h3>Opsi 2: Build dari Source Code</h3>
 <p>
-  Untuk memeriksa atau mengompilasi proyek ini sendiri, Anda memerlukan:
+  Jika ingin memeriksa atau mengompilasi proyek ini sendiri, siapkan:
 </p>
 <ul>
   <li><strong>JDK 21</strong></li>
   <li><strong>Android SDK</strong> (cukup Command-Line Tools, misalnya bersama VS Code) <strong>atau Android Studio</strong></li>
 </ul>
 <p>
-  Arahkan Gradle ke SDK Anda melalui variabel lingkungan <code>ANDROID_HOME</code> atau file <code>local.properties</code> berisi <code>sdk.dir=/path/ke/Android/sdk</code>, lalu jalankan:
+  Arahkan Gradle ke folder SDK Anda melalui variabel lingkungan <code>ANDROID_HOME</code> atau file <code>local.properties</code> berisi <code>sdk.dir=/path/ke/Android/sdk</code>, lalu jalankan perintah berikut:
 </p>
 
 ```bash
-git clone https://github.com/RizkyFauzi06/Morph.git
+git clone [https://github.com/RizkyFauzi06/Morph.git](https://github.com/RizkyFauzi06/Morph.git)
 cd Morph
 
 # Kompilasi Debug APK
