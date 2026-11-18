@@ -23,10 +23,6 @@ import kotlinx.coroutines.*
 
 class MorphService : Service() {
 
-    private val CHANNEL_ID = "Morph_Foreground"
-    private val NOTIFICATION_ID = 143
-    private val SUMMARY_NOTIFICATION_ID = 144
-
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var queueExecutionJob: Job? = null
     @Volatile private var isCancelled = false
@@ -36,6 +32,10 @@ class MorphService : Service() {
         const val ACTION_CANCEL_CONVERSION = "ACTION_CANCEL_CONVERSION"
         const val ACTION_CANCEL_SINGLE_JOB = "com.morph.app.ACTION_CANCEL_SINGLE_JOB"
         const val EXTRA_JOB_ID = "EXTRA_JOB_ID"
+
+        private const val CHANNEL_ID = "Morph_Foreground"
+        private const val NOTIFICATION_ID = 143
+        private const val SUMMARY_NOTIFICATION_ID = 144
 
         /** The type every tested device accepts; used if the system rejects the preferred one. */
         @SuppressLint("InlinedApi") // compile-time int, only passed on Android 10+
