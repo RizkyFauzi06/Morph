@@ -25,6 +25,9 @@ output.json
 # IntelliJ
 *.iml
 .idea/
+
+# VS Code (local IntelliSense config with machine-specific NDK paths)
+.vscode/
 misc.xml
 deploymentTargetDropDown.xml
 render.experimental.xml
