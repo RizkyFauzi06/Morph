@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "name": "Android arm64-v8a (NDK r27)",
+            "compileCommands": "${workspaceFolder}/app/.cxx/tools/debug/arm64-v8a/compile_commands.json",
+            "compilerPath": "C:/Android/Sdk/ndk/27.2.12479018/toolchains/llvm/prebuilt/windows-x86_64/bin/clang++.exe",
+            "compilerArgs": [
+                "--target=aarch64-none-linux-android26",
+                "--sysroot=C:/Android/Sdk/ndk/27.2.12479018/toolchains/llvm/prebuilt/windows-x86_64/sysroot"
+            ],
+            "includePath": [
+                "${workspaceFolder}/app/src/main/cpp/x264_build",
+                "${workspaceFolder}/app/src/main/cpp/third_party/x264"
+            ],
+            "defines": ["ANDROID"],
+            "intelliSenseMode": "linux-clang-arm64",
+            "cStandard": "gnu99",
+            "cppStandard": "c++17"
+        }
+    ],
+    "version": 4
+}
