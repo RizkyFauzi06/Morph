@@ -142,7 +142,6 @@ interface Strings {
     val toolOfflineDetail: String
     val toolFormatTitle: String
     val toolFormatDesc: String
-    val toolFormatDetail: String
     val toolExpand: String
     val toolCollapse: String
 
@@ -467,7 +466,6 @@ object IndonesianStrings : Strings {
     override val toolOfflineDetail = "Untuk format yang didukung, proses konversi dilakukan tanpa perlu mengunggah file ke layanan cloud."
     override val toolFormatTitle = "Format Support"
     override val toolFormatDesc = "Lihat format sumber dan tujuan yang tersedia."
-    override val toolFormatDetail = "Video: MP4, MKV, MOV, WEBM, AVI\nAudio: MP3, WAV, FLAC, AAC, M4A, OGG, OPUS\nGambar: PNG, JPG, WEBP, BMP, SVG\nDokumen: PDF, TXT, EPUB"
     override val toolExpand = "Buka"
     override val toolCollapse = "Tutup"
 
@@ -789,7 +787,6 @@ object EnglishStrings : Strings {
     override val toolOfflineDetail = "All supported conversions are processed on-device without uploading files to cloud services."
     override val toolFormatTitle = "Format Support"
     override val toolFormatDesc = "View available source and target formats."
-    override val toolFormatDetail = "Video: MP4, MKV, MOV, WEBM, AVI\nAudio: MP3, WAV, FLAC, AAC, M4A, OGG, OPUS\nImages: PNG, JPG, WEBP, BMP, SVG\nDocuments: PDF, TXT, EPUB"
     override val toolExpand = "Expand"
     override val toolCollapse = "Collapse"
 

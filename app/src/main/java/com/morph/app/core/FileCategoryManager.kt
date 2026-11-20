@@ -180,4 +180,15 @@ object FileCategoryManager {
 
     fun isVideo(extension: String): Boolean =
         getCategory(extension) == FileCategory.VIDEO
+
+    /** Extensions Morph recognises for [category]; the Tools screen lists formats from these. */
+    fun extensionsOf(category: FileCategory): Set<String> = when (category) {
+        FileCategory.IMAGE -> imageExtensions
+        FileCategory.VIDEO -> videoExtensions
+        FileCategory.AUDIO -> audioExtensions
+        FileCategory.PDF -> pdfExtensions
+        FileCategory.EBOOK -> ebookExtensions
+        FileCategory.DOCUMENT -> documentExtensions
+        else -> emptySet()
+    }
 }

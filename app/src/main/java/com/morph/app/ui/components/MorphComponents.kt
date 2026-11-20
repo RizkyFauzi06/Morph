@@ -647,12 +647,3 @@ fun formatFileSize(bytes: Long): String {
 
     return DecimalFormat("#,##0.#").format(size) + " " + units[digitGroups]
 }
-
-// Transitional shim: Tools and Settings still draw their own header; removed when they move to MorphTopBar
-@Composable
-fun MorphScreenHeader(title: String, subtitle: String, modifier: Modifier = Modifier) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(title, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
-        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
