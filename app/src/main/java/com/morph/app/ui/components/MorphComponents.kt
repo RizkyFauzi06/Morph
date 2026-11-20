@@ -656,7 +656,3 @@ fun MorphScreenHeader(title: String, subtitle: String, modifier: Modifier = Modi
         Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
-
-// Transitional shim: the old app shell still calls this; removed once MainActivity uses MorphTopBar
-@Composable
-fun MorphHomeTopBar() = MorphTopBar(title = null)
