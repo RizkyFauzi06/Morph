@@ -1,22 +1,39 @@
 package com.morph.app.ui.screens
 
-import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.*
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.BatteryAlert
+import androidx.compose.material.icons.rounded.FilterList
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
@@ -25,34 +42,29 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import com.morph.app.MorphEngine
 import com.morph.app.core.AppStrings
 import com.morph.app.core.ConversionQueueManager
 import com.morph.app.core.FileCategory
 import com.morph.app.core.FileCategoryManager
 import com.morph.app.core.JobStatus
-import com.morph.app.ui.components.*
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import com.morph.app.core.MorphOutputFile
-import androidx.compose.foundation.border
-import androidx.compose.ui.draw.clip
-import androidx.compose.material3.ripple
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.filled.BatteryAlert
-import androidx.compose.ui.unit.sp
+import com.morph.app.ui.components.*
+import com.morph.app.ui.theme.LocalMorphColors
+import com.morph.app.ui.theme.LocalReduceMotion
+import com.morph.app.ui.theme.MorphMotion
+import com.morph.app.ui.theme.MorphSpace
+import kotlinx.coroutines.delay
 
 // ============================================================
-// HOME SCREEN — STATE MODEL
-// Sesuai MORPH_UI_UX_SPEC.md Section 7.5
+// HOME SCREEN: STATE MODEL (MORPH_UI_UX_SPEC.md section 7.5)
 // ============================================================
 
 data class CategoryFilterItem(val id: String, val label: String)
@@ -77,12 +89,11 @@ fun HomeScreen(
     onFileClick: (MorphOutputFile) -> Unit,
     onShareFile: (MorphOutputFile) -> Unit,
     onDeleteFile: (MorphOutputFile) -> Unit,
-    isBatteryUnrestricted: Boolean = true,
     onRetryConversion: (android.net.Uri, String) -> Unit,
-    onBannerClick: () -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isBatteryUnrestricted: Boolean = true,
+    onBannerClick: () -> Unit = {}
 ) {
-    val coroutineScope = rememberCoroutineScope()
     val strings = AppStrings.current
 
     val pullRefreshState = rememberPullRefreshState(
@@ -97,8 +108,8 @@ fun HomeScreen(
     val failedJobs = remember(queueState) { queueState.filter { it.status == JobStatus.FAILED } }
     val completedCount = remember(queueState) { queueState.count { it.status == JobStatus.COMPLETED } }
     val totalQueueCount = remember(queueState) { queueState.size }
-    
-    val context = androidx.compose.ui.platform.LocalContext.current
+
+    val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val prefs = remember { com.morph.app.MorphPrefs(context) }
 
@@ -117,7 +128,7 @@ fun HomeScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    
+
     // Auto-refresh when conversion completes
     LaunchedEffect(engineState, completedCount) {
         if (engineState is MorphEngine.ConvertState.Success || completedCount > 0) {
@@ -161,59 +172,55 @@ fun HomeScreen(
         filteredFiles.isEmpty() -> HomeHistoryState.FilteredEmpty
         else -> HomeHistoryState.HistoryAvailable(filteredFiles)
     }
-    
-    //Update Notification 
+
+    // --- UPDATE NOTICE ---
     var availableRelease by remember { mutableStateOf<com.morph.app.core.ReleaseInfo?>(null) }
     var showUpdateDialog by remember { mutableStateOf(false) }
-        LaunchedEffect(Unit) {
-            if (prefs.autoCheckUpdates) {
-                val result = com.morph.app.core.UpdateChecker.checkForUpdates(context)
-                if (result is com.morph.app.core.UpdateCheckResult.UpdateAvailable &&
-                    result.release.tagName != prefs.dismissedUpdateTag
-                ) {
-                    availableRelease = result.release
-                }
+    LaunchedEffect(Unit) {
+        if (prefs.autoCheckUpdates) {
+            val result = com.morph.app.core.UpdateChecker.checkForUpdates(context)
+            if (result is com.morph.app.core.UpdateCheckResult.UpdateAvailable &&
+                result.release.tagName != prefs.dismissedUpdateTag
+            ) {
+                availableRelease = result.release
             }
         }
+    }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .pullRefresh(pullRefreshState)
-    ) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp),
-            contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+    val engineError = engineState as? MorphEngine.ConvertState.Error
+    val showBatteryNotice = !batteryUnrestricted && !batteryBannerDismissed
+    val hasNotices = activeJob != null || failedJobs.isNotEmpty() || engineError != null ||
+        !hasNotificationPermission || showBatteryNotice || availableRelease != null
+
+    // Live job, failures and one-time prompts share one column above the content
+    val notices: @Composable (Modifier) -> Unit = { noticeModifier ->
+        Column(
+            modifier = noticeModifier
+                .fillMaxWidth()
+                .animateContentSize(MorphMotion.sizeSpring),
+            verticalArrangement = Arrangement.spacedBy(MorphSpace.m)
         ) {
-            // --- 1. CONVERSION PROGRESS BANNER (jika ada job aktif) ---
-            if (activeJob != null) {
-                val currentJobNumber = queueState.indexOfFirst { it.id == activeJob.id } + 1
-                val queueInfo = if (totalQueueCount > 1) {
-                    strings.convertingBatchInfo(currentJobNumber, totalQueueCount)
-                } else {
-                    strings.convertingTo(activeJob.targetFormat)
-                }
-
-                item {
-                    ConversionBanner(
-                        format = activeJob.targetFormat,
-                        progress = activeJob.progress,
-                        fileName = activeJob.originalFileName,
-                        queueInfo = queueInfo,
-                        stepMessage = activeJob.progressMessage,
-                        onCancel = { ConversionQueueManager.cancelAllJobs() },
-                        onClick = onBannerClick
-                    )
-                }
+            NoticeVisibility(visible = activeJob != null) {
+                val job = activeJob ?: return@NoticeVisibility
+                val currentJobNumber = queueState.indexOfFirst { it.id == job.id } + 1
+                ConversionBanner(
+                    format = job.targetFormat,
+                    progress = job.progress,
+                    fileName = job.originalFileName,
+                    queueInfo = if (totalQueueCount > 1) {
+                        strings.convertingBatchInfo(currentJobNumber, totalQueueCount)
+                    } else {
+                        strings.convertingTo(job.targetFormat)
+                    },
+                    stepMessage = job.progressMessage,
+                    onCancel = { ConversionQueueManager.cancelAllJobs() },
+                    onClick = onBannerClick
+                )
             }
 
-            // --- 2. ERROR BANNER ---
             if (failedJobs.isNotEmpty()) {
                 failedJobs.forEach { failedJob ->
-                    item(key = "failed_${failedJob.id}") {
+                    key(failedJob.id) {
                         ErrorCard(
                             message = "${failedJob.originalFileName}: ${failedJob.errorMessage ?: strings.failedToConvertDefault}",
                             onDismiss = { ConversionQueueManager.dismissJob(failedJob.id) },
@@ -224,264 +231,201 @@ fun HomeScreen(
                         )
                     }
                 }
-            } else if (engineState is MorphEngine.ConvertState.Error) {
-                val error = engineState as MorphEngine.ConvertState.Error
-                item {
-                    ErrorCard(
-                        message = error.message,
-                        onDismiss = { MorphEngine.currentStatus.value = MorphEngine.ConvertState.Idle },
-                        onRetry = if (error.originalUri != null && error.targetFormat.isNotEmpty()) {
-                            {
-                                MorphEngine.currentStatus.value = MorphEngine.ConvertState.Idle
-                                onRetryConversion(error.originalUri, error.targetFormat)
-                            }
-                        } else null
-                    )
-                }
-            }
-
-            // --- 3. NOTIFICATION PERMISSION PROMPT ---
-            if (!hasNotificationPermission) {
-                item {
-                    NotificationPermissionBanner(onRequestPermission = onRequestPermission)
-                }
-            }
-            // Battery
-            if (!batteryUnrestricted && !batteryBannerDismissed) {
-                item {
-                    Card(
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f)
-                        ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.BatteryAlert,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = strings.batteryBannerTitle,
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                    Text(
-                                        text = strings.batteryBannerDesc,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
-                                    )
-                                }
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                TextButton(
-                                    onClick = {
-                                        batteryBannerDismissed = true
-                                        prefs.dismissBatteryWarning = true
-                                    }
-                                ) {
-                                    Text(strings.btnLater, fontSize = 12.sp)
-                                }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Button(
-                                    onClick = { showBatteryGuideDialog = true },
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Text(strings.btnLearnHow, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
+            } else if (engineError != null) {
+                ErrorCard(
+                    message = engineError.message,
+                    onDismiss = { MorphEngine.currentStatus.value = MorphEngine.ConvertState.Idle },
+                    onRetry = if (engineError.originalUri != null && engineError.targetFormat.isNotEmpty()) {
+                        {
+                            MorphEngine.currentStatus.value = MorphEngine.ConvertState.Idle
+                            onRetryConversion(engineError.originalUri, engineError.targetFormat)
                         }
+                    } else null
+                )
+            }
+
+            NoticeVisibility(visible = !hasNotificationPermission) {
+                NotificationPermissionBanner(onRequestPermission = onRequestPermission)
+            }
+
+            NoticeVisibility(visible = showBatteryNotice) {
+                MorphNoticeCard(
+                    icon = Icons.Rounded.BatteryAlert,
+                    title = strings.batteryBannerTitle,
+                    description = strings.batteryBannerDesc
+                ) {
+                    TextButton(onClick = {
+                        batteryBannerDismissed = true
+                        prefs.dismissBatteryWarning = true
+                    }) {
+                        Text(strings.btnLater)
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    FilledTonalButton(
+                        onClick = { showBatteryGuideDialog = true },
+                        shape = MaterialTheme.shapes.medium
+                    ) {
+                        Text(strings.btnLearnHow, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
-            
-            //Update
-            availableRelease?.let { release ->
-                item(key = "app_update_banner") {
-                    Card(
+
+            NoticeVisibility(visible = availableRelease != null) {
+                val release = availableRelease ?: return@NoticeVisibility
+                MorphNoticeCard(
+                    icon = Icons.Rounded.SystemUpdate,
+                    title = strings.updateAvailableTitle(release.tagName),
+                    description = strings.updateAvailableDesc,
+                    tone = NoticeTone.Accent,
+                    onClick = { showUpdateDialog = true }
+                ) {
+                    TextButton(onClick = {
+                        prefs.dismissedUpdateTag = release.tagName
+                        availableRelease = null
+                    }) {
+                        Text(strings.btnLater, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    Button(
                         onClick = { showUpdateDialog = true },
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f)
-                        ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+                        shape = MaterialTheme.shapes.medium
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.SystemUpdate,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(24.dp)
+                        Text(strings.btnDownload, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .pullRefresh(pullRefreshState)
+    ) {
+        when (historyState) {
+            is HomeHistoryState.HistoryAvailable, is HomeHistoryState.FilteredEmpty -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        start = MorphSpace.screen,
+                        end = MorphSpace.screen,
+                        top = MorphSpace.s,
+                        bottom = 104.dp // clears the FAB
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (hasNotices) {
+                        item(key = "notices", contentType = "notices") {
+                            notices(Modifier.animateItem().padding(bottom = 6.dp))
+                        }
+                    }
+
+                    item(key = "filters", contentType = "filters") {
+                        MorphCategoryFilter(
+                            categories = categories,
+                            selectedCategoryId = selectedCategoryId,
+                            onCategorySelected = { selectedCategoryId = it }
+                        )
+                    }
+
+                    item(key = "history_header", contentType = "header") {
+                        MorphSectionLabel(
+                            text = strings.historyTitle,
+                            trailing = strings.historyCount(filteredFiles.size),
+                            modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
+                        )
+                    }
+
+                    if (historyState is HomeHistoryState.HistoryAvailable) {
+                        items(
+                            items = historyState.files,
+                            key = { it.uri.toString() },
+                            contentType = { "file" }
+                        ) { file ->
+                            FileHistoryItemCard(
+                                file = file,
+                                onClick = { onFileClick(file) },
+                                onShare = { onShareFile(file) },
+                                onDelete = { onDeleteFile(file) },
+                                modifier = Modifier.animateItem(
+                                    fadeInSpec = MorphMotion.medium(),
+                                    placementSpec = MorphMotion.medium(),
+                                    fadeOutSpec = MorphMotion.fast()
                                 )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = strings.updateAvailableTitle(release.tagName),
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                    Text(
-                                        text = strings.updateAvailableDesc,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
-                                    )
-                                }
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                TextButton(
-                                    onClick = {
-                                        prefs.dismissedUpdateTag = release.tagName
-                                        availableRelease = null
-                                    }
-                                ) {
-                                    Text(strings.btnLater, fontSize = 12.sp)
-                                }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Button(
-                                    onClick = { showUpdateDialog = true },
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Text(
-                                        text = strings.btnDownload,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
+                            )
                         }
-                    }
-                }
-            }
-            
-
-            // --- 4. CATEGORY FILTER CHIPS ---
-            // Hanya tampil saat ada history (populated atau filtered empty)
-            if (historyState !is HomeHistoryState.NoHistory) {
-                item {
-                    MorphCategoryFilter(
-                        categories = categories,
-                        selectedCategoryId = selectedCategoryId,
-                        onCategorySelected = { selectedCategoryId = it }
-                    )
-                }
-            }
-
-            // --- 5. MAIN CONTENT AREA ---
-            when (historyState) {
-                is HomeHistoryState.NoHistory -> {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillParentMaxHeight(0.75f)
-                                .fillMaxWidth(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            MorphEmptyFileState(onPickFileClick = onPickFileClick)
-                        }
-                    }
-                }
-
-                is HomeHistoryState.FilteredEmpty -> {
-                    item {
-                        val currentLabel = categories.find { it.id == selectedCategoryId }?.label ?: strings.categoryAll
-                        MorphFilteredEmptyState(
-                            category = currentLabel,
-                            onClearFilter = { selectedCategoryId = "all" }
-                        )
-                    }
-                }
-
-                is HomeHistoryState.HistoryAvailable -> {
-                    items(historyState.files, key = { it.uri.toString() }) { file ->
-                        FileHistoryItemCard(
-                            file = file,
-                            onClick = { onFileClick(file) },
-                            onShare = { onShareFile(file) },
-                            onDelete = { onDeleteFile(file) }
-                        )
-                    }
-                }
-
-                is HomeHistoryState.Loading -> {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 48.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(
-                                color = MaterialTheme.colorScheme.primary
+                    } else {
+                        item(key = "filtered_empty", contentType = "empty") {
+                            val currentLabel = categories.find { it.id == selectedCategoryId }?.label ?: strings.categoryAll
+                            MorphFilteredEmptyState(
+                                category = currentLabel,
+                                onClearFilter = { selectedCategoryId = "all" },
+                                modifier = Modifier.animateItem()
                             )
                         }
                     }
                 }
+            }
 
-                is HomeHistoryState.Error -> {
-                    item {
-                        Text(
-                            text = historyState.message,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(vertical = 32.dp)
-                        )
+            else -> {
+                // No history yet: the pick-file circle sits centred in the space under any notices.
+                // Kept outside LazyColumn so its looping pulse never lives inside a lazy item.
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = MorphSpace.screen, vertical = MorphSpace.s)
+                ) {
+                    if (hasNotices) notices(Modifier)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(vertical = MorphSpace.xl),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        when (historyState) {
+                            is HomeHistoryState.Loading -> CircularProgressIndicator(
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 3.dp
+                            )
+                            is HomeHistoryState.Error -> Text(
+                                text = historyState.message,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                                textAlign = TextAlign.Center
+                            )
+                            else -> MorphEmptyFileState(onPickFileClick = onPickFileClick)
+                        }
                     }
                 }
-                
-            }   
+            }
         }
 
-        //Battery Dialog
-        if (showBatteryGuideDialog) {
-            BatteryOptimizationGuideDialog(
-                onDismiss = { showBatteryGuideDialog = false },
-                onOpenSettings = {
-                    showBatteryGuideDialog = false
-                    com.morph.app.openAppBatterySettings(context, strings)
-                }
-            )
-        }
-        // --- FAB — Hanya muncul saat history tersedia ---
-        if (historyState is HomeHistoryState.HistoryAvailable) {
+        // --- FAB: only once there is history to sit on top of ---
+        val fabInteraction = remember { MutableInteractionSource() }
+        AnimatedVisibility(
+            visible = historyState is HomeHistoryState.HistoryAvailable || historyState is HomeHistoryState.FilteredEmpty,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = MorphSpace.screen, bottom = MorphSpace.screen),
+            enter = scaleIn(MorphMotion.medium(), initialScale = 0.6f) + fadeIn(MorphMotion.medium()),
+            exit = scaleOut(MorphMotion.fast(), targetScale = 0.6f) + fadeOut(MorphMotion.fast())
+        ) {
             FloatingActionButton(
                 onClick = onPickFileClick,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 20.dp, bottom = 20.dp),
+                modifier = Modifier.pressScale(fabInteraction, 0.96f),
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
-                shape = CircleShape
+                shape = CircleShape,
+                elevation = FloatingActionButtonDefaults.elevation(
+                    defaultElevation = 4.dp,
+                    pressedElevation = 2.dp
+                ),
+                interactionSource = fabInteraction
             ) {
                 Icon(
-                    imageVector = Icons.Default.Add,
+                    imageVector = Icons.Rounded.Add,
                     contentDescription = strings.selectNewFile,
                     modifier = Modifier.size(26.dp)
                 )
@@ -492,10 +436,20 @@ fun HomeScreen(
             refreshing = isRefreshing,
             state = pullRefreshState,
             modifier = Modifier.align(Alignment.TopCenter),
+            backgroundColor = LocalMorphColors.current.card,
             contentColor = MaterialTheme.colorScheme.primary
         )
-    
-        //update
+
+        if (showBatteryGuideDialog) {
+            BatteryOptimizationGuideDialog(
+                onDismiss = { showBatteryGuideDialog = false },
+                onOpenSettings = {
+                    showBatteryGuideDialog = false
+                    com.morph.app.openAppBatterySettings(context, strings)
+                }
+            )
+        }
+
         if (showUpdateDialog && availableRelease != null) {
             AppUpdateDialog(
                 release = availableRelease!!,
@@ -505,19 +459,29 @@ fun HomeScreen(
                     showUpdateDialog = false
                     val intent = android.content.Intent(
                         android.content.Intent.ACTION_VIEW,
-                        android.net.Uri.parse(availableRelease!!.htmlUrl)
+                        availableRelease!!.htmlUrl.toUri()
                     )
                     context.startActivity(intent)
                 }
             )
-        }  
-        
+        }
+    }
+}
+
+/** Notices slide in and out instead of popping, so the list below never jumps. */
+@Composable
+private fun NoticeVisibility(visible: Boolean, content: @Composable () -> Unit) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(MorphMotion.medium()) + expandVertically(MorphMotion.medium()),
+        exit = fadeOut(MorphMotion.fast()) + shrinkVertically(MorphMotion.medium())
+    ) {
+        content()
     }
 }
 
 // ============================================================
-// CATEGORY FILTER CHIPS
-// Sesuai MORPH_UI_UX_SPEC.md Section 7.2
+// CATEGORY FILTER (spec 7.2): selected = filled violet, others = card with hairline
 // ============================================================
 
 @Composable
@@ -529,43 +493,29 @@ fun MorphCategoryFilter(
 ) {
     LazyRow(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(MorphSpace.s),
         contentPadding = PaddingValues(vertical = 2.dp)
     ) {
         items(categories, key = { it.id }) { categoryItem ->
             val isSelected = selectedCategoryId == categoryItem.id
-            FilterChip(
+            MorphChoicePill(
                 selected = isSelected,
                 onClick = { onCategorySelected(categoryItem.id) },
-                label = {
-                    Text(
-                        text = categoryItem.label,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                    )
-                },
-                shape = RoundedCornerShape(14.dp),
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.primary,
-                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                border = FilterChipDefaults.filterChipBorder(
-                    enabled = true,
-                    selected = isSelected,
-                    selectedBorderColor = Color.Transparent,
-                    borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
-                    selectedBorderWidth = 0.dp
+                style = PillStyle.Filled
+            ) { contentColor ->
+                Text(
+                    text = categoryItem.label,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                    color = contentColor
                 )
-            )
+            }
         }
     }
 }
 
 // ============================================================
-// EMPTY STATE — Circular action
-// Sesuai MORPH_UI_UX_SPEC.md Section 7.3
+// EMPTY STATE (spec 7.3): one tappable circle, a soft ring that breathes, one line of help
 // ============================================================
 
 @Composable
@@ -573,101 +523,107 @@ fun MorphEmptyFileState(
     onPickFileClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "emptyStatePulse")
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.04f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1800, easing = EaseInOut),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulseScale"
-    )
+    val strings = AppStrings.current
+    val scheme = MaterialTheme.colorScheme
+    val reduceMotion = LocalReduceMotion.current
 
-    Box(modifier = modifier.fillMaxSize()) {
-        // Folder illustration
-        Box(
-            modifier = Modifier.align(Alignment.Center).size(180.dp),
-            contentAlignment = Alignment.Center
-        ) {
+    // Read only inside graphicsLayer: the loop redraws, it never recomposes or relayouts
+    val pulse: () -> Float = if (reduceMotion) {
+        { 0f }
+    } else {
+        val transition = rememberInfiniteTransition(label = "emptyPulse")
+        val fraction = transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1800, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "emptyPulseFraction"
+        )
+        val read: () -> Float = { fraction.value }
+        read
+    }
+    val interaction = remember { MutableInteractionSource() }
+
+    Column(
+        modifier = modifier.padding(horizontal = MorphSpace.xxl),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(modifier = Modifier.size(184.dp), contentAlignment = Alignment.Center) {
             Box(
                 modifier = Modifier
-                    .size(160.dp)
-                    .scale(pulseScale)
+                    .size(168.dp)
+                    .graphicsLayer {
+                        val f = pulse()
+                        val s = 1f + 0.05f * f
+                        scaleX = s
+                        scaleY = s
+                        alpha = 1f - 0.45f * f
+                    }
+                    .border(BorderStroke(1.5.dp, scheme.primary.copy(alpha = 0.28f)), CircleShape)
+            )
+            Box(
+                modifier = Modifier
+                    .size(132.dp)
+                    .pressScale(interaction, 0.97f)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
+                    .background(scheme.primaryContainer)
                     .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = ripple(bounded = true, radius = 80.dp)
-                    ) { onPickFileClick() },
+                        interactionSource = interaction,
+                        indication = ripple(),
+                        role = Role.Button,
+                        onClick = onPickFileClick
+                    ),
                 contentAlignment = Alignment.Center
             ) {
-                Box(modifier = Modifier.size(120.dp), contentAlignment = Alignment.Center) {
-                    // Main folder circle
+                Box(modifier = Modifier.size(60.dp)) {
+                    Icon(
+                        imageVector = Icons.Rounded.Folder,
+                        contentDescription = strings.selectNewFile,
+                        tint = scheme.primary,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .align(Alignment.Center)
+                    )
                     Box(
-                        modifier = Modifier.fillMaxSize().background(
-                            MaterialTheme.colorScheme.primaryContainer,
-                            CircleShape
-                        ),
+                        modifier = Modifier
+                            .size(24.dp)
+                            .align(Alignment.BottomEnd)
+                            .background(scheme.primary, CircleShape)
+                            .border(2.dp, scheme.primaryContainer, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Folder,
+                            imageVector = Icons.Rounded.Add,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(80.dp)
-                        )
-                    }
-
-                    // Plus badge
-                    Box(
-                        modifier = Modifier.size(40.dp).align(Alignment.BottomEnd)
-                            .offset(x = 2.dp, y = 2.dp)
-                            .background(MaterialTheme.colorScheme.primary, CircleShape)
-                            .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(20.dp)
+                            tint = scheme.onPrimary,
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                 }
             }
         }
 
-        // Text below illustration
-        Column(
-            modifier = Modifier.align(Alignment.Center).offset(y = 120.dp)
-                .fillMaxWidth().padding(horizontal = 32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            val strings = AppStrings.current
-
-            Text(
-                text = strings.selectFile,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = strings.selectFileSubtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
-        }
+        Spacer(Modifier.height(MorphSpace.l))
+        Text(
+            text = strings.selectFile,
+            style = MaterialTheme.typography.titleLarge,
+            color = scheme.onBackground,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = strings.selectFileSubtitle,
+            style = MaterialTheme.typography.bodyMedium,
+            color = scheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
     }
 }
 
 // ============================================================
-// FILTERED EMPTY STATE
-// Sesuai MORPH_UI_UX_SPEC.md Section 7.4 & 7.5
+// FILTERED EMPTY STATE (spec 7.4 / 7.5)
 // ============================================================
 
 @Composable
@@ -681,49 +637,42 @@ fun MorphFilteredEmptyState(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 48.dp, horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .padding(vertical = 40.dp, horizontal = MorphSpace.xl),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
             modifier = Modifier
-                .size(72.dp)
+                .size(64.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.Default.FilterList,
+                imageVector = Icons.Rounded.FilterList,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(32.dp)
+                modifier = Modifier.size(28.dp)
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
+        Spacer(Modifier.height(MorphSpace.l))
         Text(
             text = strings.noFilesInCategory(category),
             style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center
         )
-
-        Spacer(modifier = Modifier.height(6.dp))
-
+        Spacer(Modifier.height(6.dp))
         Text(
             text = strings.noFilesInCategoryDesc,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
+        Spacer(Modifier.height(MorphSpace.l))
         OutlinedButton(
             onClick = onClearFilter,
-            shape = RoundedCornerShape(14.dp),
+            shape = MaterialTheme.shapes.medium,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
         ) {
             Text(
@@ -736,7 +685,7 @@ fun MorphFilteredEmptyState(
 }
 
 // ============================================================
-// NOTIFICATION PERMISSION BANNER
+// NOTIFICATION PERMISSION NOTICE
 // ============================================================
 
 @Composable
@@ -745,53 +694,20 @@ fun NotificationPermissionBanner(
     modifier: Modifier = Modifier
 ) {
     val strings = AppStrings.current
-
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.75f)
-        )
+    MorphNoticeCard(
+        icon = Icons.Rounded.NotificationsActive,
+        title = strings.notifBannerTitle,
+        description = strings.notifBannerDesc,
+        modifier = modifier
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
+        FilledTonalButton(
+            onClick = onRequestPermission,
+            shape = MaterialTheme.shapes.medium
         ) {
-            Icon(
-                imageVector = Icons.Default.NotificationsActive,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.error,
-                modifier = Modifier.size(22.dp)
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = strings.notifBannerTitle,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
-                Text(
-                    text = strings.notifBannerDesc,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f)
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            TextButton(onClick = onRequestPermission) {
-                Text(
-                    text = strings.btnAllow,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.error,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
+            Text(strings.btnAllow, fontWeight = FontWeight.SemiBold)
         }
     }
 }
-
 
 @Composable
 fun BatteryOptimizationGuideDialog(
@@ -802,13 +718,12 @@ fun BatteryOptimizationGuideDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(20.dp),
-        containerColor = MaterialTheme.colorScheme.surface,
+        shape = MaterialTheme.shapes.extraLarge,
+        containerColor = LocalMorphColors.current.card,
         title = {
             Text(
                 text = strings.batteryDialogTitle,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface
             )
         },
@@ -816,37 +731,29 @@ fun BatteryOptimizationGuideDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(androidx.compose.foundation.rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(MorphSpace.m)
             ) {
                 Text(
                     text = strings.batteryDialogIntro,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceContainer
                 ) {
                     Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier.padding(MorphSpace.m),
+                        verticalArrangement = Arrangement.spacedBy(MorphSpace.s)
                     ) {
-                        Text(
-                            text = strings.batteryStep1,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            text = strings.batteryStep2,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Medium
-                        )
+                        Text(strings.batteryStep1, style = MaterialTheme.typography.bodyMedium)
+                        Text(strings.batteryStep2, style = MaterialTheme.typography.bodyMedium)
                         Text(
                             text = strings.batteryStep3,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -854,7 +761,7 @@ fun BatteryOptimizationGuideDialog(
 
                 Text(
                     text = strings.batteryNotes,
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -865,11 +772,8 @@ fun BatteryOptimizationGuideDialog(
             }
         },
         confirmButton = {
-            Button(
-                onClick = onOpenSettings,
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text(strings.btnOpenAppInfo, fontWeight = FontWeight.Bold)
+            Button(onClick = onOpenSettings, shape = MaterialTheme.shapes.medium) {
+                Text(strings.btnOpenAppInfo, fontWeight = FontWeight.SemiBold)
             }
         }
     )
@@ -884,14 +788,13 @@ fun AppUpdateDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(20.dp),
-        containerColor = MaterialTheme.colorScheme.surface,
+        shape = MaterialTheme.shapes.extraLarge,
+        containerColor = LocalMorphColors.current.card,
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     text = strings.updateDialogTitle,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
@@ -907,11 +810,11 @@ fun AppUpdateDialog(
                     .fillMaxWidth()
                     .heightIn(max = 280.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(MorphSpace.s)
             ) {
                 Text(
                     text = release.releaseNotes.ifBlank { strings.updateDefaultReleaseNotes },
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -922,14 +825,8 @@ fun AppUpdateDialog(
             }
         },
         confirmButton = {
-            Button(
-                onClick = onDownloadClick,
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text(
-                    text = strings.btnDownloadApk,
-                    fontWeight = FontWeight.Bold
-                )
+            Button(onClick = onDownloadClick, shape = MaterialTheme.shapes.medium) {
+                Text(text = strings.btnDownloadApk, fontWeight = FontWeight.SemiBold)
             }
         }
     )

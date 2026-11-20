@@ -14,25 +14,31 @@ import android.webkit.MimeTypeMap
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.material.icons.outlined.Handyman
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.rounded.Handyman
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import androidx.core.content.FileProvider
@@ -48,13 +54,17 @@ import com.morph.app.core.MorphOutputFile
 import com.morph.app.core.OutputManager
 import com.morph.app.core.SelectedFileItem
 import com.morph.app.core.Strings
-import com.morph.app.ui.components.MorphHomeTopBar
+import com.morph.app.ui.components.MorphBottomNavigation
+import com.morph.app.ui.components.MorphNavItem
+import com.morph.app.ui.components.MorphTopBar
 import com.morph.app.ui.screens.BottomSheetConverter
 import com.morph.app.ui.screens.HomeScreen
 import com.morph.app.ui.screens.ProgressScreen
 import com.morph.app.ui.screens.SettingsScreen
 import com.morph.app.ui.screens.ToolsScreen
 import com.morph.app.ui.screens.WelcomeScreen
+import com.morph.app.ui.theme.LocalMorphColors
+import com.morph.app.ui.theme.MorphMotion
 import com.morph.app.ui.theme.MorphTheme
 import java.io.File
 import android.os.PowerManager
@@ -68,6 +78,9 @@ import android.provider.Settings
 enum class MorphTab {
     Home, Tools, Settings
 }
+
+/** Top-level standalone screens; switching between them is one AnimatedContent. */
+private enum class MorphScreen { Onboarding, Progress, Main }
 
 class MainActivity : ComponentActivity() {
 
@@ -273,187 +286,181 @@ class MainActivity : ComponentActivity() {
             MorphTheme(themeOption = currentThemeOption, language = currentLanguage) {
                 val backgroundColor = if (isStandaloneMode) MaterialTheme.colorScheme.background else Color.Transparent
 
+                // Standalone screens draw behind transparent system bars, with icon colour following the
+                // app theme (not the system one). The share overlay keeps its own window untouched.
+                val isDarkTheme = LocalMorphColors.current.isDark
+                if (isStandaloneMode) {
+                    LaunchedEffect(isDarkTheme) {
+                        val barStyle = if (isDarkTheme) {
+                            SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                        } else {
+                            SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
+                        }
+                        // The legacy translucent theme leaves bar drawing to the system (solid black bars)
+                        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+                        enableEdgeToEdge(statusBarStyle = barStyle, navigationBarStyle = barStyle)
+                    }
+                }
+
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = backgroundColor
                 ) {
                     if (isStandaloneMode) {
-                        if (isOnboarding) {
-                            WelcomeScreen(
-                                onGetStarted = {
-                                    prefs.onboardingDone = true
-                                    isOnboarding = false
-                                }
-                            )
-                        } else if (showProgressScreen) {
-                            ProgressScreen(
-                                onMinimize = { showProgressScreen = false },
-                                onFinish = {
-                                    showProgressScreen = false
-                                    refreshFiles()
-                                }, onViewResult = {
-                                    showProgressScreen = false
-                                    // Ambil file yang baru saja selesai dikonversi
-                                    uiScope.launch {
-                                        val lastOutput = ConversionQueueManager.queueState.value
-                                            .lastOrNull { it.status == JobStatus.COMPLETED }?.outputFilePath
-                                        val files = withContext(Dispatchers.IO) { getMorphFiles(context) }
-                                        morphFiles = files
-                                        // History order relies on lastModified, which some SAF providers report as 0
-                                        val latestFile = withContext(Dispatchers.IO) { resolveOutputFile(context, lastOutput) }
-                                            ?: files.firstOrNull()
-                                        if (latestFile != null) {
-                                            openFileDirectly(context, latestFile, strings)
-                                        } else {
-                                            Toast.makeText(context, strings.fileNotFoundToast, Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                }
-                            )
-                        } else {
-                            Scaffold(
-                            topBar = {
-                                // Top bar hanya di Home — Tools dan Settings punya header sendiri
-                                if (currentTab == MorphTab.Home) {
-                                    MorphHomeTopBar()
-                                }
+                        val screen = when {
+                            isOnboarding -> MorphScreen.Onboarding
+                            showProgressScreen -> MorphScreen.Progress
+                            else -> MorphScreen.Main
+                        }
+                        // Screen changes fade with a short rise; nothing slides across the whole width
+                        AnimatedContent(
+                            targetState = screen,
+                            transitionSpec = {
+                                (fadeIn(MorphMotion.slow()) + slideInVertically(MorphMotion.slow()) { it / 24 }) togetherWith
+                                    fadeOut(MorphMotion.fast())
                             },
-                            bottomBar = {
-                                NavigationBar(
-                                    containerColor = MaterialTheme.colorScheme.surface,
-                                    tonalElevation = 0.dp
-                                ) {
-                                    NavigationBarItem(
-                                        selected = currentTab == MorphTab.Home,
-                                        onClick = { currentTab = MorphTab.Home },
-                                        icon = {
-                                            Icon(
-                                                if (currentTab == MorphTab.Home) Icons.Default.Home
-                                                else Icons.Outlined.Home,
-                                                contentDescription = strings.tabHome
-                                            )
-                                        },
-                                        label = {
-                                            Text(
-                                                strings.tabHome,
-                                                style = MaterialTheme.typography.labelMedium,
-                                                fontWeight = if (currentTab == MorphTab.Home) FontWeight.SemiBold else FontWeight.Normal
-                                            )
-                                        }
-                                    )
-                                    NavigationBarItem(
-                                        selected = currentTab == MorphTab.Tools,
-                                        onClick = { currentTab = MorphTab.Tools },
-                                        icon = {
-                                            Icon(
-                                                if (currentTab == MorphTab.Tools) Icons.Default.Build
-                                                else Icons.Outlined.Build,
-                                                contentDescription = strings.tabTools
-                                            )
-                                        },
-                                        label = {
-                                            Text(
-                                                strings.tabTools,
-                                                style = MaterialTheme.typography.labelMedium,
-                                                fontWeight = if (currentTab == MorphTab.Tools) FontWeight.SemiBold else FontWeight.Normal
-                                            )
-                                        }
-                                    )
-                                    NavigationBarItem(
-                                        selected = currentTab == MorphTab.Settings,
-                                        onClick = { currentTab = MorphTab.Settings },
-                                        icon = {
-                                            Icon(
-                                                if (currentTab == MorphTab.Settings) Icons.Default.Settings
-                                                else Icons.Outlined.Settings,
-                                                contentDescription = strings.tabSettings
-                                            )
-                                        },
-                                        label = {
-                                            Text(
-                                                strings.tabSettings,
-                                                style = MaterialTheme.typography.labelMedium,
-                                                fontWeight = if (currentTab == MorphTab.Settings) FontWeight.SemiBold else FontWeight.Normal
-                                            )
-                                        }
-                                    )
-                                }
-                            }
-                        ) { innerPadding ->
-                            Box(modifier = Modifier.padding(innerPadding)) {
-                                when (currentTab) {
-                                    MorphTab.Home -> {
-                                        HomeScreen(
-                                            morphFiles = morphFiles,
-                                            isRefreshing = isRefreshing,
-                                            hasNotificationPermission = hasNotificationPermission,
-                                            onRefresh = { refreshFiles() },
-                                            onPickFileClick = { filePickerLauncher.launch("*/*") },
-                                            onRequestPermission = { askNotificationPermission() },
-                                            onFileClick = { file -> openFileDirectly(context, file, strings) },
-                                            onShareFile = { file -> shareFileDirectly(context, file, strings) },
-                                            onDeleteFile = { file ->
-                                                if (!OutputManager.deleteOutputFile(context, file)) {
-                                                    Toast.makeText(context, strings.deleteFileFailedToast, Toast.LENGTH_SHORT).show()
-                                                }
-                                                refreshFiles()
-                                            },
-                                            onRetryConversion = { retryUri, retryFormat ->
-                                                val serviceIntent = Intent(context, MorphService::class.java).apply {
-                                                    putExtra("INPUT_URI", retryUri)
-                                                    putExtra("TARGET_FORMAT", retryFormat)
-                                                    putExtra("QUALITY_PRESET", prefs.qualityPreset)
-                                                }
-                                                context.startForegroundService(serviceIntent)
-                                            },
-                                            onBannerClick = { showProgressScreen = true }
-                                        )
+                            label = "screen"
+                        ) { target ->
+                            when (target) {
+                                MorphScreen.Onboarding -> WelcomeScreen(
+                                    onGetStarted = {
+                                        prefs.onboardingDone = true
+                                        isOnboarding = false
+                                    }
+                                )
 
-                                        // BottomSheet Picker Trigger
-                                        if (showBottomSheet && selectedFilesForConversion.isNotEmpty()) {
-                                            BottomSheetConverter(
-                                                selectedFiles = selectedFilesForConversion,
-                                                defaultQuality = prefs.qualityPreset,
-                                                onDismiss = {
-                                                    showBottomSheet = false
-                                                    selectedFilesForConversion = emptyList()
-                                                },
-                                                onConvertStarted = {
-                                                    showBottomSheet = false
-                                                    selectedFilesForConversion = emptyList()
-                                                    showProgressScreen = true
-                                                }
-                                            )
+                                MorphScreen.Progress -> ProgressScreen(
+                                    onMinimize = { showProgressScreen = false },
+                                    onFinish = {
+                                        showProgressScreen = false
+                                        refreshFiles()
+                                    }, onViewResult = {
+                                        showProgressScreen = false
+                                        // Ambil file yang baru saja selesai dikonversi
+                                        uiScope.launch {
+                                            val lastOutput = ConversionQueueManager.queueState.value
+                                                .lastOrNull { it.status == JobStatus.COMPLETED }?.outputFilePath
+                                            val files = withContext(Dispatchers.IO) { getMorphFiles(context) }
+                                            morphFiles = files
+                                            // History order relies on lastModified, which some SAF providers report as 0
+                                            val latestFile = withContext(Dispatchers.IO) { resolveOutputFile(context, lastOutput) }
+                                                ?: files.firstOrNull()
+                                            if (latestFile != null) {
+                                                openFileDirectly(context, latestFile, strings)
+                                            } else {
+                                                Toast.makeText(context, strings.fileNotFoundToast, Toast.LENGTH_SHORT).show()
+                                            }
                                         }
                                     }
+                                )
 
-                                    MorphTab.Tools -> {
-                                        ToolsScreen(
-                                            onPickFileForTool = { filePickerLauncher.launch("*/*") },
-                                            onBackClick = { currentTab = MorphTab.Home }
-                                        )
-                                    }
-
-                                    MorphTab.Settings -> {
-                                        SettingsScreen(
-                                            currentTheme = currentThemeOption,
-                                            onThemeChange = { newTheme ->
-                                                currentThemeOption = newTheme
-                                                prefs.themeOption = newTheme
-                                            },
-                                            onBackClick = { currentTab = MorphTab.Home },
-                                            currentLanguage = currentLanguage,
-                                            onLanguageChange = { newLang ->
-                                                currentLanguage = newLang
-                                                prefs.appLanguage = newLang
-                                                AppStrings.setLanguage(newLang)
+                                MorphScreen.Main -> Scaffold(
+                                    containerColor = MaterialTheme.colorScheme.background,
+                                    topBar = {
+                                        // One bar for every tab: the wordmark on Home, the tab name elsewhere
+                                        MorphTopBar(
+                                            title = when (currentTab) {
+                                                MorphTab.Home -> null
+                                                MorphTab.Tools -> strings.tabTools
+                                                MorphTab.Settings -> strings.tabSettings
                                             }
                                         )
+                                    },
+                                    bottomBar = {
+                                        MorphBottomNavigation(
+                                            items = listOf(
+                                                MorphNavItem(strings.tabHome, Icons.Outlined.Home, Icons.Rounded.Home),
+                                                MorphNavItem(strings.tabTools, Icons.Outlined.Handyman, Icons.Rounded.Handyman),
+                                                MorphNavItem(strings.tabSettings, Icons.Outlined.Settings, Icons.Rounded.Settings)
+                                            ),
+                                            selectedIndex = currentTab.ordinal,
+                                            onSelect = { index -> currentTab = MorphTab.entries[index] }
+                                        )
+                                    }
+                                ) { innerPadding ->
+                                    AnimatedContent(
+                                        targetState = currentTab,
+                                        modifier = Modifier.padding(innerPadding),
+                                        transitionSpec = {
+                                            fadeIn(tween(220, easing = FastOutSlowInEasing)) togetherWith
+                                                fadeOut(tween(140, easing = FastOutSlowInEasing))
+                                        },
+                                        label = "tab"
+                                    ) { tab ->
+                                        when (tab) {
+                                            MorphTab.Home -> {
+                                                HomeScreen(
+                                                    morphFiles = morphFiles,
+                                                    isRefreshing = isRefreshing,
+                                                    hasNotificationPermission = hasNotificationPermission,
+                                                    onRefresh = { refreshFiles() },
+                                                    onPickFileClick = { filePickerLauncher.launch("*/*") },
+                                                    onRequestPermission = { askNotificationPermission() },
+                                                    onFileClick = { file -> openFileDirectly(context, file, strings) },
+                                                    onShareFile = { file -> shareFileDirectly(context, file, strings) },
+                                                    onDeleteFile = { file ->
+                                                        if (!OutputManager.deleteOutputFile(context, file)) {
+                                                            Toast.makeText(context, strings.deleteFileFailedToast, Toast.LENGTH_SHORT).show()
+                                                        }
+                                                        refreshFiles()
+                                                    },
+                                                    onRetryConversion = { retryUri, retryFormat ->
+                                                        val serviceIntent = Intent(context, MorphService::class.java).apply {
+                                                            putExtra("INPUT_URI", retryUri)
+                                                            putExtra("TARGET_FORMAT", retryFormat)
+                                                            putExtra("QUALITY_PRESET", prefs.qualityPreset)
+                                                        }
+                                                        context.startForegroundService(serviceIntent)
+                                                    },
+                                                    onBannerClick = { showProgressScreen = true }
+                                                )
+
+                                                // BottomSheet Picker Trigger
+                                                if (showBottomSheet && selectedFilesForConversion.isNotEmpty()) {
+                                                    BottomSheetConverter(
+                                                        selectedFiles = selectedFilesForConversion,
+                                                        defaultQuality = prefs.qualityPreset,
+                                                        onDismiss = {
+                                                            showBottomSheet = false
+                                                            selectedFilesForConversion = emptyList()
+                                                        },
+                                                        onConvertStarted = {
+                                                            showBottomSheet = false
+                                                            selectedFilesForConversion = emptyList()
+                                                            showProgressScreen = true
+                                                        }
+                                                    )
+                                                }
+                                            }
+
+                                            MorphTab.Tools -> {
+                                                ToolsScreen(
+                                                    onPickFileForTool = { filePickerLauncher.launch("*/*") },
+                                                    onBackClick = { currentTab = MorphTab.Home }
+                                                )
+                                            }
+
+                                            MorphTab.Settings -> {
+                                                SettingsScreen(
+                                                    currentTheme = currentThemeOption,
+                                                    onThemeChange = { newTheme ->
+                                                        currentThemeOption = newTheme
+                                                        prefs.themeOption = newTheme
+                                                    },
+                                                    onBackClick = { currentTab = MorphTab.Home },
+                                                    currentLanguage = currentLanguage,
+                                                    onLanguageChange = { newLang ->
+                                                        currentLanguage = newLang
+                                                        prefs.appLanguage = newLang
+                                                        AppStrings.setLanguage(newLang)
+                                                    }
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
                 } else {
                         // --- LAYAR SHARE OVERLAY (Transparan) ---
                         if (showBottomSheet && selectedFilesForConversion.isNotEmpty()) {

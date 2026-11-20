@@ -1,26 +1,39 @@
 package com.morph.app.ui.screens
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.*
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.FolderOpen
+import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -28,8 +41,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morph.app.core.AppStrings
 import com.morph.app.core.ConversionQueueManager
+import com.morph.app.core.FileCategoryManager
 import com.morph.app.core.JobStatus
+import com.morph.app.ui.components.FileTypeTile
 import com.morph.app.ui.components.MorphLogo
+import com.morph.app.ui.theme.LocalMorphColors
+import com.morph.app.ui.theme.LocalReduceMotion
+import com.morph.app.ui.theme.MorphMotion
+import com.morph.app.ui.theme.MorphSpace
+
+private enum class ProgressPhase { Running, Success, Failed }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,6 +70,11 @@ fun ProgressScreen(
 
     val isFinished = totalCount > 0 && queueState.none { it.status == JobStatus.PROCESSING || it.status == JobStatus.WAITING }
     val isAllSuccess = isFinished && failedCount == 0
+    val phase = when {
+        !isFinished -> ProgressPhase.Running
+        isAllSuccess -> ProgressPhase.Success
+        else -> ProgressPhase.Failed
+    }
 
     // Konfirmasi pembatalan
     var showCancelDialog by remember { mutableStateOf(false) }
@@ -61,8 +87,10 @@ fun ProgressScreen(
     if (showCancelDialog) {
         AlertDialog(
             onDismissRequest = { showCancelDialog = false },
-            title = { Text(strings.cancelDialogTitle) },
-            text = { Text(strings.cancelDialogDesc) },
+            shape = MaterialTheme.shapes.extraLarge,
+            containerColor = LocalMorphColors.current.card,
+            title = { Text(strings.cancelDialogTitle, style = MaterialTheme.typography.titleLarge) },
+            text = { Text(strings.cancelDialogDesc, style = MaterialTheme.typography.bodyMedium) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -71,7 +99,7 @@ fun ProgressScreen(
                         onFinish()
                     }
                 ) {
-                    Text(strings.btnConfirmCancel, color = MaterialTheme.colorScheme.error)
+                    Text(strings.btnConfirmCancel, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
                 }
             },
             dismissButton = {
@@ -83,13 +111,13 @@ fun ProgressScreen(
     }
 
     Scaffold(
+        modifier = modifier,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
                         text = if (isFinished) strings.titleFinished else strings.titleConversionProgress,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
+                        style = MaterialTheme.typography.titleMedium
                     )
                 },
                 navigationIcon = {
@@ -101,336 +129,327 @@ fun ProgressScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = MaterialTheme.colorScheme.background
                 )
             )
         },
-        containerColor = MaterialTheme.colorScheme.surface
+        containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
-        Column(
-            modifier = modifier
+        AnimatedContent(
+            targetState = phase,
+            modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Spacer(modifier = Modifier.height(24.dp))
+                .padding(innerPadding),
+            transitionSpec = {
+                (fadeIn(MorphMotion.slow()) + scaleIn(MorphMotion.slow(), initialScale = 0.96f)) togetherWith
+                    fadeOut(MorphMotion.fast())
+            },
+            label = "progressPhase"
+        ) { target ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = MorphSpace.xl),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                when (target) {
+                    ProgressPhase.Running -> {
+                        val currentJob = activeJob ?: queueState.firstOrNull()
+                        val currentPercent = (currentJob?.progress ?: 0).coerceIn(0, 100)
+                        val animatedProgress by animateFloatAsState(
+                            targetValue = currentPercent / 100f,
+                            animationSpec = MorphMotion.slow(),
+                            label = "progressAnim"
+                        )
 
-            if (!isFinished) {
-                // --- STATE PROSES BERJALAN ---
-                val currentJob = activeJob ?: queueState.firstOrNull()
-                val currentPercent = currentJob?.progress ?: 0
-                val animatedProgress by animateFloatAsState(
-                    targetValue = currentPercent / 100f,
-                    animationSpec = tween(durationMillis = 300, easing = LinearEasing),
-                    label = "progressAnim"
-                )
+                        Spacer(Modifier.weight(1f))
+                        FileTransformationVisual(
+                            sourceExt = currentJob?.originalFileName?.substringAfterLast('.', "") ?: "",
+                            targetExt = currentJob?.targetFormat ?: ""
+                        )
+                        Spacer(Modifier.height(MorphSpace.xxl))
 
-                // Visual Transformation: Source File → Morph Ribbon → Target File
-                FileTransformationVisual(
-                    sourceExt = currentJob?.originalFileName?.substringAfterLast('.', "")?.uppercase() ?: "FILE",
-                    targetExt = currentJob?.targetFormat?.uppercase() ?: "OUTPUT"
-                )
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // Progress Info
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = strings.convertingFileProgress,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    Text(
-                        text = "$currentPercent%",
-                        style = MaterialTheme.typography.displayLarge.copy(fontSize = 44.sp),
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-
-                    LinearProgressIndicator(
-                        progress = { animatedProgress },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp)),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                    )
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    if (totalCount > 1) {
                         Text(
-                            text = strings.progressBatchFilesCompleted(completedCount, totalCount),
+                            text = strings.convertingFileProgress,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Spacer(Modifier.height(MorphSpace.s))
+                        // Real percentage from the engine, never a simulated one (spec 10)
+                        Text(
+                            text = "$currentPercent%",
+                            style = MaterialTheme.typography.displayLarge.copy(fontSize = 44.sp),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.height(MorphSpace.l))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(animatedProgress)
+                                    .fillMaxHeight()
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary)
+                            )
+                        }
+                        Spacer(Modifier.height(MorphSpace.m))
+                        if (totalCount > 1) {
+                            Text(
+                                text = strings.progressBatchFilesCompleted(completedCount, totalCount),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (currentJob != null) {
+                            Text(
+                                text = strings.processingFile(currentJob.originalFileName),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
+                        }
+
+                        Spacer(Modifier.weight(1.2f))
+                        OutlinedButton(
+                            onClick = { showCancelDialog = true },
+                            modifier = Modifier.height(48.dp),
+                            shape = MaterialTheme.shapes.medium,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                            contentPadding = PaddingValues(horizontal = MorphSpace.xl)
+                        ) {
+                            Icon(Icons.Rounded.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(MorphSpace.s))
+                            Text(strings.cancelConversion, style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+
+                    ProgressPhase.Success -> {
+                        Spacer(Modifier.weight(1f))
+                        ResultBadge(success = true, contentDescription = strings.titleFinished)
+                        Spacer(Modifier.height(MorphSpace.xl))
+                        Text(
+                            text = strings.conversionSuccess,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(Modifier.height(MorphSpace.s))
+                        Text(
+                            text = if (totalCount == 1) strings.singleFileSuccessDesc else strings.batchFilesSuccessDesc(completedCount),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    if (currentJob != null) {
-                        Text(
-                            text = currentJob.originalFileName,
-                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            textAlign = TextAlign.Center
                         )
+
+                        // HFX-5: per-file result details (e.g. PDF size before → after)
+                        val resultDetails = queueState.mapNotNull { job ->
+                            job.resultDetail?.let { if (totalCount == 1) it else "${job.originalFileName}: $it" }
+                        }
+                        if (resultDetails.isNotEmpty()) {
+                            Text(
+                                text = resultDetails.joinToString("\n"),
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(top = MorphSpace.m)
+                            )
+                        }
+
+                        Spacer(Modifier.weight(1.2f))
+                        Button(
+                            onClick = onViewResult,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Icon(Icons.Rounded.FolderOpen, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(MorphSpace.s))
+                            Text(strings.btnViewResult, style = MaterialTheme.typography.titleSmall)
+                        }
+                        Spacer(Modifier.height(MorphSpace.m))
+                        OutlinedButton(
+                            onClick = onFinish,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp),
+                            shape = MaterialTheme.shapes.medium,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                        ) {
+                            Icon(Icons.Rounded.Home, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(MorphSpace.s))
+                            Text(strings.btnBackToHome, style = MaterialTheme.typography.labelLarge)
+                        }
                     }
-                }
 
-                Spacer(modifier = Modifier.weight(1f))
-
-                // Tombol Batal
-                OutlinedButton(
-                    onClick = { showCancelDialog = true },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(strings.cancelConversion)
-                }
-
-            } else if (isAllSuccess) {
-                // --- STATE SUKSES LENGKAP ---
-                Spacer(modifier = Modifier.weight(0.5f))
-
-                Box(
-                    modifier = Modifier
-                        .size(100.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = strings.titleFinished,
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(52.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Text(
-                    text = strings.conversionSuccess,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = if (totalCount == 1) strings.singleFileSuccessDesc else strings.batchFilesSuccessDesc(completedCount),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-
-                // HFX-5: per-file result details (e.g. PDF size before → after)
-                val resultDetails = queueState.mapNotNull { job ->
-                    job.resultDetail?.let { if (totalCount == 1) it else "${job.originalFileName}: $it" }
-                }
-                if (resultDetails.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = resultDetails.joinToString("\n"),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary,
-                        textAlign = TextAlign.Center
-                    )
-                }
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Button(
-                        onClick = onViewResult,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
+                    ProgressPhase.Failed -> {
+                        Spacer(Modifier.weight(1f))
+                        ResultBadge(success = false, contentDescription = null)
+                        Spacer(Modifier.height(MorphSpace.xl))
+                        Text(
+                            text = if (completedCount > 0) strings.conversionPartialSuccess else strings.conversionFailed,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            textAlign = TextAlign.Center
                         )
-                    ) {
-                        Text(strings.btnViewResult, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(MorphSpace.s))
+                        val summaryText = if (completedCount > 0) {
+                            strings.summaryPartial(completedCount, failedCount)
+                        } else {
+                            queueState.firstOrNull { it.status == JobStatus.FAILED }?.errorMessage ?: strings.defaultErrorMsg
+                        }
+                        Text(
+                            text = summaryText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(Modifier.weight(1.2f))
+                        Button(
+                            onClick = onFinish,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Icon(Icons.Rounded.Home, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(MorphSpace.s))
+                            Text(strings.btnBackToHome, style = MaterialTheme.typography.titleSmall)
+                        }
                     }
-
-                    OutlinedButton(
-                        onClick = onFinish,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Text(strings.btnBackToHome)
-                    }
                 }
-
-            } else {
-                // --- STATE SEBAGIAN GAGAL / SEMUA GAGAL ---
-                Spacer(modifier = Modifier.weight(0.5f))
-
-                Box(
-                    modifier = Modifier
-                        .size(100.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.errorContainer),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ErrorOutline,
-                        contentDescription = "Error",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(52.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Text(
-                    text = if (completedCount > 0) strings.conversionPartialSuccess else strings.conversionFailed,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                val summaryText = if (completedCount > 0) {
-                    strings.summaryPartial(completedCount, failedCount)
-                } else {
-                    queueState.firstOrNull { it.status == JobStatus.FAILED }?.errorMessage ?: strings.defaultErrorMsg
-                }
-
-                Text(
-                    text = summaryText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                Button(
-                    onClick = onFinish,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Text(strings.btnBackToHome, fontWeight = FontWeight.Bold)
-                }
+                Spacer(Modifier.height(MorphSpace.xl))
             }
-
-            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
 
+/** Success check (or error mark) that settles into place once, without a bounce. */
+@Composable
+private fun ResultBadge(success: Boolean, contentDescription: String?) {
+    val scheme = MaterialTheme.colorScheme
+    val reduceMotion = LocalReduceMotion.current
+    val scale = remember { Animatable(if (reduceMotion) 1f else 0.6f) }
+    LaunchedEffect(Unit) {
+        scale.animateTo(1f, spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow))
+    }
+
+    Box(
+        modifier = Modifier
+            .size(136.dp)
+            .graphicsLayer {
+                scaleX = scale.value
+                scaleY = scale.value
+            }
+            .clip(CircleShape)
+            .background(if (success) scheme.primaryContainer else scheme.errorContainer),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(96.dp)
+                .clip(CircleShape)
+                .background(if (success) scheme.primary else scheme.error),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = if (success) Icons.Rounded.Check else Icons.Rounded.ErrorOutline,
+                contentDescription = contentDescription,
+                tint = if (success) scheme.onPrimary else scheme.onError,
+                modifier = Modifier.size(52.dp)
+            )
+        }
+    }
+}
+
+/** Source tile → Morph → target tile; the two tiles drift in opposite directions while work runs. */
 @Composable
 private fun FileTransformationVisual(
     sourceExt: String,
     targetExt: String
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "transformPulse")
-    val floatOffset by infiniteTransition.animateFloat(
-        initialValue = -6f,
-        targetValue = 6f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "float"
-    )
+    val reduceMotion = LocalReduceMotion.current
+    // Read only in graphicsLayer, so the loop costs a redraw per frame, never a relayout
+    val drift: () -> Float = if (reduceMotion) {
+        { 0f }
+    } else {
+        val transition = rememberInfiniteTransition(label = "transformDrift")
+        val value = transition.animateFloat(
+            initialValue = -1f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1600, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "drift"
+        )
+        val read: () -> Float = { value.value }
+        read
+    }
+    val ringColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
 
-    Row(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 16.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically
+            .height(180.dp),
+        contentAlignment = Alignment.Center
     ) {
-        // Source File Box
-        Surface(
+        Box(
             modifier = Modifier
-                .size(76.dp)
-                .offset(y = floatOffset.dp),
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.primaryContainer,
-            border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+                .size(168.dp)
+                .border(1.5.dp, ringColor, CircleShape)
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.InsertDriveFile,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(28.dp)
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = sourceExt,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
+            TransformTile(
+                ext = sourceExt,
+                modifier = Modifier.graphicsLayer {
+                    translationY = drift() * 6.dp.toPx()
+                }
+            )
+            MorphLogo(size = 64.dp)
+            TransformTile(
+                ext = targetExt,
+                modifier = Modifier.graphicsLayer {
+                    translationY = -drift() * 6.dp.toPx()
+                }
+            )
         }
+    }
+}
 
-        // Center Morph Logo
-        MorphLogo(size = 56.dp)
-
-        // Target File Box
-        Surface(
-            modifier = Modifier
-                .size(76.dp)
-                .offset(y = (-floatOffset).dp),
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.4f))
-        ) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.InsertDriveFile,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.size(28.dp)
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = targetExt,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                )
-            }
-        }
+@Composable
+private fun TransformTile(ext: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(MorphSpace.s)
+    ) {
+        FileTypeTile(
+            category = FileCategoryManager.getCategory(ext),
+            size = 68.dp,
+            iconSize = 32.dp,
+            cornerRadius = 18.dp
+        )
+        Text(
+            text = ext.uppercase().ifBlank { "FILE" },
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }

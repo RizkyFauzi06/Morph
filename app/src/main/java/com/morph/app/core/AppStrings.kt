@@ -142,7 +142,6 @@ interface Strings {
     val toolOfflineDetail: String
     val toolFormatTitle: String
     val toolFormatDesc: String
-    val toolFormatDetail: String
     val toolExpand: String
     val toolCollapse: String
 
@@ -194,6 +193,20 @@ interface Strings {
     fun instantLosslessSupported(src: String, tgt: String): String
     val instantNotAvailable: String
     val btnConvert: String
+    // UI polish (feat/ui-ux-polish)
+    val welcomeHeadline: String
+    val pdfOutputTitle: String
+    val pdfModeMerge: String
+    val pdfModeSeparate: String
+    fun pdfModeMergeDesc(count: Int): String
+    val pdfModeSeparateDesc: String
+    val historyTitle: String
+    fun historyCount(count: Int): String
+    val instantSupportedLabel: String
+    val formatsFromLabel: String
+    val formatsToLabel: String
+    fun processingFile(name: String): String
+    val convertOnDeviceNote: String
     fun btnConvertBatch(count: Int): String
     fun btnMergeAndConvert(count: Int): String
 
@@ -453,7 +466,6 @@ object IndonesianStrings : Strings {
     override val toolOfflineDetail = "Untuk format yang didukung, proses konversi dilakukan tanpa perlu mengunggah file ke layanan cloud."
     override val toolFormatTitle = "Format Support"
     override val toolFormatDesc = "Lihat format sumber dan tujuan yang tersedia."
-    override val toolFormatDetail = "Video: MP4, MKV, MOV, WEBM, AVI\nAudio: MP3, WAV, FLAC, AAC, M4A, OGG, OPUS\nGambar: PNG, JPG, WEBP, BMP, SVG\nDokumen: PDF, TXT, EPUB"
     override val toolExpand = "Buka"
     override val toolCollapse = "Tutup"
 
@@ -505,6 +517,19 @@ object IndonesianStrings : Strings {
         "Lossless (Instan) didukung untuk ${src.uppercase()} → ${tgt.uppercase()}"
     override val instantNotAvailable = "Instant tidak tersedia untuk format ini. Morph menggunakan kualitas tertinggi."
     override val btnConvert = "Konversi"
+    override val welcomeHeadline = "Konversi File, Offline."
+    override val pdfOutputTitle = "Hasil PDF"
+    override val pdfModeMerge = "Satu PDF"
+    override val pdfModeSeparate = "PDF terpisah"
+    override fun pdfModeMergeDesc(count: Int) = "$count gambar digabung menjadi satu dokumen."
+    override val pdfModeSeparateDesc = "Setiap gambar menjadi PDF sendiri."
+    override val historyTitle = "Riwayat"
+    override fun historyCount(count: Int) = "$count file"
+    override val instantSupportedLabel = "Mendukung Instan"
+    override val formatsFromLabel = "Dari"
+    override val formatsToLabel = "Ke"
+    override fun processingFile(name: String) = "Sedang memproses: $name"
+    override val convertOnDeviceNote = "Konversi berjalan di perangkat ini."
     override fun btnConvertBatch(count: Int) = "Konversi ($count File)"
     override fun btnMergeAndConvert(count: Int) = "Gabung & Konversi ($count File)"
 
@@ -762,7 +787,6 @@ object EnglishStrings : Strings {
     override val toolOfflineDetail = "All supported conversions are processed on-device without uploading files to cloud services."
     override val toolFormatTitle = "Format Support"
     override val toolFormatDesc = "View available source and target formats."
-    override val toolFormatDetail = "Video: MP4, MKV, MOV, WEBM, AVI\nAudio: MP3, WAV, FLAC, AAC, M4A, OGG, OPUS\nImages: PNG, JPG, WEBP, BMP, SVG\nDocuments: PDF, TXT, EPUB"
     override val toolExpand = "Expand"
     override val toolCollapse = "Collapse"
 
@@ -814,6 +838,19 @@ object EnglishStrings : Strings {
         "Lossless (Instant) supported for ${src.uppercase()} → ${tgt.uppercase()}"
     override val instantNotAvailable = "Instant is not available for this format. Morph will use High quality."
     override val btnConvert = "Convert"
+    override val welcomeHeadline = "Convert Files, Offline."
+    override val pdfOutputTitle = "PDF output"
+    override val pdfModeMerge = "One PDF"
+    override val pdfModeSeparate = "Separate PDFs"
+    override fun pdfModeMergeDesc(count: Int) = "$count images combined into one document."
+    override val pdfModeSeparateDesc = "Each image becomes its own PDF."
+    override val historyTitle = "History"
+    override fun historyCount(count: Int) = if (count == 1) "1 file" else "$count files"
+    override val instantSupportedLabel = "Instant supported"
+    override val formatsFromLabel = "From"
+    override val formatsToLabel = "To"
+    override fun processingFile(name: String) = "Processing: $name"
+    override val convertOnDeviceNote = "Conversion runs on this device."
     override fun btnConvertBatch(count: Int) = "Convert ($count Files)"
     override fun btnMergeAndConvert(count: Int) = "Merge & Convert ($count Files)"
 
