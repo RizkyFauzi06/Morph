@@ -66,6 +66,8 @@ private fun toolRoute(sources: Collection<String>, keepTarget: (String) -> Boole
             to += targets
         }
     }
+    // JPEG is the same output as JPG; listing both reads like two formats
+    if ("jpg" in to) to.remove("jpeg")
     return from to to.toList()
 }
 
@@ -268,7 +270,8 @@ private fun ToolFeatureCard(tool: ToolSpec) {
 
 @Composable
 private fun FormatLine(label: String, formats: List<String>) {
-    val joined = formats.joinToString(" · ") { it.uppercase() }
+    // A no-break space keeps each separator on the line of the format before it
+    val joined = formats.joinToString(" · ") { it.uppercase() }
     Row {
         Text(
             text = label,
