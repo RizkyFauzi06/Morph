@@ -14,7 +14,9 @@ import android.webkit.MimeTypeMap
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -61,6 +63,7 @@ import com.morph.app.ui.screens.ProgressScreen
 import com.morph.app.ui.screens.SettingsScreen
 import com.morph.app.ui.screens.ToolsScreen
 import com.morph.app.ui.screens.WelcomeScreen
+import com.morph.app.ui.theme.LocalMorphColors
 import com.morph.app.ui.theme.MorphMotion
 import com.morph.app.ui.theme.MorphTheme
 import java.io.File
@@ -282,6 +285,22 @@ class MainActivity : ComponentActivity() {
 
             MorphTheme(themeOption = currentThemeOption, language = currentLanguage) {
                 val backgroundColor = if (isStandaloneMode) MaterialTheme.colorScheme.background else Color.Transparent
+
+                // Standalone screens draw behind transparent system bars, with icon colour following the
+                // app theme (not the system one). The share overlay keeps its own window untouched.
+                val isDarkTheme = LocalMorphColors.current.isDark
+                if (isStandaloneMode) {
+                    LaunchedEffect(isDarkTheme) {
+                        val barStyle = if (isDarkTheme) {
+                            SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                        } else {
+                            SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
+                        }
+                        // The legacy translucent theme leaves bar drawing to the system (solid black bars)
+                        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+                        enableEdgeToEdge(statusBarStyle = barStyle, navigationBarStyle = barStyle)
+                    }
+                }
 
                 Surface(
                     modifier = Modifier.fillMaxSize(),
