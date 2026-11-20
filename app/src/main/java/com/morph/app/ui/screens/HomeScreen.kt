@@ -129,12 +129,16 @@ fun HomeScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Auto-refresh when conversion completes
-    LaunchedEffect(engineState, completedCount) {
-        if (engineState is MorphEngine.ConvertState.Success || completedCount > 0) {
+    // Auto-refresh when a conversion completes. Keyed on the finished count, not on engineState:
+    // engineState changes on every progress tick, which reloaded the whole history ~4x a second
+    // during a batch. A new key cancels the wait, so a fast batch reloads once per pause.
+    val engineSucceeded = engineState is MorphEngine.ConvertState.Success
+    LaunchedEffect(engineSucceeded, completedCount) {
+        if (engineSucceeded || completedCount > 0) {
+            delay(400)
             onRefresh()
-            if (engineState is MorphEngine.ConvertState.Success) {
-                delay(1500)
+            if (engineSucceeded) {
+                delay(1100)
                 MorphEngine.currentStatus.value = MorphEngine.ConvertState.Idle
             }
         }

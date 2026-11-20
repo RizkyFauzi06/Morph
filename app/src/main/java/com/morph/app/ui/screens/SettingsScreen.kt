@@ -63,7 +63,9 @@ import com.morph.app.ui.components.pressScale
 import com.morph.app.ui.theme.LocalMorphColors
 import com.morph.app.ui.theme.MorphMotion
 import com.morph.app.ui.theme.MorphSpace
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun SettingsScreen(
@@ -109,8 +111,15 @@ fun SettingsScreen(
     var autoCheckUpdates by remember { mutableStateOf(prefs.autoCheckUpdates) }
 
     // PBI 5.1: custom output folder (validated on open so a revoked folder shows as default)
-    var customFolderLabel by remember {
-        mutableStateOf(OutputManager.validCustomTreeUri(context, prefs)?.let { OutputManager.describeTreeUri(it) })
+    // The saved folder shows at once; checking it is still reachable is a provider query, so it
+    // runs off the main thread instead of stalling the tab switch
+    val savedFolderLabel = remember {
+        prefs.customOutputTreeUri?.let { runCatching { OutputManager.describeTreeUri(it.toUri()) }.getOrNull() }
+    }
+    var customFolderLabel by remember { mutableStateOf(savedFolderLabel) }
+    LaunchedEffect(Unit) {
+        val valid = withContext(Dispatchers.IO) { OutputManager.validCustomTreeUri(context, prefs) }
+        if (customFolderLabel == savedFolderLabel) customFolderLabel = valid?.let { OutputManager.describeTreeUri(it) }
     }
     var autoSubfolder by remember { mutableStateOf(prefs.autoSubfolderPerFile) }
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { treeUri ->

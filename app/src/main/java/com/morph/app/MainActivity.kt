@@ -47,7 +47,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.morph.app.core.AppStrings
 import com.morph.app.core.ConversionQueueManager
 import com.morph.app.core.JobStatus
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.morph.app.core.MorphOutputFile
@@ -116,11 +118,27 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.GetMultipleContents()
     ) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
-            selectedFilesForConversion = uris.map { uri ->
-                val name = getFileNameFromUri(this, uri)
-                val mime = contentResolver.getType(uri) ?: getExplicitMimeType(name.substringAfterLast('.', ""))
-                val size = getFileSizeFromUri(this, uri)
-                SelectedFileItem(uri, name, mime, size)
+            showSheetFor(uris) { uri, name ->
+                contentResolver.getType(uri) ?: getExplicitMimeType(name.substringAfterLast('.', ""))
+            }
+        }
+    }
+
+    private var selectionJob: Job? = null
+    private var refreshJob: Job? = null
+
+    /**
+     * Opens the converter sheet once the files' name, type and size are read. That costs two
+     * provider queries per file (about 1 s for 40 photos), so it runs off the main thread.
+     */
+    private fun showSheetFor(uris: List<Uri>, mimeFor: (Uri, String) -> String) {
+        selectionJob?.cancel()
+        selectionJob = lifecycleScope.launch {
+            selectedFilesForConversion = withContext(Dispatchers.IO) {
+                uris.map { uri ->
+                    val name = getFileNameFromUri(this@MainActivity, uri)
+                    SelectedFileItem(uri, name, mimeFor(uri, name), getFileSizeFromUri(this@MainActivity, uri))
+                }
             }
             showBottomSheet = true
         }
@@ -158,12 +176,8 @@ class MainActivity : ComponentActivity() {
                 ?.takeIf { isSharedContentUri(it) }
 
             if (uri != null) {
-                val name = getFileNameFromUri(this, uri)
-                val mime = intent.type ?: contentResolver.getType(uri) ?: "*/*"
-                val size = getFileSizeFromUri(this, uri)
-                selectedFilesForConversion = listOf(SelectedFileItem(uri, name, mime, size))
                 isStandaloneMode = false
-                showBottomSheet = true
+                showSheetFor(listOf(uri)) { u, _ -> intent.type ?: contentResolver.getType(u) ?: "*/*" }
             } else {
                 val text = intent.getStringExtra(Intent.EXTRA_TEXT)
                 if (!text.isNullOrBlank()) {
@@ -186,14 +200,8 @@ class MainActivity : ComponentActivity() {
             }).filter { isSharedContentUri(it) }
 
             if (validUris.isNotEmpty()) {
-                selectedFilesForConversion = validUris.map { uri ->
-                    val name = getFileNameFromUri(this, uri)
-                    val mime = contentResolver.getType(uri) ?: "*/*"
-                    val size = getFileSizeFromUri(this, uri)
-                    SelectedFileItem(uri, name, mime, size)
-                }
                 isStandaloneMode = false
-                showBottomSheet = true
+                showSheetFor(validUris) { u, _ -> contentResolver.getType(u) ?: "*/*" }
             } else {
                 Toast.makeText(this, AppStrings.get().noFilesFromShareToast, Toast.LENGTH_SHORT).show()
                 isStandaloneMode = true
@@ -253,8 +261,10 @@ class MainActivity : ComponentActivity() {
             val uiScope = rememberCoroutineScope()
             var hasNotificationPermission by remember { mutableStateOf(checkNotifPermission(context)) }
 
+            // Only the newest refresh may write the list: an older, slower listing must not overwrite it
             val refreshFiles: () -> Unit = {
-                uiScope.launch {
+                refreshJob?.cancel()
+                refreshJob = uiScope.launch {
                     isRefreshing = true
                     morphFiles = withContext(Dispatchers.IO) { getMorphFiles(context) }
                     isRefreshing = false
