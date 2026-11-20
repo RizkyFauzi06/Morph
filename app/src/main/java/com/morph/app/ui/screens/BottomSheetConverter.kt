@@ -723,8 +723,7 @@ private fun VideoOptionRow(
                 val isSelected = value == selected
                 MorphChoicePill(
                     selected = isSelected,
-                    onClick = { onSelect(value) },
-                    height = 40.dp
+                    onClick = { onSelect(value) }
                 ) { contentColor ->
                     Text(
                         label,

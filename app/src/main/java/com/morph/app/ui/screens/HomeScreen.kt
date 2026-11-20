@@ -501,8 +501,7 @@ fun MorphCategoryFilter(
             MorphChoicePill(
                 selected = isSelected,
                 onClick = { onCategorySelected(categoryItem.id) },
-                style = PillStyle.Filled,
-                height = 40.dp
+                style = PillStyle.Filled
             ) { contentColor ->
                 Text(
                     text = categoryItem.label,
